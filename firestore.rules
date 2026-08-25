@@ -1,10 +1,76 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permitir leitura e escrita para qualquer pessoa autenticada
-    // (já que o app é só para duas pessoas, sem autenticação formal)
+
+
+    function meuPerfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function souAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        meuPerfil().permissao == "admin" &&
+        meuPerfil().bloqueado != true;
+    }
+
+    function souTrabalhador() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        meuPerfil().permissao == "trabalhador" &&
+        meuPerfil().bloqueado != true;
+    }
+
+    function estouBloqueado() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        meuPerfil().bloqueado == true;
+    }
+
+    match /usuarios/{uid} {
+      allow read: if request.auth != null;
+
+      // Auto-cadastro (tela de login pública): só cria como "padrão" e não
+      // bloqueado, não importa o que a pessoa tente mandar no resto do
+      // documento. Quando é o ADMIN criando a conta de outra pessoa (tela
+      // de Usuários, onde ele escolhe a permissão), não trava nada -- ele
+      // já é uma conta de confiança e precisa poder escolher trabalhador/admin.
+      allow create: if request.auth != null && (
+        (request.auth.uid == uid
+          && request.resource.data.permissao == "padrao"
+          && request.resource.data.bloqueado == false)
+        || souAdmin()
+      );
+
+      // Editar o próprio perfil não pode mudar a própria permissão nem se
+      // desbloquear sozinho -- só um admin (de verdade, não bloqueado) pode
+      // mudar esses dois campos, seja no próprio perfil ou no de outra pessoa.
+      allow update: if request.auth != null && (
+        souAdmin() ||
+        (request.auth.uid == uid
+          && request.resource.data.permissao == resource.data.permissao
+          && request.resource.data.bloqueado == resource.data.bloqueado)
+      );
+    }
+
+    match /ciclos/{cicloId}/equipamentos/{itemId} {
+      allow create, update: if souTrabalhador();
+    }
+    match /ciclos/{cicloId}/historico/{id} {
+      // Só cria -- editar/apagar um registro já existente fica só com admin
+      // (é um log de manutenção, não devia dar pra reescrever depois).
+      allow create: if souTrabalhador();
+    }
+    match /ciclos/{cicloId}/ordens/{id} {
+      allow create, update, delete: if souTrabalhador();
+    }
+    match /infoCondensadoras/{equipamentoId} {
+      allow create, update: if souTrabalhador();
+    }
+
     match /{document=**} {
-      allow read, write: if true;
+      allow read: if request.auth != null && !estouBloqueado();
+      allow write: if souAdmin();
     }
   }
 }
