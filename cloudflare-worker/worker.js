@@ -16,9 +16,9 @@
 //   FIREBASE_WEB_API_KEY   (o mesmo "apiKey" que já está no firebase-config.js)
 //   FIREBASE_PROJECT_ID    (= "pcm-alece")
 //
-// ORIGEM_PERMITIDA: troque pelo endereço real onde o PMOC fica publicado
-// (ex: "https://jovannapi.github.io"), pra só esse site poder chamar isso.
-const ORIGEM_PERMITIDA = "https://jovannapi.github.io";
+// ORIGEM_PERMITIDA: troque se o PMOC mudar de endereço de novo, pra só
+// esse site poder chamar isso.
+const ORIGEM_PERMITIDA = "https://pmoc-ale.github.io";
 
 function cabecalhosCors() {
   return {
