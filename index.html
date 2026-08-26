@@ -72,6 +72,9 @@
     <button class="tab sidenav-item" data-view="equipamentos">
       <span class="sidenav-icon"></span> Equipamentos
     </button>
+    <button class="tab sidenav-item" data-view="localizacao">
+      <span class="sidenav-icon"></span> Localização
+    </button>
     <button class="tab sidenav-item" data-view="feriados">
       <span class="sidenav-icon"></span> Feriados e férias
     </button>
@@ -388,6 +391,38 @@
         </div>
       </details>
       <button class="fab" id="fabAdicionarEquipamento" aria-label="Adicionar equipamento" title="Adicionar equipamento">+</button>
+    </section>
+
+    <!-- VIEW: LOCALIZAÇÃO NA PLANTA -->
+    <section class="view" id="view-localizacao">
+      <div class="card">
+        <div class="card-head" style="align-items:center;">
+          <h2>Localização na planta</h2>
+          <select id="plantaSeletor"></select>
+        </div>
+        <p class="muted">Clique em um marcador na planta para ver os dados do aparelho.<span id="plantaDicaAdmin"></span></p>
+        <div class="planta-area">
+          <div class="planta-imagem-wrap" id="plantaImagemWrap">
+            <img id="plantaImagem" alt="Planta baixa">
+            <div id="plantaMarcadores"></div>
+          </div>
+          <div class="planta-painel" id="plantaPainel">
+            <p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="cardPosicionarPlanta" hidden>
+        <h2>Posicionar equipamentos nesta planta</h2>
+        <p class="muted">Escolha um aparelho da lista, confira/preencha o código dele na planta (ex: E2/C4) e clique no ponto certo da imagem para marcar (ou mover) a posição.</p>
+        <div class="grid-form">
+          <label>Aparelho
+            <select id="plantaEquipamentoSelect"></select>
+          </label>
+          <label>Código na planta (opcional, ex: E2/C4)
+            <input type="text" id="plantaCodigoInput" placeholder="Ex: E2/C4">
+          </label>
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 9: FERIADOS E FÉRIAS -->

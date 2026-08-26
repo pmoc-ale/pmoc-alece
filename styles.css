@@ -1091,6 +1091,76 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .ilha-secao h3 { margin-top: 0 !important; }
 .ilha-secao:last-of-type { margin-bottom: 0; }
 
+/* Tela de Localização na planta */
+.planta-area {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.planta-imagem-wrap {
+  position: relative;
+  flex: 1 1 65%;
+  min-width: 0;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  overflow: auto;
+  background: #fff;
+}
+.planta-imagem-wrap img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+#plantaMarcadores {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.planta-marcador {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(16, 38, 61, 0.4), var(--sombra-elevada);
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 0;
+}
+.planta-marcador.pendente { background: var(--vermelho); }
+.planta-marcador.andamento { background: var(--amarelo); }
+.planta-marcador.concluido { background: var(--verde); }
+.planta-marcador.atrasado { background: var(--azul-900); }
+.planta-marcador.selecionado {
+  width: 22px;
+  height: 22px;
+  box-shadow: 0 0 0 3px var(--dourado), var(--sombra-elevada);
+}
+.planta-painel {
+  flex: 1 1 35%;
+  min-width: 220px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: var(--sp-4);
+  background: var(--azul-50);
+  align-self: stretch;
+}
+
+@media (max-width: 768px) {
+  .planta-area {
+    flex-direction: column;
+  }
+  .planta-imagem-wrap, .planta-painel {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .planta-marcador {
+    width: 20px;
+    height: 20px;
+  }
+}
+
 .checklist-item {
   display: flex;
   align-items: center;

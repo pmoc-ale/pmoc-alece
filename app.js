@@ -245,7 +245,18 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   diaSelecionado: null,
   localFiltro: "Todos",
   diasVaziosCronograma: [],
+  plantaSelecionada: null,
 };
+
+// Plantas baixas disponíveis para a tela de Localização. Cada planta é
+// amarrada a um prédio (o mesmo valor usado no campo "Prédio" do
+// equipamento) -- é o que restringe a lista de aparelhos pra marcar nela.
+const PLANTAS = [
+  { id: "anexo2-1piso", nome: "Anexo 2 — 1º Piso", arquivo: "plantas/anexo2-1-piso.png", local: "ANEXO 2" },
+];
+function plantaPorId(id) {
+  return PLANTAS.find((p) => p.id === id) || PLANTAS[0];
+}
 const URL_CHAMADOS_CORRETIVOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR2Ysf9JofZL_2Xn_JPJFaPrMX6IGiwMQWFyhgJcqu8BK_4imC_lmrMgfpDWLnI6MIdcC0OYSDUQFPw/pub?gid=1978174237&single=true&output=csv";
 ESTADO.configSite.urlCorretivas = URL_CHAMADOS_CORRETIVOS;
 const INTERVALO_ATUALIZACAO_CORRETIVOS_MS = 5 * 60 * 1000; 
@@ -591,6 +602,7 @@ $all(".tab").forEach((btn) => {
     if (btn.dataset.view === "ciclos") renderCiclos();
     if (btn.dataset.view === "dashboard") renderDashboard();
     if (btn.dataset.view === "equipamentos") renderEquipamentosCadastro();
+    if (btn.dataset.view === "localizacao") renderLocalizacao();
     if (btn.dataset.view === "feriados") renderFeriados();
     if (btn.dataset.view === "ordens") renderOrdens();
     if (btn.dataset.view === "historico") renderHistorico();
@@ -1471,6 +1483,7 @@ function iniciarSincronizacao() {
     renderCalendar();
     renderDashboard();
     renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
+    renderLocalizacao();
     atualizarBannerAtrasados();
     atualizarAlertaDiasVazios();
     renderCiclos();
@@ -3815,6 +3828,138 @@ $("#btnLimparSelecaoEquipamentos")?.addEventListener("click", () => {
   renderEquipamentosCadastro(); // Re-renderiza a tabela para desmarcar as linhas
 });
 
+// ------------------------------------------------------------------
+// Localização na planta — mostra os aparelhos marcados sobre a imagem da
+// planta baixa do prédio; admin pode clicar na imagem pra marcar/mover a
+// posição de um aparelho (a posição fica salva no próprio equipamento,
+// como plantaId/plantaX/plantaY -- por isso ela sobrevive à virada de
+// ciclo, já que o item inteiro é copiado pro ciclo novo).
+// ------------------------------------------------------------------
+function renderLocalizacao() {
+  const seletor = $("#plantaSeletor");
+  if (!seletor) return;
+  if (!PLANTAS.length) return;
+
+  if (!ESTADO.plantaSelecionada || !PLANTAS.some((p) => p.id === ESTADO.plantaSelecionada)) {
+    ESTADO.plantaSelecionada = PLANTAS[0].id;
+  }
+  seletor.innerHTML = PLANTAS.map((p) =>
+    `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
+  ).join("");
+  seletor.hidden = PLANTAS.length <= 1;
+
+  const planta = plantaPorId(ESTADO.plantaSelecionada);
+  const img = $("#plantaImagem");
+  if (img && img.dataset.src !== planta.arquivo) {
+    img.src = planta.arquivo;
+    img.dataset.src = planta.arquivo;
+    $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+  }
+
+  renderMarcadoresPlanta();
+
+  const isAdmin = ESTADO.permissao === "admin";
+  const cardPosicionar = $("#cardPosicionarPlanta");
+  if (cardPosicionar) cardPosicionar.hidden = !isAdmin;
+  const wrap = $("#plantaImagemWrap");
+  if (wrap) wrap.style.cursor = isAdmin ? "crosshair" : "default";
+  const dica = $("#plantaDicaAdmin");
+  if (dica) dica.textContent = isAdmin ? " Para marcar/mover um aparelho, use o quadro abaixo." : "";
+
+  if (isAdmin) {
+    const select = $("#plantaEquipamentoSelect");
+    const itensDoPredio = ESTADO.equipamentos
+      .filter((e) => (e.local || "SEDE") === planta.local)
+      .sort((a, b) => (a.ambiente || "").localeCompare(b.ambiente || ""));
+    const selecionadoAntes = select.value;
+    select.innerHTML = itensDoPredio.map((e) => {
+      const marcado = e.plantaId === planta.id ? " ✓ já marcado" : "";
+      const rotulo = [e.codigoPlanta, e.patrimonio ? `Pat. ${e.patrimonio}` : null, e.ambiente].filter(Boolean).join(" — ");
+      return `<option value="${e.id}">${escapeHtml(rotulo || e.id)}${marcado}</option>`;
+    }).join("");
+    if (itensDoPredio.some((e) => e.id === selecionadoAntes)) select.value = selecionadoAntes;
+    atualizarCodigoPlantaInput();
+    select.onchange = atualizarCodigoPlantaInput;
+    function atualizarCodigoPlantaInput() {
+      const itemSelecionado = itensDoPredio.find((e) => e.id === select.value);
+      const codigoInput = $("#plantaCodigoInput");
+      if (codigoInput) codigoInput.value = (itemSelecionado && itemSelecionado.codigoPlanta) || "";
+    }
+  }
+}
+
+function renderMarcadoresPlanta() {
+  const container = $("#plantaMarcadores");
+  if (!container) return;
+  const planta = plantaPorId(ESTADO.plantaSelecionada);
+  const itens = ESTADO.equipamentos.filter(
+    (e) => e.plantaId === planta.id && e.plantaX != null && e.plantaY != null
+  );
+  container.innerHTML = itens.map((e) => {
+    const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
+    const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
+    return `<button type="button" class="planta-marcador ${classe}" style="left:${e.plantaX}%; top:${e.plantaY}%" data-id="${e.id}" title="${escapeHtml(rotulo)}"></button>`;
+  }).join("");
+  container.querySelectorAll(".planta-marcador").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const item = ESTADO.equipamentos.find((e) => e.id === btn.dataset.id);
+      if (!item) return;
+      container.querySelectorAll(".planta-marcador").forEach((b) => b.classList.remove("selecionado"));
+      btn.classList.add("selecionado");
+      mostrarPainelPlanta(item);
+    });
+  });
+}
+
+function mostrarPainelPlanta(item) {
+  const painel = $("#plantaPainel");
+  if (!painel) return;
+  painel.innerHTML = `
+    <h3 style="margin-top:0">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
+    <div class="drawer-campo"><span class="rotulo">Patrimônio</span><span class="valor">${escapeHtml(item.patrimonio || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Setor</span><span class="valor">${escapeHtml(item.setor || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Ambiente</span><span class="valor">${escapeHtml(item.ambiente || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Marca / Modelo</span><span class="valor">${escapeHtml([item.marca, item.modelo].filter(Boolean).join(" / ") || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Capacidade</span><span class="valor">${escapeHtml(item.capacidade || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Tipo de gás</span><span class="valor">${escapeHtml(item.tipoGas || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Status</span><span class="valor">${estaAtrasado(item) ? "Atrasado" : escapeHtml(item.statusPreventiva || "-")}</span></div>
+    <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:10px;width:100%">Ver ficha completa</button>
+  `;
+  $("#btnAbrirDrawerDaPlanta")?.addEventListener("click", () => abrirDrawerEquipamento(item.id));
+}
+
+$("#plantaSeletor")?.addEventListener("change", (ev) => {
+  ESTADO.plantaSelecionada = ev.target.value;
+  renderLocalizacao();
+});
+
+$("#plantaImagemWrap")?.addEventListener("click", async (ev) => {
+  if (ESTADO.permissao !== "admin") return;
+  if (ev.target.closest(".planta-marcador")) return;
+  const select = $("#plantaEquipamentoSelect");
+  if (!select || !select.value) {
+    toast("Escolha um aparelho na lista antes de clicar na planta.");
+    return;
+  }
+  const wrap = $("#plantaImagemWrap");
+  const rect = wrap.getBoundingClientRect();
+  const x = Math.round((((ev.clientX - rect.left) / rect.width) * 100) * 100) / 100;
+  const y = Math.round((((ev.clientY - rect.top) / rect.height) * 100) * 100) / 100;
+  const id = select.value;
+  const planta = plantaPorId(ESTADO.plantaSelecionada);
+  const codigoPlanta = $("#plantaCodigoInput")?.value.trim() || "";
+  try {
+    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
+      plantaId: planta.id, plantaX: x, plantaY: y, codigoPlanta,
+    });
+    toast("Posição marcada.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar posição: " + err.message);
+  }
+});
+
 function renderEquipamentosCadastro() {
   const table = $("#equipamentosTable");
   if (!table) return;
@@ -4095,6 +4240,12 @@ async function abrirDrawerEquipamento(id) {
       <div class="drawer-campo"><span class="rotulo">Origem do cadastro</span><span class="valor">${item.origem === "manual" ? "Manual" : "Planilha"}</span></div>
       <div class="drawer-campo"><span class="rotulo">Tipo de gás</span><span class="valor">${escapeHtml(item.tipoGas || "-")}</span></div>
       <div class="drawer-campo"><span class="rotulo">Observações</span><span class="valor">${escapeHtml(item.observacao || "-")}</span></div>
+      <div class="drawer-campo"><span class="rotulo">Código na planta</span><span class="valor">${escapeHtml(item.codigoPlanta || "-")}</span></div>
+      ${item.plantaId ? `
+        <div class="drawer-acoes">
+          <button class="btn ghost" id="drawerVerNaPlanta">Ver na planta</button>
+        </div>
+      ` : ""}
     </details>
 
     <details class="drawer-secao">
@@ -4138,6 +4289,7 @@ async function abrirDrawerEquipamento(id) {
         </select>
       </label>
       <label>Observações (ex: contato da sala, restrições de horário...)<input type="text" id="drawerObservacao" value="${escapeHtml(item.observacao || "")}" placeholder="Ex: falar com Fulano, ramal 1234"></label>
+      <label>Código na planta (ex: E2/C4)<input type="text" id="drawerCodigoPlanta" value="${escapeHtml(item.codigoPlanta || "")}" placeholder="Ex: E2/C4"></label>
       <div class="drawer-acoes">
         <button class="btn primary" id="drawerSalvarCadastro">Salvar cadastro</button>
       </div>
@@ -4173,6 +4325,7 @@ async function abrirDrawerEquipamento(id) {
     const capacidade = $("#drawerCapacidade").value.trim();
     const tipoGas = $("#drawerTipoGas")?.value || "";
     const observacao = $("#drawerObservacao")?.value.trim() || "";
+    const codigoPlanta = $("#drawerCodigoPlanta")?.value.trim() || "";
     if (!setor || !ambiente) {
       toast("Preencha pelo menos Setor e Ambiente.");
       return;
@@ -4180,7 +4333,7 @@ async function abrirDrawerEquipamento(id) {
     const setorPCM = identificarSetor(setor, ambiente);
     try {
       await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
-        patrimonio, setor, ambiente, local, setorPCM, marca, modelo, capacidade, tipoGas, observacao,
+        patrimonio, setor, ambiente, local, setorPCM, marca, modelo, capacidade, tipoGas, observacao, codigoPlanta,
         prioridadeSetor: PRIORIDADE[setorPCM] || 7,
         pisoPCM: descobrirPiso(setor),
       });
@@ -4194,6 +4347,17 @@ async function abrirDrawerEquipamento(id) {
       console.error(err);
       toast("Erro ao salvar: " + err.message);
     }
+  });
+
+  $("#drawerVerNaPlanta")?.addEventListener("click", () => {
+    fecharDrawer();
+    ESTADO.plantaSelecionada = item.plantaId;
+    irParaAba("localizacao");
+    setTimeout(() => {
+      const marcador = $(`.planta-marcador[data-id="${item.id}"]`);
+      marcador?.click();
+      marcador?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
   });
 
   $("#drawerEnviarFoto")?.addEventListener("click", async () => {
