@@ -246,16 +246,41 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   localFiltro: "Todos",
   diasVaziosCronograma: [],
   plantaSelecionada: null,
+  plantas: [],
+  unsubscribePlantas: null,
 };
 
-// Plantas baixas disponíveis para a tela de Localização. Cada planta é
-// amarrada a um prédio (o mesmo valor usado no campo "Prédio" do
-// equipamento) -- é o que restringe a lista de aparelhos pra marcar nela.
-const PLANTAS = [
-  { id: "anexo2-1piso", nome: "Anexo 2 — 1º Piso", arquivo: "plantas/anexo2-1-piso.png", local: "ANEXO 2" },
-];
+// Cada planta cadastrada (coleção "plantas" no Firestore) é amarrada a um
+// prédio (o mesmo valor usado no campo "Prédio" do equipamento) -- é o que
+// restringe a lista de aparelhos pra marcar nela. O desenho vetorial em si
+// (linhas/camadas, pesado demais pra um documento do Firestore) fica
+// hospedado no Cloudinary como um JSON "raw"; o Firestore só guarda o link
+// (dadosUrl) e os metadados. _dadosPlantaCache guarda, na memória da aba
+// aberta, o JSON já baixado de cada planta (pra não rebaixar toda hora).
+const _dadosPlantaCache = new Map();
+
 function plantaPorId(id) {
-  return PLANTAS.find((p) => p.id === id) || PLANTAS[0];
+  return ESTADO.plantas.find((p) => p.id === id) || ESTADO.plantas[0];
+}
+
+function iniciarSincronizacaoPlantas() {
+  if (ESTADO.unsubscribePlantas) ESTADO.unsubscribePlantas();
+  ESTADO.unsubscribePlantas = onSnapshot(collection(db, "plantas"), (snap) => {
+    ESTADO.plantas = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderLocalizacao();
+  }, (err) => {
+    console.error("Erro ao ler plantas:", err);
+  });
+}
+
+// Baixa (e guarda em cache) o desenho vetorial completo de uma planta.
+async function carregarDadosPlanta(planta) {
+  if (_dadosPlantaCache.has(planta.id)) return _dadosPlantaCache.get(planta.id);
+  const resp = await fetch(planta.dadosUrl);
+  if (!resp.ok) throw new Error("Não consegui baixar o desenho dessa planta.");
+  const dados = await resp.json();
+  _dadosPlantaCache.set(planta.id, dados);
+  return dados;
 }
 const URL_CHAMADOS_CORRETIVOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR2Ysf9JofZL_2Xn_JPJFaPrMX6IGiwMQWFyhgJcqu8BK_4imC_lmrMgfpDWLnI6MIdcC0OYSDUQFPw/pub?gid=1978174237&single=true&output=csv";
 ESTADO.configSite.urlCorretivas = URL_CHAMADOS_CORRETIVOS;
@@ -1504,6 +1529,7 @@ async function inicializarApp() {
     iniciarSincronizacaoHistorico();
     iniciarSincronizacaoOrdens();
     iniciarSincronizacaoCiclos();
+    iniciarSincronizacaoPlantas();
 }
 
 let modoCadastro = false;
@@ -3835,36 +3861,70 @@ $("#btnLimparSelecaoEquipamentos")?.addEventListener("click", () => {
 // como plantaId/plantaX/plantaY -- por isso ela sobrevive à virada de
 // ciclo, já que o item inteiro é copiado pro ciclo novo).
 // ------------------------------------------------------------------
-function renderLocalizacao() {
+const CORES_STATUS_MARCADOR = {
+  pendente: "#C00000",
+  andamento: "#9C6500",
+  concluido: "#375623",
+  atrasado: "#10263D",
+};
+
+async function renderLocalizacao() {
   const seletor = $("#plantaSeletor");
   if (!seletor) return;
-  if (!PLANTAS.length) return;
 
-  if (!ESTADO.plantaSelecionada || !PLANTAS.some((p) => p.id === ESTADO.plantaSelecionada)) {
-    ESTADO.plantaSelecionada = PLANTAS[0].id;
+  const isAdmin = ESTADO.permissao === "admin";
+  const semPlantas = $("#plantaSemPlantas");
+  const area = $("#plantaConteudo");
+  const painelUpload = $("#painelUploadPlanta");
+  if (!ESTADO.plantas.length) {
+    if (semPlantas) semPlantas.hidden = false;
+    if (area) area.hidden = true;
+    if (painelUpload) painelUpload.hidden = !isAdmin;
+    if (isAdmin) renderUploadPlanta();
+    return;
   }
-  seletor.innerHTML = PLANTAS.map((p) =>
+  if (semPlantas) semPlantas.hidden = true;
+  if (area) area.hidden = false;
+  if (painelUpload && !isAdmin) painelUpload.hidden = true;
+
+  if (!ESTADO.plantaSelecionada || !ESTADO.plantas.some((p) => p.id === ESTADO.plantaSelecionada)) {
+    ESTADO.plantaSelecionada = ESTADO.plantas[0].id;
+  }
+  seletor.innerHTML = ESTADO.plantas.map((p) =>
     `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
   ).join("");
-  seletor.hidden = PLANTAS.length <= 1;
+  seletor.hidden = ESTADO.plantas.length <= 1;
 
   const planta = plantaPorId(ESTADO.plantaSelecionada);
-  const img = $("#plantaImagem");
-  if (img && img.dataset.src !== planta.arquivo) {
-    img.src = planta.arquivo;
-    img.dataset.src = planta.arquivo;
-    $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+  if (!planta) return;
+
+  const svg = $("#plantaSvg");
+  if (svg && svg.dataset.plantaId !== planta.id) {
+    svg.innerHTML = "";
+    svg.dataset.plantaId = "";
+    $("#plantaCamadas").innerHTML = "";
+    $("#plantaPainel").innerHTML = '<p class="muted">Carregando planta...</p>';
+    try {
+      const dados = await carregarDadosPlanta(planta);
+      montarSvgPlanta(planta, dados);
+      svg.dataset.plantaId = planta.id;
+      $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+    } catch (err) {
+      console.error(err);
+      $("#plantaPainel").innerHTML = `<p class="muted">Erro ao carregar essa planta: ${escapeHtml(err.message)}</p>`;
+      return;
+    }
   }
 
   renderMarcadoresPlanta();
 
-  const isAdmin = ESTADO.permissao === "admin";
   const cardPosicionar = $("#cardPosicionarPlanta");
   if (cardPosicionar) cardPosicionar.hidden = !isAdmin;
-  const wrap = $("#plantaImagemWrap");
-  if (wrap) wrap.style.cursor = isAdmin ? "crosshair" : "default";
   const dica = $("#plantaDicaAdmin");
   if (dica) dica.textContent = isAdmin ? " Para marcar/mover um aparelho, use o quadro abaixo." : "";
+
+  const btnNovaPlanta = $("#btnMostrarUploadPlanta");
+  if (btnNovaPlanta) btnNovaPlanta.hidden = !isAdmin;
 
   if (isAdmin) {
     const select = $("#plantaEquipamentoSelect");
@@ -3888,28 +3948,152 @@ function renderLocalizacao() {
   }
 }
 
-function renderMarcadoresPlanta() {
-  const container = $("#plantaMarcadores");
-  if (!container) return;
+// Constrói o SVG da planta a partir do desenho vetorial já baixado: um
+// <g> por camada do CAD (pra dar pra ligar/desligar) dentro do grupo com a
+// transformação de coordenadas, e a lista de checkboxes de camada.
+function montarSvgPlanta(planta, dados) {
+  const svg = $("#plantaSvg");
+  const [xmin, ymin, xmax, ymax] = dados.bbox;
+  const pad = Math.max((xmax - xmin) * 0.03, 1);
+  svg.setAttribute("viewBox", `${xmin - pad} ${ymin - pad} ${xmax - xmin + pad * 2} ${ymax - ymin + pad * 2}`);
+  svg.innerHTML = "";
+
+  const nsSvg = "http://www.w3.org/2000/svg";
+  const gRaiz = document.createElementNS(nsSvg, "g");
+  gRaiz.setAttribute("transform", `matrix(${dados.matriz.join(",")})`);
+  svg.appendChild(gRaiz);
+
+  const gPorCamada = {};
+  (dados.layers || []).forEach((camada) => {
+    const g = document.createElementNS(nsSvg, "g");
+    g.dataset.camada = camada;
+    gRaiz.appendChild(g);
+    gPorCamada[camada] = g;
+  });
+
+  (dados.entities || []).forEach((ent) => {
+    const p = document.createElementNS(nsSvg, "path");
+    p.setAttribute("d", ent.d);
+    if (ent.stroke) {
+      p.setAttribute("stroke", ent.stroke);
+      p.setAttribute("stroke-width", ent.sw || 1);
+      p.setAttribute("fill", "none");
+    }
+    if (ent.fill) {
+      p.setAttribute("fill", ent.fill);
+      if (!ent.stroke) p.setAttribute("stroke", "none");
+    }
+    if (!ent.stroke && !ent.fill) {
+      p.setAttribute("stroke", "#888");
+      p.setAttribute("stroke-width", 4);
+      p.setAttribute("fill", "none");
+    }
+    (gPorCamada[ent.layer] || gRaiz).appendChild(p);
+  });
+
+  const gMarcadores = document.createElementNS(nsSvg, "g");
+  gMarcadores.id = "plantaMarcadoresSvg";
+  svg.appendChild(gMarcadores);
+
+  const painelCamadas = $("#plantaCamadas");
+  painelCamadas.innerHTML = (dados.layers || []).map((camada) =>
+    `<label><input type="checkbox" checked data-camada="${escapeHtml(camada)}"> ${escapeHtml(camada)}</label>`
+  ).join("");
+  painelCamadas.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("change", () => {
+      const g = gPorCamada[inp.dataset.camada];
+      if (g) g.style.display = inp.checked ? "" : "none";
+    });
+  });
+}
+
+// Converte um clique do mouse (coordenadas de tela) pra coordenada do
+// espaço interno do SVG -- não dá pra usar só % da caixa na tela porque o
+// viewBox pode manter proporção com barras (letterbox); isso aqui acerta
+// mesmo quando isso acontece.
+function svgPontoDeClique(svg, evento) {
+  const pt = svg.createSVGPoint();
+  pt.x = evento.clientX;
+  pt.y = evento.clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: 0, y: 0 };
+  const local = pt.matrixTransform(ctm.inverse());
+  return { x: local.x, y: local.y };
+}
+
+async function renderMarcadoresPlanta() {
+  const gMarcadores = $("#plantaMarcadoresSvg");
+  if (!gMarcadores) return;
   const planta = plantaPorId(ESTADO.plantaSelecionada);
+  if (!planta) return;
+  const nsSvg = "http://www.w3.org/2000/svg";
+  gMarcadores.innerHTML = "";
+
+  const raioMarcador = (() => {
+    const [xmin, , xmax] = (_dadosPlantaCache.get(planta.id) || {}).bbox || [0, 0, 100];
+    return (xmax - xmin) / 120 || 1;
+  })();
+
+  // Aparelhos já identificados (têm plantaId + posição salva no próprio
+  // cadastro) -- coloridos pelo status, igual ao resto do sistema.
   const itens = ESTADO.equipamentos.filter(
     (e) => e.plantaId === planta.id && e.plantaX != null && e.plantaY != null
   );
-  container.innerHTML = itens.map((e) => {
+  itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
     const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
-    return `<button type="button" class="planta-marcador ${classe}" style="left:${e.plantaX}%; top:${e.plantaY}%" data-id="${e.id}" title="${escapeHtml(rotulo)}"></button>`;
-  }).join("");
-  container.querySelectorAll(".planta-marcador").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
+    const c = document.createElementNS(nsSvg, "circle");
+    c.setAttribute("cx", e.plantaX);
+    c.setAttribute("cy", e.plantaY);
+    c.setAttribute("r", raioMarcador);
+    c.setAttribute("fill", CORES_STATUS_MARCADOR[classe] || "#888");
+    c.setAttribute("stroke", "#fff");
+    c.setAttribute("stroke-width", raioMarcador / 6);
+    c.dataset.id = e.id;
+    c.style.cursor = "pointer";
+    const titulo = document.createElementNS(nsSvg, "title");
+    titulo.textContent = rotulo;
+    c.appendChild(titulo);
+    c.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      const item = ESTADO.equipamentos.find((e) => e.id === btn.dataset.id);
-      if (!item) return;
-      container.querySelectorAll(".planta-marcador").forEach((b) => b.classList.remove("selecionado"));
-      btn.classList.add("selecionado");
-      mostrarPainelPlanta(item);
+      mostrarPainelPlanta(e);
     });
+    gMarcadores.appendChild(c);
   });
+
+  // Modo admin: mostra também os candidatos detectados automaticamente no
+  // arquivo que ainda não foram identificados -- clicar num candidato
+  // marca ele de uma vez, sem precisar acertar o pixel certo na mão.
+  if (ESTADO.permissao === "admin" && planta.camadaEquipamento) {
+    try {
+      const dados = await carregarDadosPlanta(planta);
+      const candidatos = (dados.marcadoresPorCamada && dados.marcadoresPorCamada[planta.camadaEquipamento]) || [];
+      const ocupados = new Set(itens.map((e) => Math.round(e.plantaX * 10) + "," + Math.round(e.plantaY * 10)));
+      candidatos.forEach((cand) => {
+        const chave = Math.round(cand.x * 10) + "," + Math.round(cand.y * 10);
+        if (ocupados.has(chave)) return;
+        const c = document.createElementNS(nsSvg, "circle");
+        c.setAttribute("cx", cand.x);
+        c.setAttribute("cy", cand.y);
+        c.setAttribute("r", raioMarcador);
+        // fill "transparent" (não "none"!) -- com "none" o SVG não conta o
+        // miolo do círculo como clicável, só a borda tracejada (bem fina),
+        // o que tornaria a maior parte da área do marcador "morta" pra clique.
+        c.setAttribute("fill", "transparent");
+        c.setAttribute("stroke", "#8B98A6");
+        c.setAttribute("stroke-dasharray", `${raioMarcador / 4},${raioMarcador / 4}`);
+        c.setAttribute("stroke-width", raioMarcador / 5);
+        c.style.cursor = "pointer";
+        c.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          salvarPosicaoPlanta(planta, cand.x, cand.y);
+        });
+        gMarcadores.appendChild(c);
+      });
+    } catch (err) {
+      console.error("Erro ao carregar candidatos:", err);
+    }
+  }
 }
 
 function mostrarPainelPlanta(item) {
@@ -3929,25 +4113,13 @@ function mostrarPainelPlanta(item) {
   $("#btnAbrirDrawerDaPlanta")?.addEventListener("click", () => abrirDrawerEquipamento(item.id));
 }
 
-$("#plantaSeletor")?.addEventListener("change", (ev) => {
-  ESTADO.plantaSelecionada = ev.target.value;
-  renderLocalizacao();
-});
-
-$("#plantaImagemWrap")?.addEventListener("click", async (ev) => {
-  if (ESTADO.permissao !== "admin") return;
-  if (ev.target.closest(".planta-marcador")) return;
+async function salvarPosicaoPlanta(planta, x, y) {
   const select = $("#plantaEquipamentoSelect");
   if (!select || !select.value) {
-    toast("Escolha um aparelho na lista antes de clicar na planta.");
+    toast("Escolha um aparelho na lista antes de marcar a posição.");
     return;
   }
-  const wrap = $("#plantaImagemWrap");
-  const rect = wrap.getBoundingClientRect();
-  const x = Math.round((((ev.clientX - rect.left) / rect.width) * 100) * 100) / 100;
-  const y = Math.round((((ev.clientY - rect.top) / rect.height) * 100) * 100) / 100;
   const id = select.value;
-  const planta = plantaPorId(ESTADO.plantaSelecionada);
   const codigoPlanta = $("#plantaCodigoInput")?.value.trim() || "";
   try {
     await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
@@ -3957,6 +4129,181 @@ $("#plantaImagemWrap")?.addEventListener("click", async (ev) => {
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar posição: " + err.message);
+  }
+}
+
+$("#plantaSeletor")?.addEventListener("change", (ev) => {
+  ESTADO.plantaSelecionada = ev.target.value;
+  const svg = $("#plantaSvg");
+  if (svg) svg.dataset.plantaId = ""; // força recarregar o desenho da nova planta
+  renderLocalizacao();
+});
+
+$("#plantaSvg")?.addEventListener("click", (ev) => {
+  if (ESTADO.permissao !== "admin") return;
+  if (ev.target.closest("circle")) return; // clique em marcador já tem seu próprio handler
+  const svg = $("#plantaSvg");
+  const planta = plantaPorId(ESTADO.plantaSelecionada);
+  if (!svg || !planta) return;
+  const { x, y } = svgPontoDeClique(svg, ev);
+  salvarPosicaoPlanta(planta, Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+});
+
+// ------------------------------------------------------------------
+// Upload de planta (.dwf/.dwfx) -- lido inteiro no navegador (utils/
+// dwfParser.js), sem passar por nenhum servidor nosso. O desenho lido
+// vira um preview na hora, a pessoa confirma qual camada é a de
+// equipamento, e só então salva (o JSON pesado vai pro Cloudinary como
+// arquivo "raw", igual as fotos; o Firestore só guarda o link).
+// ------------------------------------------------------------------
+let _dadosPlantaPendente = null; // resultado do parseDwf() ainda não salvo
+
+function renderUploadPlanta() {
+  const local = $("#uploadPlantaLocal");
+  if (local && ESTADO.configSite?.predios) {
+    local.innerHTML = ESTADO.configSite.predios.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join("");
+  }
+}
+
+$("#btnMostrarUploadPlanta")?.addEventListener("click", () => {
+  const painel = $("#painelUploadPlanta");
+  if (painel) painel.hidden = !painel.hidden;
+});
+
+$("#uploadPlantaArquivo")?.addEventListener("change", async (ev) => {
+  const arquivo = ev.target.files?.[0];
+  if (!arquivo) return;
+  const status = $("#uploadPlantaStatus");
+  const preview = $("#uploadPlantaPreviewWrap");
+  if (preview) preview.hidden = true;
+  if (status) status.textContent = "Lendo o arquivo...";
+  _dadosPlantaPendente = null;
+
+  try {
+    const buffer = await arquivo.arrayBuffer();
+    const dados = await parseDwf(buffer);
+    _dadosPlantaPendente = dados;
+
+    montarSvgPreviewUpload(dados);
+
+    const selectCamada = $("#uploadPlantaCamadaEquip");
+    selectCamada.innerHTML = dados.layers.map((l) =>
+      `<option value="${escapeHtml(l)}" ${l === dados.camadaEquipamentoSugerida ? "selected" : ""}>${escapeHtml(l)}</option>`
+    ).join("");
+    atualizarContagemCandidatos();
+    selectCamada.onchange = atualizarContagemCandidatos;
+    function atualizarContagemCandidatos() {
+      const camada = selectCamada.value;
+      const n = (dados.marcadoresPorCamada[camada] || []).length;
+      $("#uploadPlantaContagem").textContent = `${n} posição(ões) de equipamento detectada(s) automaticamente nessa camada.`;
+    }
+
+    if (!$("#uploadPlantaNome").value) {
+      $("#uploadPlantaNome").value = arquivo.name.replace(/\.(dwfx?|DWFX?)$/, "");
+    }
+    if (preview) preview.hidden = false;
+    if (status) status.textContent = `Lido com sucesso: ${dados.layers.length} camadas, ${dados.entities.length} elementos.`;
+  } catch (err) {
+    console.error(err);
+    if (status) status.textContent = "Erro ao ler o arquivo: " + err.message;
+  }
+});
+
+function montarSvgPreviewUpload(dados) {
+  const svg = $("#uploadPlantaSvg");
+  const [xmin, ymin, xmax, ymax] = dados.bbox;
+  const pad = Math.max((xmax - xmin) * 0.03, 1);
+  svg.setAttribute("viewBox", `${xmin - pad} ${ymin - pad} ${xmax - xmin + pad * 2} ${ymax - ymin + pad * 2}`);
+  svg.innerHTML = "";
+  const nsSvg = "http://www.w3.org/2000/svg";
+  const g = document.createElementNS(nsSvg, "g");
+  g.setAttribute("transform", `matrix(${dados.matriz.join(",")})`);
+  svg.appendChild(g);
+  dados.entities.forEach((ent) => {
+    const p = document.createElementNS(nsSvg, "path");
+    p.setAttribute("d", ent.d);
+    if (ent.stroke) { p.setAttribute("stroke", ent.stroke); p.setAttribute("stroke-width", ent.sw || 1); p.setAttribute("fill", "none"); }
+    if (ent.fill) { p.setAttribute("fill", ent.fill); if (!ent.stroke) p.setAttribute("stroke", "none"); }
+    if (!ent.stroke && !ent.fill) { p.setAttribute("stroke", "#888"); p.setAttribute("stroke-width", 4); p.setAttribute("fill", "none"); }
+    g.appendChild(p);
+  });
+}
+
+// Envia um objeto JSON como arquivo "raw" pro Cloudinary, reaproveitando a
+// mesma assinatura/Worker já usados pras fotos de equipamento -- só muda
+// o endpoint de destino (raw/upload em vez de image/upload).
+async function enviarArquivoPlanta(dadosObjeto, nomeArquivo) {
+  const idToken = await auth.currentUser.getIdToken();
+  const respAssinatura = await fetch(URL_UPLOAD_FOTO, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + idToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ folder: "plantas", publicId: nomeArquivo, overwrite: true }),
+  });
+  if (!respAssinatura.ok) {
+    const erro = await respAssinatura.json().catch(() => ({}));
+    throw new Error(erro.erro || "Não autorizado a enviar planta.");
+  }
+  const assinatura = await respAssinatura.json();
+
+  const blob = new Blob([JSON.stringify(dadosObjeto)], { type: "application/json" });
+  const formData = new FormData();
+  formData.append("file", blob, "planta.json");
+  formData.append("api_key", assinatura.apiKey);
+  formData.append("timestamp", assinatura.timestamp);
+  formData.append("signature", assinatura.signature);
+  if (assinatura.folder) formData.append("folder", assinatura.folder);
+  if (assinatura.publicId) formData.append("public_id", assinatura.publicId);
+  if (assinatura.overwrite) formData.append("overwrite", assinatura.overwrite);
+
+  const respUpload = await fetch(`https://api.cloudinary.com/v1_1/${assinatura.cloudName}/raw/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!respUpload.ok) throw new Error("Falha ao enviar o desenho da planta.");
+  const dadosResp = await respUpload.json();
+  return dadosResp.secure_url;
+}
+
+$("#btnSalvarPlanta")?.addEventListener("click", async () => {
+  if (!_dadosPlantaPendente) { toast("Escolha um arquivo primeiro."); return; }
+  const nome = $("#uploadPlantaNome").value.trim();
+  const local = $("#uploadPlantaLocal").value;
+  const camadaEquipamento = $("#uploadPlantaCamadaEquip").value;
+  if (!nome) { toast("Dê um nome pra essa planta."); return; }
+
+  const btn = $("#btnSalvarPlanta");
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+  const status = $("#uploadPlantaStatus");
+  try {
+    const publicId = "planta_" + Date.now();
+    if (status) status.textContent = "Enviando o desenho...";
+    const dadosUrl = await enviarArquivoPlanta(_dadosPlantaPendente, publicId);
+
+    const novaRef = doc(collection(db, "plantas"));
+    await setDoc(novaRef, {
+      nome, local,
+      layers: _dadosPlantaPendente.layers,
+      camadaEquipamento,
+      dadosUrl,
+      criadoEm: new Date().toISOString(),
+      criadoPor: ESTADO.usuarioNome || "",
+    });
+
+    toast("Planta salva.");
+    _dadosPlantaPendente = null;
+    $("#uploadPlantaArquivo").value = "";
+    $("#uploadPlantaNome").value = "";
+    $("#uploadPlantaPreviewWrap").hidden = true;
+    $("#painelUploadPlanta").hidden = true;
+    ESTADO.plantaSelecionada = novaRef.id;
+  } catch (err) {
+    console.error(err);
+    if (status) status.textContent = "Erro ao salvar: " + err.message;
+    toast("Erro ao salvar planta: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Salvar planta";
   }
 });
 
@@ -4349,15 +4696,16 @@ async function abrirDrawerEquipamento(id) {
     }
   });
 
-  $("#drawerVerNaPlanta")?.addEventListener("click", () => {
+  $("#drawerVerNaPlanta")?.addEventListener("click", async () => {
     fecharDrawer();
     ESTADO.plantaSelecionada = item.plantaId;
+    const svgAntigo = $("#plantaSvg");
+    if (svgAntigo) svgAntigo.dataset.plantaId = "";
     irParaAba("localizacao");
-    setTimeout(() => {
-      const marcador = $(`.planta-marcador[data-id="${item.id}"]`);
-      marcador?.click();
-      marcador?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 60);
+    await renderLocalizacao();
+    const marcador = $(`circle[data-id="${item.id}"]`);
+    marcador?.dispatchEvent(new Event("click", { bubbles: true }));
+    marcador?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 
   $("#drawerEnviarFoto")?.addEventListener("click", async () => {

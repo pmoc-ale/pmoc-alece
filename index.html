@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 <div class="auth-overlay" id="authOverlay" hidden>
@@ -395,25 +396,55 @@
 
     <!-- VIEW: LOCALIZAÇÃO NA PLANTA -->
     <section class="view" id="view-localizacao">
-      <div class="card">
+      <div class="card" id="plantaSemPlantas" hidden>
+        <h2>Localização na planta</h2>
+        <p class="muted">Nenhuma planta cadastrada ainda. Um admin pode enviar o desenho exportado do AutoCAD (.dwf ou .dwfx) abaixo.</p>
+      </div>
+      <div class="card" id="painelUploadPlanta" hidden>
+        <h2>Enviar planta (.dwf / .dwfx)</h2>
+        <p class="muted">Exporte a planta do AutoCAD como .dwf ou .dwfx ("Plotar" ou "Exportar") e envie aqui. A leitura é feita aqui mesmo, no navegador.</p>
+        <label>Arquivo<input type="file" id="uploadPlantaArquivo" accept=".dwf,.dwfx"></label>
+        <p class="muted" id="uploadPlantaStatus"></p>
+        <div id="uploadPlantaPreviewWrap" hidden>
+          <div class="planta-area">
+            <div class="planta-imagem-wrap">
+              <svg id="uploadPlantaSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+          <div class="grid-form" style="margin-top:12px">
+            <label>Nome da planta<input type="text" id="uploadPlantaNome" placeholder="Ex: Anexo 2 — 1º Piso"></label>
+            <label>Prédio<select id="uploadPlantaLocal"></select></label>
+            <label>Camada dos equipamentos<select id="uploadPlantaCamadaEquip"></select></label>
+          </div>
+          <p class="muted" id="uploadPlantaContagem"></p>
+          <button class="btn primary" id="btnSalvarPlanta" style="margin-top:8px">Salvar planta</button>
+        </div>
+      </div>
+      <div class="card" id="plantaConteudo" hidden>
         <div class="card-head" style="align-items:center;">
           <h2>Localização na planta</h2>
-          <select id="plantaSeletor"></select>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <select id="plantaSeletor"></select>
+            <button class="btn ghost" id="btnMostrarUploadPlanta" hidden style="font-size:12.5px;padding:6px 14px;">+ Nova planta</button>
+          </div>
         </div>
         <p class="muted">Clique em um marcador na planta para ver os dados do aparelho.<span id="plantaDicaAdmin"></span></p>
         <div class="planta-area">
-          <div class="planta-imagem-wrap" id="plantaImagemWrap">
-            <img id="plantaImagem" alt="Planta baixa">
-            <div id="plantaMarcadores"></div>
+          <div class="planta-imagem-wrap">
+            <svg id="plantaSvg" xmlns="http://www.w3.org/2000/svg"></svg>
           </div>
           <div class="planta-painel" id="plantaPainel">
             <p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>
           </div>
         </div>
+        <details class="drawer-secao" style="margin-top:12px">
+          <summary>Camadas</summary>
+          <div id="plantaCamadas" class="planta-camadas"></div>
+        </details>
       </div>
       <div class="card" id="cardPosicionarPlanta" hidden>
         <h2>Posicionar equipamentos nesta planta</h2>
-        <p class="muted">Escolha um aparelho da lista, confira/preencha o código dele na planta (ex: E2/C4) e clique no ponto certo da imagem para marcar (ou mover) a posição.</p>
+        <p class="muted">Escolha um aparelho da lista, confira/preencha o código dele na planta (ex: E2/C4) e clique no ponto certo da planta pra marcar (ou mover) a posição — os círculos tracejados são posições de equipamento já detectadas automaticamente no desenho; clicar num deles marca na hora.</p>
         <div class="grid-form">
           <label>Aparelho
             <select id="plantaEquipamentoSelect"></select>
@@ -577,7 +608,8 @@
 </aside>
 <div class="toast" id="toast"></div>
 <script src="utils/pdfGenerator.js"></script>
+<script src="utils/dwfParser.js"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=11"></script>
+<script type="module" src="app.js?v=12"></script>
 </body>
 </html>
