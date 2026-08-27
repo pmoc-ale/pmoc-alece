@@ -1115,6 +1115,29 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .planta-imagem-wrap svg:active {
   cursor: grabbing;
 }
+.planta-imagem-wrap svg.marcacao-ativa {
+  cursor: crosshair;
+}
+.planta-imagem-wrap svg.marcacao-ativa:active {
+  cursor: crosshair;
+}
+.planta-toggle-marcacao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: var(--raio);
+  background: #f4f6f8;
+  border: 1px solid var(--borda);
+  cursor: pointer;
+}
+.planta-toggle-marcacao.ativo {
+  background: #fff4e5;
+  border-color: #e0a63a;
+  color: #8a5a00;
+}
 .planta-zoom-controles {
   position: absolute;
   right: 10px;
@@ -1183,10 +1206,11 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   transform-origin: 50% 50%;
   animation: pulsoDestaquePlanta 1.3s ease-out infinite;
   pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(232, 163, 23, 0.85));
 }
 @keyframes pulsoDestaquePlanta {
-  0% { opacity: 0.9; transform: scale(1); }
-  100% { opacity: 0; transform: scale(2.2); }
+  0% { opacity: 1; transform: scale(0.6); }
+  100% { opacity: 0; transform: scale(2.6); }
 }
 .planta-painel {
   flex: 1 1 35%;

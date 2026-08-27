@@ -461,6 +461,10 @@
       <div class="card" id="cardPosicionarPlanta" hidden>
         <h2>Posicionar equipamentos nesta planta</h2>
         <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar.</p>
+        <label class="planta-toggle-marcacao" id="wrapAtivarMarcacao">
+          <input type="checkbox" id="chkAtivarMarcacao" style="width:auto">
+          <span id="txtAtivarMarcacao">Marcação desligada — pode navegar na planta à vontade sem risco de criar ou mover marcador</span>
+        </label>
         <div class="grid-form">
           <label>O que estou marcando
             <span style="display:flex; gap:16px; align-items:center; height:38px;">
@@ -639,6 +643,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=2"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=13"></script>
+<script type="module" src="app.js?v=14"></script>
 </body>
 </html>
