@@ -4023,10 +4023,8 @@ async function renderLocalizacao() {
 
   renderMarcadoresPlanta();
 
-  const cardPosicionar = $("#cardPosicionarPlanta");
-  if (cardPosicionar) cardPosicionar.hidden = !isAdmin;
   const dica = $("#plantaDicaAdmin");
-  if (dica) dica.textContent = isAdmin ? " Para marcar/mover um aparelho, use o quadro abaixo." : "";
+  if (dica) dica.textContent = isAdmin ? " Para marcar/mover um aparelho, use o lápis ✏️ no canto da planta." : "";
 
   const btnNovaPlanta = $("#btnMostrarUploadPlanta");
   if (btnNovaPlanta) btnNovaPlanta.hidden = !isAdmin;
@@ -4063,14 +4061,16 @@ async function renderLocalizacao() {
 // Mostra/esconde os campos certos conforme o modo (evaporadora escolhe
 // um aparelho da lista; condensadora só pede o código dela) e atualiza
 // a dica embaixo explicando como funciona o vínculo automático.
-// Marcação só acontece de propósito: por padrão o toggle vem desligado
-// e clicar na planta só navega (dá pra abrir os painéis dos marcadores
-// já existentes normalmente, isso nunca cria nada). Só quando a pessoa
-// liga o toggle é que um clique no fundo ou num contorno tracejado
-// passa a criar/mover um marcador -- assim não tem risco de marcar
-// sem querer só olhando a planta.
+// Marcação só acontece de propósito: o modo de edição fica desligado por
+// padrão (lápis apagado no canto da planta) e clicar/arrastar só navega
+// (dá pra abrir os painéis dos marcadores já existentes normalmente, isso
+// nunca cria nada). Só quando a pessoa clica no lápis é que um clique no
+// fundo, num contorno tracejado, ou arrastar um marcador/ícone passa a
+// criar/mover algo -- assim não tem risco de marcar sem querer só
+// olhando a planta. O painel inteiro de "o que estou marcando" também
+// só aparece nesse modo, em vez de ficar sempre visível.
 function marcacaoEstaAtiva() {
-  return $("#chkAtivarMarcacao")?.checked === true;
+  return ESTADO.permissao === "admin" && ESTADO.editandoPlanta === true;
 }
 
 function atualizarModoMarcacao() {
@@ -4082,16 +4082,17 @@ function atualizarModoMarcacao() {
   if (campoCodEvap) campoCodEvap.hidden = modoCondensadora;
   if (campoCodCond) campoCodCond.hidden = !modoCondensadora;
 
-  const ativa = marcacaoEstaAtiva();
-  const wrapToggle = $("#wrapAtivarMarcacao");
-  const txtToggle = $("#txtAtivarMarcacao");
-  if (wrapToggle) wrapToggle.classList.toggle("ativo", ativa);
-  if (txtToggle) {
-    txtToggle.textContent = ativa
-      ? "Marcação ligada — clicar na planta cria ou move um marcador"
-      : "Marcação desligada — pode navegar na planta à vontade sem risco de criar ou mover marcador";
+  const isAdmin = ESTADO.permissao === "admin";
+  const editando = marcacaoEstaAtiva();
+  const cardPosicionar = $("#cardPosicionarPlanta");
+  if (cardPosicionar) cardPosicionar.hidden = !editando;
+  const btnEditar = $("#btnEditarPlanta");
+  if (btnEditar) {
+    btnEditar.hidden = !isAdmin;
+    btnEditar.classList.toggle("ativo", editando);
+    btnEditar.title = editando ? "Sair do modo de edição" : "Editar marcações (posicionar/mover equipamentos)";
   }
-  $("#plantaSvg")?.classList.toggle("marcacao-ativa", ativa);
+  $("#plantaSvg")?.classList.toggle("marcacao-ativa", editando);
 
   const dica = $("#dicaModoMarcacao");
   if (dica) {
@@ -4100,7 +4101,11 @@ function atualizarModoMarcacao() {
       : "";
   }
 }
-$("#chkAtivarMarcacao")?.addEventListener("change", () => { atualizarModoMarcacao(); renderMarcadoresPlanta(); });
+$("#btnEditarPlanta")?.addEventListener("click", () => {
+  ESTADO.editandoPlanta = !ESTADO.editandoPlanta;
+  atualizarModoMarcacao();
+  renderMarcadoresPlanta();
+});
 
 // Constrói o SVG da planta a partir do desenho vetorial já baixado: um
 // <g> por camada do CAD (pra dar pra ligar/desligar) dentro do grupo com a
@@ -4249,7 +4254,7 @@ async function renderMarcadoresPlanta() {
   // "quadrado rosa" da planta virar visualmente o marcador, em vez de um
   // ícone genérico por cima. Só cai no ícone quando não há um símbolo
   // real ali (ex: condensadora marcada à mão numa área sem esse desenho).
-  function marcarAparelho(x, y, tipo, cor, rotulo, aoClicar) {
+  function marcarAparelho(x, y, tipo, cor, rotulo, aoClicar, aoMoverPara) {
     const cand = candidatoPerto(x, y);
     const elementos = cand?.nums?.map((n) => svg.__pathPorNumero.get(n)).filter(Boolean) || [];
     if (elementos.length) {
@@ -4283,7 +4288,57 @@ async function renderMarcadoresPlanta() {
     const titulo = document.createElementNS(nsSvg, "title");
     titulo.textContent = rotulo;
     icone.appendChild(titulo);
-    icone.addEventListener("click", (ev) => { ev.stopPropagation(); aoClicar(); });
+    // O "click" nativo do navegador dispara no pointerup mesmo depois de
+    // um arrasto grande (não existe um limite de movimento embutido nele
+    // -- é exatamente por isso que o resto da planta usa esse mesmo
+    // truque da flag "arrastou" pra diferenciar). Sem isso, todo arrasto
+    // pra reposicionar também abriria o painel do aparelho logo em
+    // seguida.
+    icone.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (icone.dataset.arrastou === "1") { icone.dataset.arrastou = "0"; return; }
+      aoClicar();
+    });
+
+    // Arrastar pra reposicionar -- só faz sentido pro ícone genérico
+    // (fallback de quando não achou o símbolo real do CAD ali perto): o
+    // destaque em cima do desenho de verdade (acima) fica preso à
+    // posição do próprio símbolo desenhado, então "arrastar" ali não
+    // faria sentido nenhum. Só ativa no modo de edição, e só clique vira
+    // "abrir painel" -- um arrasto de verdade (movimento > alguns
+    // pixels) que vira reposicionamento.
+    if (aoMoverPara && marcacaoEstaAtiva()) {
+      icone.style.cursor = "grab";
+      let arrastando = false, moveu = 0, ultimoX = 0, ultimoY = 0;
+      icone.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+        icone.setPointerCapture(ev.pointerId);
+        arrastando = true; moveu = 0;
+        ultimoX = ev.clientX; ultimoY = ev.clientY;
+      });
+      icone.addEventListener("pointermove", (ev) => {
+        if (!arrastando) return;
+        moveu += Math.abs(ev.clientX - ultimoX) + Math.abs(ev.clientY - ultimoY);
+        ultimoX = ev.clientX; ultimoY = ev.clientY;
+        if (moveu > 5) {
+          const { x: nx, y: ny } = svgPontoDeClique(svg, ev);
+          icone.setAttribute("transform", `translate(${nx},${ny})`);
+        }
+      });
+      icone.addEventListener("pointerup", (ev) => {
+        if (!arrastando) return;
+        arrastando = false;
+        if (moveu > 5) {
+          icone.dataset.arrastou = "1";
+          const planta = plantaPorId(ESTADO.plantaSelecionada);
+          const { x: nx, y: ny } = svgPontoDeClique(svg, ev);
+          const cand = candidatoMaisProximo(planta, nx, ny);
+          aoMoverPara(cand ? cand.x : Math.round(nx * 100) / 100, cand ? cand.y : Math.round(ny * 100) / 100);
+        }
+      });
+      icone.addEventListener("pointercancel", () => { arrastando = false; });
+    }
+
     gMarcadores.appendChild(icone);
   }
 
@@ -4295,7 +4350,7 @@ async function renderMarcadoresPlanta() {
   itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
     const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
-    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e));
+    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e), (nx, ny) => reposicionarEvaporadora(e, nx, ny));
   });
 
   // Condensadoras marcadas nesta planta (pelo código, não por aparelho --
@@ -4317,7 +4372,7 @@ async function renderMarcadoresPlanta() {
     });
     const cor = classe ? (CORES_STATUS_MARCADOR[classe] || "#888") : "#8B98A6";
     const rotulo = "Condensadora " + (cond.codigo || "") + (vinculadas.length ? ` — ${vinculadas.length} aparelho(s)` : " — sem evaporadora vinculada ainda");
-    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond));
+    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond), cond.codigo ? (nx, ny) => reposicionarCondensadora(planta, cond.codigo, nx, ny) : null);
   });
 
   // Modo admin: mostra também os candidatos detectados automaticamente no
@@ -4526,6 +4581,36 @@ function candidatoMaisProximo(planta, x, y) {
   return melhor && melhorDist <= distanciaMax ? melhor : null;
 }
 
+// Reposiciona um marcador já existente (arrastar, não criar) -- usa
+// direto o aparelho/código que o marcador já representa, sem depender
+// do que estiver selecionado no formulário (que pode ser outro
+// aparelho qualquer nem relacionado ao que está sendo arrastado).
+async function reposicionarEvaporadora(item, x, y) {
+  try {
+    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), { plantaX: x, plantaY: y });
+    toast("Posição atualizada.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar posição: " + err.message);
+  }
+}
+
+async function reposicionarCondensadora(planta, codigo, x, y) {
+  const plantaRef = doc(db, "plantas", planta.id);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(plantaRef);
+      const listaAtual = (snap.exists() && snap.data().condensadoras) || [];
+      const novaLista = listaAtual.map((c) => normalizarCodigo(c.codigo) === normalizarCodigo(codigo) ? { ...c, x, y } : c);
+      tx.update(plantaRef, { condensadoras: novaLista });
+    });
+    toast("Posição atualizada.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar posição: " + err.message);
+  }
+}
+
 async function salvarPosicaoPlanta(planta, x, y) {
   const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
 
@@ -4652,6 +4737,47 @@ $("#plantaSvg")?.addEventListener("click", (ev) => {
   } else {
     salvarPosicaoPlanta(planta, Math.round(x * 100) / 100, Math.round(y * 100) / 100);
   }
+});
+
+// ------------------------------------------------------------------
+// Arrastar um ícone da caixinha "Ou arraste pra dentro da planta" --
+// alternativa ao clique, pensada pro caso em que o desenho não tem o
+// símbolo detectado ali perto (então não existe contorno tracejado pra
+// clicar em cima). Feito com Pointer Events (não o drag nativo do
+// HTML5, que não funciona direito no toque do celular) pra funcionar
+// igual no mouse e no dedo.
+// ------------------------------------------------------------------
+$all(".planta-chip-arrastavel").forEach((chip) => {
+  chip.addEventListener("pointerdown", (ev) => {
+    if (!marcacaoEstaAtiva()) { toast("Clique no lápis ✏️ da planta pra entrar no modo de edição antes de arrastar."); return; }
+    ev.preventDefault();
+    const tipo = chip.dataset.tipo;
+    const radio = $(`input[name="modoMarcacao"][value="${tipo}"]`);
+    if (radio && !radio.checked) { radio.checked = true; atualizarModoMarcacao(); }
+
+    const fantasma = document.createElement("div");
+    fantasma.className = "planta-fantasma-arrasto " + tipo;
+    document.body.appendChild(fantasma);
+    const mover = (cx, cy) => { fantasma.style.left = (cx - 13) + "px"; fantasma.style.top = (cy - 13) + "px"; };
+    mover(ev.clientX, ev.clientY);
+
+    function aoMover(e) { mover(e.clientX, e.clientY); }
+    function aoSoltar(e) {
+      document.removeEventListener("pointermove", aoMover);
+      fantasma.remove();
+      const svg = $("#plantaSvg");
+      const planta = plantaPorId(ESTADO.plantaSelecionada);
+      if (!svg || !planta) return;
+      const retSvg = svg.getBoundingClientRect();
+      if (e.clientX < retSvg.left || e.clientX > retSvg.right || e.clientY < retSvg.top || e.clientY > retSvg.bottom) return; // soltou fora da planta, cancela
+      const { x, y } = svgPontoDeClique(svg, e);
+      const cand = candidatoMaisProximo(planta, x, y);
+      if (cand) salvarPosicaoPlanta(planta, cand.x, cand.y);
+      else salvarPosicaoPlanta(planta, Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+    }
+    document.addEventListener("pointermove", aoMover);
+    document.addEventListener("pointerup", aoSoltar, { once: true });
+  });
 });
 
 // ------------------------------------------------------------------
