@@ -1093,14 +1093,11 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 
 /* Tela de Localização na planta */
 .planta-area {
-  display: flex;
-  gap: var(--sp-4);
-  align-items: flex-start;
+  display: block;
 }
 .planta-imagem-wrap {
   position: relative;
-  flex: 1 1 65%;
-  min-width: 0;
+  width: 100%;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   overflow: hidden;
@@ -1109,7 +1106,7 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .planta-imagem-wrap svg {
   display: block;
   width: 100%;
-  height: 70vh;
+  height: 80vh;
   cursor: grab;
 }
 .planta-imagem-wrap svg:active {
@@ -1253,13 +1250,18 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   100% { opacity: 0; transform: scale(2.6); }
 }
 .planta-painel {
-  flex: 1 1 35%;
-  min-width: 220px;
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 3;
+  width: min(340px, calc(100% - 20px));
+  max-height: 48%;
+  overflow-y: auto;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   padding: var(--sp-4);
-  background: var(--azul-50);
-  align-self: stretch;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
 }
 .planta-camadas {
   display: grid;
@@ -1276,15 +1278,12 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 }
 
 @media (max-width: 768px) {
-  .planta-area {
-    flex-direction: column;
-  }
-  .planta-imagem-wrap, .planta-painel {
-    flex: 1 1 auto;
-    width: 100%;
-  }
   .planta-imagem-wrap svg {
-    height: 50vh;
+    height: 60vh;
+  }
+  .planta-painel {
+    width: calc(100% - 20px);
+    max-height: 55%;
   }
 }
 
