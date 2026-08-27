@@ -4063,6 +4063,16 @@ async function renderLocalizacao() {
 // Mostra/esconde os campos certos conforme o modo (evaporadora escolhe
 // um aparelho da lista; condensadora só pede o código dela) e atualiza
 // a dica embaixo explicando como funciona o vínculo automático.
+// Marcação só acontece de propósito: por padrão o toggle vem desligado
+// e clicar na planta só navega (dá pra abrir os painéis dos marcadores
+// já existentes normalmente, isso nunca cria nada). Só quando a pessoa
+// liga o toggle é que um clique no fundo ou num contorno tracejado
+// passa a criar/mover um marcador -- assim não tem risco de marcar
+// sem querer só olhando a planta.
+function marcacaoEstaAtiva() {
+  return $("#chkAtivarMarcacao")?.checked === true;
+}
+
 function atualizarModoMarcacao() {
   const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
   const campoEquip = $("#campoEquipamentoWrap");
@@ -4071,6 +4081,18 @@ function atualizarModoMarcacao() {
   if (campoEquip) campoEquip.hidden = modoCondensadora;
   if (campoCodEvap) campoCodEvap.hidden = modoCondensadora;
   if (campoCodCond) campoCodCond.hidden = !modoCondensadora;
+
+  const ativa = marcacaoEstaAtiva();
+  const wrapToggle = $("#wrapAtivarMarcacao");
+  const txtToggle = $("#txtAtivarMarcacao");
+  if (wrapToggle) wrapToggle.classList.toggle("ativo", ativa);
+  if (txtToggle) {
+    txtToggle.textContent = ativa
+      ? "Marcação ligada — clicar na planta cria ou move um marcador"
+      : "Marcação desligada — pode navegar na planta à vontade sem risco de criar ou mover marcador";
+  }
+  $("#plantaSvg")?.classList.toggle("marcacao-ativa", ativa);
+
   const dica = $("#dicaModoMarcacao");
   if (dica) {
     dica.textContent = modoCondensadora
@@ -4078,6 +4100,7 @@ function atualizarModoMarcacao() {
       : "";
   }
 }
+$("#chkAtivarMarcacao")?.addEventListener("change", () => { atualizarModoMarcacao(); renderMarcadoresPlanta(); });
 
 // Constrói o SVG da planta a partir do desenho vetorial já baixado: um
 // <g> por camada do CAD (pra dar pra ligar/desligar) dentro do grupo com a
@@ -4328,8 +4351,12 @@ async function renderMarcadoresPlanta() {
         retangulo.setAttribute("stroke-dasharray", `${pad * 0.6},${pad * 0.6}`);
         retangulo.setAttribute("stroke-width", pad * 0.3);
         retangulo.dataset.destaque = "1";
-        retangulo.style.cursor = "pointer";
-        retangulo.addEventListener("click", (ev) => { ev.stopPropagation(); salvarPosicaoPlanta(planta, cand.x, cand.y); });
+        retangulo.style.cursor = marcacaoEstaAtiva() ? "pointer" : "default";
+        retangulo.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (!marcacaoEstaAtiva()) return;
+          salvarPosicaoPlanta(planta, cand.x, cand.y);
+        });
         gDestaques.appendChild(retangulo);
       } else {
         const c = document.createElementNS(nsSvg, "circle");
@@ -4343,8 +4370,12 @@ async function renderMarcadoresPlanta() {
         c.setAttribute("stroke", "#8B98A6");
         c.setAttribute("stroke-dasharray", `${raioMarcador / 4},${raioMarcador / 4}`);
         c.setAttribute("stroke-width", raioMarcador / 5);
-        c.style.cursor = "pointer";
-        c.addEventListener("click", (ev) => { ev.stopPropagation(); salvarPosicaoPlanta(planta, cand.x, cand.y); });
+        c.style.cursor = marcacaoEstaAtiva() ? "pointer" : "default";
+        c.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (!marcacaoEstaAtiva()) return;
+          salvarPosicaoPlanta(planta, cand.x, cand.y);
+        });
         gMarcadores.appendChild(c);
       }
     });
@@ -4461,18 +4492,18 @@ function piscarDestaque(svg, x, y) {
   const gMarcadores = $("#plantaMarcadoresSvg");
   if (!svg || !gMarcadores) return;
   const [xmin, , xmax] = svg.__viewOriginal ? [svg.__viewOriginal.x, 0, svg.__viewOriginal.x + svg.__viewOriginal.w] : [0, 0, 100];
-  const raio = (xmax - xmin) / 55 || 1;
+  const raio = (xmax - xmin) / 42 || 1;
   const nsSvg = "http://www.w3.org/2000/svg";
   const anel = document.createElementNS(nsSvg, "circle");
   anel.setAttribute("cx", x);
   anel.setAttribute("cy", y);
   anel.setAttribute("r", raio);
   anel.setAttribute("fill", "none");
-  anel.setAttribute("stroke", "#C9A34E");
-  anel.setAttribute("stroke-width", raio / 3);
+  anel.setAttribute("stroke", "#E8A317");
+  anel.setAttribute("stroke-width", raio / 2.5);
   anel.classList.add("planta-pulso-destaque");
   gMarcadores.appendChild(anel);
-  setTimeout(() => anel.remove(), 2600);
+  setTimeout(() => anel.remove(), 3900);
 }
 
 // Acha o candidato (símbolo real detectado no CAD) mais próximo de um
@@ -4610,6 +4641,7 @@ $("#plantaSvg")?.addEventListener("click", (ev) => {
   const svg = $("#plantaSvg");
   if (svg?.dataset.arrastou === "1") { svg.dataset.arrastou = "0"; return; } // era pan, não clique
   if (ESTADO.permissao !== "admin") return;
+  if (!marcacaoEstaAtiva()) return; // toggle desligado -- só navegar, sem risco de marcar
   if (ev.target.closest("circle, g[data-id], g[data-condensadora-de], [data-destaque]")) return; // marcador já tem seu próprio handler
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!svg || !planta) return;
@@ -4686,7 +4718,12 @@ function ativarZoomPan(svg) {
       p.x = ev.clientX; p.y = ev.clientY;
       const [p1, p2] = [...ponteiros.values()];
       const distanciaAtual = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const fator = distanciaInicialPinca / Math.max(distanciaAtual, 1);
+      const razaoBruta = distanciaInicialPinca / Math.max(distanciaAtual, 1);
+      // Amortece a pinça: sem isso, no celular o gesto "pega" fácil demais
+      // e um movimento pequeno de dedo já dispara um zoom enorme, ficando
+      // difícil de controlar. Elevar a razão a um expoente < 1 pede mais
+      // percurso físico dos dedos pro mesmo tanto de zoom.
+      const fator = Math.pow(razaoBruta, 0.5);
       const meioX = (p1.x + p2.x) / 2, meioY = (p1.y + p2.y) / 2;
       const original = svg.__viewOriginal || viewInicialPinca;
       let novaLargura = viewInicialPinca.w * fator;
@@ -5288,14 +5325,13 @@ async function abrirDrawerEquipamento(id) {
 
   $("#drawerVerNaPlanta")?.addEventListener("click", async () => {
     fecharDrawer();
-    ESTADO.plantaSelecionada = item.plantaId;
-    const svgAntigo = $("#plantaSvg");
-    if (svgAntigo) svgAntigo.dataset.plantaId = "";
     irParaAba("localizacao");
-    await renderLocalizacao();
-    const marcador = $(`circle[data-id="${item.id}"]`);
-    marcador?.dispatchEvent(new Event("click", { bubbles: true }));
-    marcador?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Mesmo caminho do botão "Ver condensadora": troca de planta se
+    // precisar, centraliza e aproxima a visão, e pisca o anel dourado --
+    // antes esse botão procurava um <circle data-id> que não existe mais
+    // desde que o marcador virou o próprio símbolo do CAD (ou um ícone
+    // <g>), então na prática não fazia nada além de trocar de aba.
+    await irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
   });
 
   $("#drawerEnviarFoto")?.addEventListener("click", async () => {
