@@ -427,6 +427,7 @@
           <div style="display:flex; align-items:center; gap:10px;">
             <select id="plantaSeletor"></select>
             <button class="btn ghost" id="btnMostrarUploadPlanta" hidden style="font-size:12.5px;padding:6px 14px;">+ Nova planta</button>
+            <button class="btn ghost" id="btnExcluirPlanta" hidden style="font-size:12.5px;padding:6px 14px;color:var(--vermelho);border-color:var(--vermelho);">Excluir esta planta</button>
           </div>
         </div>
         <p class="muted">Clique em um marcador na planta para ver os dados do aparelho.<span id="plantaDicaAdmin"></span></p>
@@ -459,7 +460,7 @@
       </div>
       <div class="card" id="cardPosicionarPlanta" hidden>
         <h2>Posicionar equipamentos nesta planta</h2>
-        <p class="muted">Escolha um aparelho da lista, confira/preencha o código dele na planta (ex: E2/C4) e clique no ponto certo da planta pra marcar (ou mover) a posição — os círculos tracejados são posições de equipamento já detectadas automaticamente no desenho; clicar num deles marca na hora.</p>
+        <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar.</p>
         <div class="grid-form">
           <label>O que estou marcando
             <span style="display:flex; gap:16px; align-items:center; height:38px;">
@@ -467,13 +468,20 @@
               <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="condensadora" style="width:auto"> Condensadora</label>
             </span>
           </label>
-          <label>Aparelho
+          <label id="campoEquipamentoWrap">Aparelho
             <select id="plantaEquipamentoSelect"></select>
           </label>
-          <label>Código na planta (opcional, ex: E2/C4)
-            <input type="text" id="plantaCodigoInput" placeholder="Ex: E2/C4">
+          <label id="campoCodigoEvapWrap">Código na planta (opcional, ex: E2/C4)
+            <span style="display:flex; gap:8px;">
+              <input type="text" id="plantaCodigoInput" placeholder="Ex: E2/C4" style="flex:1">
+              <button type="button" class="btn ghost" id="btnSalvarCodigoEvap" style="flex-shrink:0; padding:0 12px;">Salvar código</button>
+            </span>
+          </label>
+          <label id="campoCodigoCondWrap" hidden>Código desta condensadora (ex: C7)
+            <input type="text" id="plantaCondensadoraCodigoInput" placeholder="Ex: C7">
           </label>
         </div>
+        <p class="muted" id="dicaModoMarcacao" style="margin-top:6px"></p>
       </div>
     </section>
 
