@@ -282,6 +282,65 @@ async function carregarDadosPlanta(planta) {
   _dadosPlantaCache.set(planta.id, dados);
   return dados;
 }
+
+// ------------------------------------------------------------------
+// Vínculo evaporadora <-> condensadora por CÓDIGO, não por clique par a
+// par. A condensadora normalmente fica numa planta totalmente diferente
+// (cobertura), então marcar as duas de uma vez, aparelho por aparelho,
+// obrigava a ficar trocando de planta e caçando o aparelho certo numa
+// lista toda vez. Do jeito que ficou: as condensadoras de uma planta são
+// marcadas com o código de verdade delas (o mesmo que já está desenhado
+// na planta, tipo "C7") -- sem escolher aparelho nenhum -- e uma
+// evaporadora com "Código na planta" = "E1/C7" acha essa condensadora
+// sozinha, sem precisar de nenhum passo extra de vínculo manual.
+// ------------------------------------------------------------------
+function normalizarCodigo(c) {
+  return String(c || "").trim().toUpperCase();
+}
+
+// De "E1/C7" (ou "E1 / C7") tira só a parte da condensadora ("C7").
+function extrairCodigoCondensadora(codigoPlanta) {
+  const partes = String(codigoPlanta || "").split("/");
+  if (partes.length < 2) return null;
+  const codigo = partes[1].trim();
+  return codigo || null;
+}
+
+// Procura em TODAS as plantas cadastradas (a condensadora pode estar em
+// qualquer uma) uma condensadora marcada com esse código.
+function buscarCondensadoraPorCodigo(codigo) {
+  const alvo = normalizarCodigo(codigo);
+  if (!alvo) return null;
+  for (const planta of ESTADO.plantas) {
+    const achada = (planta.condensadoras || []).find((c) => normalizarCodigo(c.codigo) === alvo);
+    if (achada) return { ...achada, plantaId: planta.id };
+  }
+  return null;
+}
+
+// Condensadora vinculada a UM equipamento específico -- por código
+// (fonte principal) ou, se não achar nada por código, pelos campos
+// antigos de vínculo direto (condensadoraPlantaId/X/Y), pra não perder
+// nada que já tenha sido marcado do jeito antigo antes dessa mudança.
+function condensadoraDoEquipamento(item) {
+  const codigo = extrairCodigoCondensadora(item.codigoPlanta);
+  if (codigo) {
+    const achada = buscarCondensadoraPorCodigo(codigo);
+    if (achada) return achada;
+  }
+  if (item.condensadoraPlantaId && item.condensadoraX != null) {
+    return { plantaId: item.condensadoraPlantaId, x: item.condensadoraX, y: item.condensadoraY, codigo: null };
+  }
+  return null;
+}
+
+// Caminho inverso: todas as evaporadoras cadastradas cujo "Código na
+// planta" aponta pra essa condensadora.
+function evaporadorasQueApontamPara(codigo) {
+  const alvo = normalizarCodigo(codigo);
+  if (!alvo) return [];
+  return ESTADO.equipamentos.filter((e) => normalizarCodigo(extrairCodigoCondensadora(e.codigoPlanta)) === alvo);
+}
 const URL_CHAMADOS_CORRETIVOS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR2Ysf9JofZL_2Xn_JPJFaPrMX6IGiwMQWFyhgJcqu8BK_4imC_lmrMgfpDWLnI6MIdcC0OYSDUQFPw/pub?gid=1978174237&single=true&output=csv";
 ESTADO.configSite.urlCorretivas = URL_CHAMADOS_CORRETIVOS;
 const INTERVALO_ATUALIZACAO_CORRETIVOS_MS = 5 * 60 * 1000; 
@@ -3971,26 +4030,23 @@ async function renderLocalizacao() {
 
   const btnNovaPlanta = $("#btnMostrarUploadPlanta");
   if (btnNovaPlanta) btnNovaPlanta.hidden = !isAdmin;
+  const btnExcluirPlanta = $("#btnExcluirPlanta");
+  if (btnExcluirPlanta) btnExcluirPlanta.hidden = !isAdmin;
+
+  atualizarModoMarcacao();
 
   if (isAdmin) {
     const select = $("#plantaEquipamentoSelect");
-    const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
-    // Marcando evaporadora: só faz sentido escolher entre os aparelhos
-    // desse prédio. Marcando condensadora: ela pode estar numa planta
-    // totalmente diferente da evaporadora (cobertura, por exemplo), então
-    // a lista não fica restrita ao prédio da planta aberta agora.
-    const itensBase = modoCondensadora
-      ? ESTADO.equipamentos
-      : ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === planta.local);
-    const itensDoPredio = itensBase.sort((a, b) =>
-      (a.local || "").localeCompare(b.local || "") || (a.ambiente || "").localeCompare(b.ambiente || "")
-    );
+    // A condensadora não escolhe aparelho nenhum (é por código -- ver
+    // atualizarModoMarcacao), então essa lista só precisa existir pro
+    // modo evaporadora, restrita ao prédio da planta aberta agora.
+    const itensDoPredio = ESTADO.equipamentos
+      .filter((e) => (e.local || "SEDE") === planta.local)
+      .sort((a, b) => (a.ambiente || "").localeCompare(b.ambiente || ""));
     const selecionadoAntes = select.value;
     select.innerHTML = itensDoPredio.map((e) => {
-      const marcado = modoCondensadora
-        ? (e.condensadoraPlantaId ? " ✓ condensadora já marcada" : "")
-        : (e.plantaId === planta.id ? " ✓ já marcado" : "");
-      const rotulo = [e.local, e.codigoPlanta, e.patrimonio ? `Pat. ${e.patrimonio}` : null, e.ambiente].filter(Boolean).join(" — ");
+      const marcado = e.plantaId === planta.id ? " ✓ já marcado" : "";
+      const rotulo = [e.codigoPlanta, e.patrimonio ? `Pat. ${e.patrimonio}` : null, e.ambiente].filter(Boolean).join(" — ");
       return `<option value="${e.id}">${escapeHtml(rotulo || e.id)}${marcado}</option>`;
     }).join("");
     if (itensDoPredio.some((e) => e.id === selecionadoAntes)) select.value = selecionadoAntes;
@@ -4001,6 +4057,25 @@ async function renderLocalizacao() {
       const codigoInput = $("#plantaCodigoInput");
       if (codigoInput) codigoInput.value = (itemSelecionado && itemSelecionado.codigoPlanta) || "";
     }
+  }
+}
+
+// Mostra/esconde os campos certos conforme o modo (evaporadora escolhe
+// um aparelho da lista; condensadora só pede o código dela) e atualiza
+// a dica embaixo explicando como funciona o vínculo automático.
+function atualizarModoMarcacao() {
+  const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
+  const campoEquip = $("#campoEquipamentoWrap");
+  const campoCodEvap = $("#campoCodigoEvapWrap");
+  const campoCodCond = $("#campoCodigoCondWrap");
+  if (campoEquip) campoEquip.hidden = modoCondensadora;
+  if (campoCodEvap) campoCodEvap.hidden = modoCondensadora;
+  if (campoCodCond) campoCodCond.hidden = !modoCondensadora;
+  const dica = $("#dicaModoMarcacao");
+  if (dica) {
+    dica.textContent = modoCondensadora
+      ? "Marque cada condensadora com o código que já está desenhado na planta (ex: C7) -- qualquer evaporadora com \"Código na planta\" = algo/C7 vai achar essa condensadora sozinha, sem precisar escolher aparelho aqui."
+      : "";
   }
 }
 
@@ -4200,14 +4275,26 @@ async function renderMarcadoresPlanta() {
     marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e));
   });
 
-  // Condensadoras vinculadas a alguma evaporadora, marcadas nesta mesma planta.
-  const condensadorasAqui = ESTADO.equipamentos.filter(
-    (e) => e.condensadoraPlantaId === planta.id && e.condensadoraX != null && e.condensadoraY != null
-  );
-  condensadorasAqui.forEach((e) => {
-    const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
-    const rotulo = "Condensadora — " + (e.codigoPlanta || e.patrimonio || e.ambiente || "");
-    marcarAparelho(e.condensadoraX, e.condensadoraY, "condensadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelCondensadora(e));
+  // Condensadoras marcadas nesta planta (pelo código, não por aparelho --
+  // ver condensadoraDoEquipamento/evaporadorasQueApontamPara). A cor
+  // reflete o status mais urgente entre as evaporadoras que apontam pra
+  // ela (uma condensadora de VRF pode atender várias); sem nenhuma
+  // evaporadora vinculada ainda, fica num tom neutro.
+  const ORDEM_URGENCIA = ["atrasado", "pendente", "andamento", "concluido"];
+  const condensadorasAqui = planta.condensadoras || [];
+  const condensadorasComPosicao = ESTADO.equipamentos
+    .filter((e) => e.condensadoraPlantaId === planta.id && e.condensadoraX != null && e.condensadoraY != null && !extrairCodigoCondensadora(e.codigoPlanta))
+    .map((e) => ({ codigo: null, x: e.condensadoraX, y: e.condensadoraY, __legado: e }));
+  [...condensadorasAqui, ...condensadorasComPosicao].forEach((cond) => {
+    const vinculadas = cond.codigo ? evaporadorasQueApontamPara(cond.codigo) : (cond.__legado ? [cond.__legado] : []);
+    let classe = null;
+    ORDEM_URGENCIA.forEach((c) => {
+      if (classe) return;
+      if (vinculadas.some((e) => (estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva)) === c)) classe = c;
+    });
+    const cor = classe ? (CORES_STATUS_MARCADOR[classe] || "#888") : "#8B98A6";
+    const rotulo = "Condensadora " + (cond.codigo || "") + (vinculadas.length ? ` — ${vinculadas.length} aparelho(s)` : " — sem evaporadora vinculada ainda");
+    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond));
   });
 
   // Modo admin: mostra também os candidatos detectados automaticamente no
@@ -4220,7 +4307,7 @@ async function renderMarcadoresPlanta() {
     // foi destacado como identificado (podia acontecer se a posição
     // salva não fosse EXATAMENTE igual à do candidato).
     const ocupados = new Set(
-      [...itens.map((e) => [e.plantaX, e.plantaY]), ...condensadorasAqui.map((e) => [e.condensadoraX, e.condensadoraY])]
+      [...itens.map((e) => [e.plantaX, e.plantaY]), ...condensadorasAqui.map((c) => [c.x, c.y]), ...condensadorasComPosicao.map((c) => [c.x, c.y])]
         .map(([x, y]) => candidatoPerto(x, y))
         .filter(Boolean)
     );
@@ -4267,7 +4354,7 @@ async function renderMarcadoresPlanta() {
 function mostrarPainelPlanta(item) {
   const painel = $("#plantaPainel");
   if (!painel) return;
-  const temCondensadora = item.condensadoraPlantaId && item.condensadoraX != null;
+  const condensadora = condensadoraDoEquipamento(item);
   const isAdmin = ESTADO.permissao === "admin";
   painel.innerHTML = `
     <h3 style="margin-top:0">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
@@ -4278,12 +4365,12 @@ function mostrarPainelPlanta(item) {
     <div class="drawer-campo"><span class="rotulo">Capacidade</span><span class="valor">${escapeHtml(item.capacidade || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Tipo de gás</span><span class="valor">${escapeHtml(item.tipoGas || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Status</span><span class="valor">${estaAtrasado(item) ? "Atrasado" : escapeHtml(item.statusPreventiva || "-")}</span></div>
-    ${temCondensadora ? '<button class="btn ghost" id="btnVerCondensadora" style="margin-top:10px;width:100%">📍 Ver condensadora</button>' : ""}
-    <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:${temCondensadora ? "6" : "10"}px;width:100%">Ver ficha completa</button>
+    ${condensadora ? `<button class="btn ghost" id="btnVerCondensadora" style="margin-top:10px;width:100%">📍 Ver condensadora${condensadora.codigo ? " (" + escapeHtml(condensadora.codigo) + ")" : ""}</button>` : ""}
+    <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:${condensadora ? "6" : "10"}px;width:100%">Ver ficha completa</button>
     ${isAdmin ? '<button class="btn ghost" id="btnRemoverMarcacaoEvap" style="margin-top:6px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação nesta planta</button>' : ""}
   `;
   $("#btnAbrirDrawerDaPlanta")?.addEventListener("click", () => abrirDrawerEquipamento(item.id));
-  $("#btnVerCondensadora")?.addEventListener("click", () => irParaMarcador(item.condensadoraPlantaId, item.condensadoraX, item.condensadoraY, () => mostrarPainelCondensadora(item)));
+  $("#btnVerCondensadora")?.addEventListener("click", () => irParaMarcador(condensadora.plantaId, condensadora.x, condensadora.y, () => mostrarPainelCondensadora(condensadora)));
   $("#btnRemoverMarcacaoEvap")?.addEventListener("click", async () => {
     if (!confirm("Remover a marcação desse aparelho nesta planta?")) return;
     try {
@@ -4299,26 +4386,40 @@ function mostrarPainelPlanta(item) {
   });
 }
 
-function mostrarPainelCondensadora(item) {
+// "cond" aqui é uma entrada do catálogo de condensadoras da planta
+// ({codigo, x, y, plantaId}) -- não um equipamento. Uma condensadora
+// pode atender mais de uma evaporadora (comum em VRF), por isso o
+// painel lista todas as que apontam pra ela, não só uma.
+function mostrarPainelCondensadora(cond) {
   const painel = $("#plantaPainel");
   if (!painel) return;
   const isAdmin = ESTADO.permissao === "admin";
+  const vinculadas = cond.codigo ? evaporadorasQueApontamPara(cond.codigo) : [];
   painel.innerHTML = `
-    <h3 style="margin-top:0">Condensadora — ${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
-    <p class="muted" style="margin-top:-6px">Unidade externa vinculada a este aparelho.</p>
-    <div class="drawer-campo"><span class="rotulo">Evaporadora</span><span class="valor">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "-")}</span></div>
-    <div class="drawer-campo"><span class="rotulo">Ambiente da evaporadora</span><span class="valor">${escapeHtml(item.ambiente || "-")}</span></div>
-    <button class="btn ghost" id="btnVerEvaporadora" style="margin-top:10px;width:100%">📍 Ver evaporadora</button>
-    ${isAdmin ? '<button class="btn ghost" id="btnRemoverMarcacaoCond" style="margin-top:6px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação da condensadora</button>' : ""}
+    <h3 style="margin-top:0">Condensadora ${escapeHtml(cond.codigo || "")}</h3>
+    <p class="muted" style="margin-top:-6px">${vinculadas.length ? `Atende ${vinculadas.length} evaporadora(s):` : "Nenhuma evaporadora aponta pra esse código ainda."}</p>
+    ${vinculadas.map((e) => `
+      <div class="drawer-campo">
+        <span class="rotulo">${escapeHtml(e.codigoPlanta || e.patrimonio || e.ambiente || "-")}</span>
+        <span class="valor"><a href="#" data-ver-evap="${escapeHtml(e.id)}">${escapeHtml(e.ambiente || "-")}</a></span>
+      </div>
+    `).join("")}
+    ${isAdmin ? `<button class="btn ghost" id="btnRemoverMarcacaoCond" style="margin-top:10px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação "${escapeHtml(cond.codigo || "")}"</button>` : ""}
   `;
-  $("#btnVerEvaporadora")?.addEventListener("click", () => irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item)));
+  painel.querySelectorAll("[data-ver-evap]").forEach((link) => {
+    link.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const item = ESTADO.equipamentos.find((e) => e.id === link.dataset.verEvap);
+      if (item) irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
+    });
+  });
   $("#btnRemoverMarcacaoCond")?.addEventListener("click", async () => {
-    if (!confirm("Remover a marcação da condensadora desse aparelho?")) return;
+    if (!confirm(`Remover a condensadora "${cond.codigo}" desta planta?`)) return;
     try {
-      await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
-        condensadoraPlantaId: deleteField(), condensadoraX: deleteField(), condensadoraY: deleteField(),
-      });
-      toast("Marcação removida.");
+      const planta = plantaPorId(cond.plantaId);
+      const novaLista = (planta.condensadoras || []).filter((c) => normalizarCodigo(c.codigo) !== normalizarCodigo(cond.codigo));
+      await updateDoc(doc(db, "plantas", cond.plantaId), { condensadoras: novaLista });
+      toast("Condensadora removida.");
       $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
     } catch (err) {
       console.error(err);
@@ -4391,30 +4492,96 @@ function candidatoMaisProximo(planta, x, y) {
 }
 
 async function salvarPosicaoPlanta(planta, x, y) {
+  const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
+
+  if (modoCondensadora) {
+    const codigo = $("#plantaCondensadoraCodigoInput")?.value.trim() || "";
+    if (!codigo) {
+      toast("Digite o código dessa condensadora (ex: C7) antes de clicar na planta.");
+      return;
+    }
+    const listaAtual = planta.condensadoras || [];
+    const novaLista = listaAtual.filter((c) => normalizarCodigo(c.codigo) !== normalizarCodigo(codigo));
+    novaLista.push({ codigo, x, y });
+    try {
+      await updateDoc(doc(db, "plantas", planta.id), { condensadoras: novaLista });
+      toast(`Condensadora "${codigo}" marcada.`);
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao salvar posição: " + err.message);
+    }
+    return;
+  }
+
   const select = $("#plantaEquipamentoSelect");
   if (!select || !select.value) {
     toast("Escolha um aparelho na lista antes de marcar a posição.");
     return;
   }
   const id = select.value;
-  const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
-  const campos = modoCondensadora
-    ? { condensadoraPlantaId: planta.id, condensadoraX: x, condensadoraY: y }
-    : { plantaId: planta.id, plantaX: x, plantaY: y, codigoPlanta: $("#plantaCodigoInput")?.value.trim() || "" };
+
+  // Restrição: duas evaporadoras não podem ocupar o mesmo lugar nesta
+  // planta -- sem isso dava pra marcar por cima de um aparelho que já
+  // estava lá, os dois "empilhados" na mesma posição sem nenhum aviso.
+  const TOLERANCIA_DUPLICATA = candidatoMaisProximo(planta, x, y) ? 0.5 :
+    Math.max(((_dadosPlantaCache.get(planta.id) || {}).bbox?.[2] - (_dadosPlantaCache.get(planta.id) || {}).bbox?.[0]) / 60 || 30, 1);
+  const outroNoLugar = ESTADO.equipamentos.find((e) =>
+    e.id !== id && e.plantaId === planta.id && e.plantaX != null &&
+    Math.hypot(e.plantaX - x, e.plantaY - y) < TOLERANCIA_DUPLICATA
+  );
+  if (outroNoLugar) {
+    toast(`Essa posição já é do aparelho "${outroNoLugar.codigoPlanta || outroNoLugar.patrimonio || outroNoLugar.ambiente}". Remova a marcação dele primeiro se quiser usar esse lugar.`);
+    return;
+  }
+
+  const campos = { plantaId: planta.id, plantaX: x, plantaY: y, codigoPlanta: $("#plantaCodigoInput")?.value.trim() || "" };
   try {
     await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), campos);
-    toast(modoCondensadora ? "Condensadora marcada." : "Posição marcada.");
+    toast("Posição marcada.");
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar posição: " + err.message);
   }
 }
 
+// Atualiza só o "Código na planta" do aparelho selecionado, sem precisar
+// clicar de novo na planta -- resolve o caso de já estar marcado e só
+// querer acrescentar/corrigir o código.
+$("#btnSalvarCodigoEvap")?.addEventListener("click", async () => {
+  const select = $("#plantaEquipamentoSelect");
+  if (!select || !select.value) {
+    toast("Escolha um aparelho na lista primeiro.");
+    return;
+  }
+  const codigoPlanta = $("#plantaCodigoInput")?.value.trim() || "";
+  try {
+    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", select.value), { codigoPlanta });
+    toast("Código salvo.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar código: " + err.message);
+  }
+});
+
 $("#plantaSeletor")?.addEventListener("change", (ev) => {
   ESTADO.plantaSelecionada = ev.target.value;
   const svg = $("#plantaSvg");
   if (svg) svg.dataset.plantaId = ""; // força recarregar o desenho da nova planta
   renderLocalizacao();
+});
+
+$("#btnExcluirPlanta")?.addEventListener("click", async () => {
+  const planta = plantaPorId(ESTADO.plantaSelecionada);
+  if (!planta) return;
+  if (!confirm(`Excluir a planta "${planta.nome}"? Os aparelhos marcados nela ficam com a posição "perdida" até serem marcados de novo (o cadastro deles não é afetado).`)) return;
+  try {
+    await deleteDoc(doc(db, "plantas", planta.id));
+    ESTADO.plantaSelecionada = null;
+    toast("Planta excluída.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao excluir planta: " + err.message);
+  }
 });
 
 $("#btnPlantaZoomIn")?.addEventListener("click", () => $("#plantaSvg")?.__zoomIn?.());
