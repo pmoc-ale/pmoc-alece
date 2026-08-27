@@ -4356,6 +4356,26 @@ function piscarDestaque(svg, x, y) {
   setTimeout(() => anel.remove(), 2600);
 }
 
+// Acha o candidato (símbolo real detectado no CAD) mais próximo de um
+// ponto, desde que esteja a uma distância razoável -- usado pra "encaixar"
+// um clique aproximado no símbolo certo, em vez de exigir acertar o pixel
+// exato. Sem isso, um clique alguns pixels ao lado do símbolo real salvava
+// uma posição solta, que depois não batia com nenhum candidato e caía no
+// ícone genérico -- exatamente o problema que a Jovanna reportou (queria
+// que ficasse marcado o próprio desenho da máquina, não uma "figurinha").
+function candidatoMaisProximo(planta, x, y) {
+  const dados = _dadosPlantaCache.get(planta.id);
+  const candidatos = (planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [];
+  if (!candidatos.length) return null;
+  const distanciaMax = ((dados.bbox[2] - dados.bbox[0]) || 1000) / 30;
+  let melhor = null, melhorDist = Infinity;
+  candidatos.forEach((c) => {
+    const d = Math.hypot(c.x - x, c.y - y);
+    if (d < melhorDist) { melhorDist = d; melhor = c; }
+  });
+  return melhor && melhorDist <= distanciaMax ? melhor : null;
+}
+
 async function salvarPosicaoPlanta(planta, x, y) {
   const select = $("#plantaEquipamentoSelect");
   if (!select || !select.value) {
@@ -4399,7 +4419,12 @@ $("#plantaSvg")?.addEventListener("click", (ev) => {
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!svg || !planta) return;
   const { x, y } = svgPontoDeClique(svg, ev);
-  salvarPosicaoPlanta(planta, Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+  const cand = candidatoMaisProximo(planta, x, y);
+  if (cand) {
+    salvarPosicaoPlanta(planta, cand.x, cand.y);
+  } else {
+    salvarPosicaoPlanta(planta, Math.round(x * 100) / 100, Math.round(y * 100) / 100);
+  }
 });
 
 // ------------------------------------------------------------------
