@@ -4132,8 +4132,18 @@ async function renderMarcadoresPlanta() {
 
   const dados = _dadosPlantaCache.get(planta.id);
   const candidatosCamada = (planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [];
-  const TOLERANCIA = 1; // mesma escala usada na deduplicação do parser (arredondamento de 1 casa)
-  const candidatoPerto = (x, y) => candidatosCamada.find((c) => Math.abs(c.x - x) < TOLERANCIA && Math.abs(c.y - y) < TOLERANCIA);
+  // Mesma distância "razoável" usada no encaixe do clique (candidatoMaisProximo)
+  // -- assim uma posição salva antes desse ajuste (de um clique impreciso)
+  // também volta a bater com o símbolo real, sem precisar remarcar nada.
+  const TOLERANCIA = dados ? Math.max((dados.bbox[2] - dados.bbox[0]) / 30, 1) : 30;
+  const candidatoPerto = (x, y) => {
+    let melhor = null, melhorDist = Infinity;
+    candidatosCamada.forEach((c) => {
+      const d = Math.hypot(c.x - x, c.y - y);
+      if (d < melhorDist) { melhorDist = d; melhor = c; }
+    });
+    return melhor && melhorDist <= TOLERANCIA ? melhor : null;
+  };
 
   // Marca o aparelho destacando o PRÓPRIO símbolo desenhado no CAD
   // (recolorindo as formas reais dele conforme o status) quando a posição
@@ -4205,13 +4215,17 @@ async function renderMarcadoresPlanta() {
   // volta do próprio símbolo (ou um círculo solto, se por algum motivo a
   // geometria dele não puder ser recuperada); clicar marca de uma vez.
   if (ESTADO.permissao === "admin" && planta.camadaEquipamento) {
+    // Mesmo critério "mais próximo dentro da tolerância" usado acima --
+    // pra não sobrar um candidato tracejado por cima de um símbolo que já
+    // foi destacado como identificado (podia acontecer se a posição
+    // salva não fosse EXATAMENTE igual à do candidato).
     const ocupados = new Set(
       [...itens.map((e) => [e.plantaX, e.plantaY]), ...condensadorasAqui.map((e) => [e.condensadoraX, e.condensadoraY])]
-        .map(([x, y]) => Math.round(x * 10) + "," + Math.round(y * 10))
+        .map(([x, y]) => candidatoPerto(x, y))
+        .filter(Boolean)
     );
     candidatosCamada.forEach((cand) => {
-      const chave = Math.round(cand.x * 10) + "," + Math.round(cand.y * 10);
-      if (ocupados.has(chave)) return;
+      if (ocupados.has(cand)) return;
       const elementos = (cand.nums || []).map((n) => svg.__pathPorNumero.get(n)).filter(Boolean);
       if (elementos.length) {
         const bbox = bboxUniao(elementos);
