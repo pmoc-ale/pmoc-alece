@@ -2,7 +2,7 @@ import { db, auth, firebaseConfig } from "./firebase-config.js?v=4";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   collection, collectionGroup, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, query,
-  orderBy, where, writeBatch, deleteDoc, addDoc, limit, deleteField,
+  orderBy, where, writeBatch, deleteDoc, addDoc, limit, deleteField, runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
@@ -4415,10 +4415,14 @@ function mostrarPainelCondensadora(cond) {
   });
   $("#btnRemoverMarcacaoCond")?.addEventListener("click", async () => {
     if (!confirm(`Remover a condensadora "${cond.codigo}" desta planta?`)) return;
+    const plantaRef = doc(db, "plantas", cond.plantaId);
     try {
-      const planta = plantaPorId(cond.plantaId);
-      const novaLista = (planta.condensadoras || []).filter((c) => normalizarCodigo(c.codigo) !== normalizarCodigo(cond.codigo));
-      await updateDoc(doc(db, "plantas", cond.plantaId), { condensadoras: novaLista });
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(plantaRef);
+        const listaAtual = (snap.exists() && snap.data().condensadoras) || [];
+        const novaLista = listaAtual.filter((c) => normalizarCodigo(c.codigo) !== normalizarCodigo(cond.codigo));
+        tx.update(plantaRef, { condensadoras: novaLista });
+      });
       toast("Condensadora removida.");
       $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
     } catch (err) {
@@ -4500,11 +4504,21 @@ async function salvarPosicaoPlanta(planta, x, y) {
       toast("Digite o código dessa condensadora (ex: C7) antes de clicar na planta.");
       return;
     }
-    const listaAtual = planta.condensadoras || [];
-    const novaLista = listaAtual.filter((c) => normalizarCodigo(c.codigo) !== normalizarCodigo(codigo));
-    novaLista.push({ codigo, x, y });
+    // Transação, não "lê o que já tenho guardado localmente e regravo" --
+    // marcando várias condensadoras em sequência rápida, o snapshot local
+    // (ESTADO.plantas) podia não ter voltado a tempo com a gravação
+    // anterior ainda, e cada clique novo sobrescrevia o array inteiro só
+    // com o que ele via na hora, apagando as marcações de antes. A
+    // transação sempre lê o estado atual de verdade no servidor primeiro.
+    const plantaRef = doc(db, "plantas", planta.id);
     try {
-      await updateDoc(doc(db, "plantas", planta.id), { condensadoras: novaLista });
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(plantaRef);
+        const listaAtual = (snap.exists() && snap.data().condensadoras) || [];
+        const novaLista = listaAtual.filter((c) => normalizarCodigo(c.codigo) !== normalizarCodigo(codigo));
+        novaLista.push({ codigo, x, y });
+        tx.update(plantaRef, { condensadoras: novaLista });
+      });
       toast(`Condensadora "${codigo}" marcada.`);
     } catch (err) {
       console.error(err);
