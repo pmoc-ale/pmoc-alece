@@ -1178,6 +1178,16 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   height: 11px;
   border-style: dashed;
 }
+.planta-pulso-destaque {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: pulsoDestaquePlanta 1.3s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes pulsoDestaquePlanta {
+  0% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
 .planta-painel {
   flex: 1 1 35%;
   min-width: 220px;

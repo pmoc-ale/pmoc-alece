@@ -2,7 +2,7 @@ import { db, auth, firebaseConfig } from "./firebase-config.js?v=4";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   collection, collectionGroup, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, query,
-  orderBy, where, writeBatch, deleteDoc, addDoc, limit,
+  orderBy, where, writeBatch, deleteDoc, addDoc, limit, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
@@ -4030,9 +4030,11 @@ function montarSvgPlanta(planta, dados) {
     gPorCamada[camada] = g;
   });
 
+  const pathPorNumero = new Map();
   (dados.entities || []).forEach((ent) => {
     const p = document.createElementNS(nsSvg, "path");
     p.setAttribute("d", ent.d);
+    if (ent.n != null) { p.dataset.n = ent.n; p.dataset.strokeOriginal = ent.stroke || ""; p.dataset.fillOriginal = ent.fill || ""; }
     if (ent.stroke) {
       p.setAttribute("stroke", ent.stroke);
       p.setAttribute("stroke-width", ent.sw || 1);
@@ -4048,8 +4050,22 @@ function montarSvgPlanta(planta, dados) {
       p.setAttribute("fill", "none");
     }
     (gPorCamada[ent.layer] || gRaiz).appendChild(p);
+    if (ent.n != null) pathPorNumero.set(ent.n, p);
   });
+  svg.__pathPorNumero = pathPorNumero;
 
+  // Fica DENTRO do gRaiz (mesmo espaço de coordenadas dos <path>, antes
+  // da transformação) -- é onde entram os destaques desenhados em cima
+  // do próprio símbolo original (contorno colorido pelo status, ou
+  // tracejado quando ainda não identificado), por cima de todas as
+  // camadas.
+  const gDestaques = document.createElementNS(nsSvg, "g");
+  gDestaques.id = "plantaDestaquesSvg";
+  gRaiz.appendChild(gDestaques);
+
+  // Já esse fica FORA do gRaiz, no espaço final -- é onde entram os
+  // ícones genéricos (fallback pra quando a posição marcada não bate com
+  // nenhum símbolo real detectado no desenho).
   const gMarcadores = document.createElementNS(nsSvg, "g");
   gMarcadores.id = "plantaMarcadoresSvg";
   svg.appendChild(gMarcadores);
@@ -4080,74 +4096,141 @@ function svgPontoDeClique(svg, evento) {
   return { x: local.x, y: local.y };
 }
 
+// Bounding box (no espaço "cru", pré-transformação) que envolve todos os
+// elementos passados -- usado pra desenhar um destaque em volta do símbolo
+// real inteiro, não só de uma peça dele.
+function bboxUniao(elementos) {
+  let box = null;
+  elementos.forEach((el) => {
+    const b = el.getBBox();
+    if (!box) box = { x: b.x, y: b.y, x2: b.x + b.width, y2: b.y + b.height };
+    else {
+      box.x = Math.min(box.x, b.x);
+      box.y = Math.min(box.y, b.y);
+      box.x2 = Math.max(box.x2, b.x + b.width);
+      box.y2 = Math.max(box.y2, b.y + b.height);
+    }
+  });
+  return { x: box.x, y: box.y, width: box.x2 - box.x, height: box.y2 - box.y };
+}
+
 async function renderMarcadoresPlanta() {
+  const svg = $("#plantaSvg");
   const gMarcadores = $("#plantaMarcadoresSvg");
-  if (!gMarcadores) return;
+  const gDestaques = $("#plantaDestaquesSvg");
+  if (!svg || !gMarcadores || !gDestaques) return;
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!planta) return;
   const nsSvg = "http://www.w3.org/2000/svg";
   gMarcadores.innerHTML = "";
+  gDestaques.innerHTML = "";
 
   const raioMarcador = (() => {
     const [xmin, , xmax] = (_dadosPlantaCache.get(planta.id) || {}).bbox || [0, 0, 100];
     return (xmax - xmin) / 110 || 1;
   })();
 
+  const dados = _dadosPlantaCache.get(planta.id);
+  const candidatosCamada = (planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [];
+  const TOLERANCIA = 1; // mesma escala usada na deduplicação do parser (arredondamento de 1 casa)
+  const candidatoPerto = (x, y) => candidatosCamada.find((c) => Math.abs(c.x - x) < TOLERANCIA && Math.abs(c.y - y) < TOLERANCIA);
+
+  // Marca o aparelho destacando o PRÓPRIO símbolo desenhado no CAD
+  // (recolorindo as formas reais dele conforme o status) quando a posição
+  // bate com um símbolo detectado automaticamente -- é o que faz o
+  // "quadrado rosa" da planta virar visualmente o marcador, em vez de um
+  // ícone genérico por cima. Só cai no ícone quando não há um símbolo
+  // real ali (ex: condensadora marcada à mão numa área sem esse desenho).
+  function marcarAparelho(x, y, tipo, cor, rotulo, aoClicar) {
+    const cand = candidatoPerto(x, y);
+    const elementos = cand?.nums?.map((n) => svg.__pathPorNumero.get(n)).filter(Boolean) || [];
+    if (elementos.length) {
+      elementos.forEach((p) => {
+        if (p.dataset.strokeOriginal) p.setAttribute("stroke", cor);
+        if (p.dataset.fillOriginal) p.setAttribute("fill", cor);
+      });
+      const bbox = bboxUniao(elementos);
+      const pad = Math.max(bbox.width, bbox.height, 1) * 0.2;
+      const retangulo = document.createElementNS(nsSvg, "rect");
+      retangulo.setAttribute("x", bbox.x - pad);
+      retangulo.setAttribute("y", bbox.y - pad);
+      retangulo.setAttribute("width", bbox.width + pad * 2);
+      retangulo.setAttribute("height", bbox.height + pad * 2);
+      retangulo.setAttribute("rx", pad * 0.6);
+      retangulo.setAttribute("fill", "transparent");
+      retangulo.setAttribute("stroke", cor);
+      retangulo.setAttribute("stroke-width", pad * 0.35);
+      retangulo.dataset.destaque = "1";
+      retangulo.style.cursor = "pointer";
+      const titulo = document.createElementNS(nsSvg, "title");
+      titulo.textContent = rotulo;
+      retangulo.appendChild(titulo);
+      retangulo.addEventListener("click", (ev) => { ev.stopPropagation(); aoClicar(); });
+      gDestaques.appendChild(retangulo);
+      return;
+    }
+    const icone = criarIconeMarcador(tipo, cor, raioMarcador);
+    icone.setAttribute("transform", `translate(${x},${y})`);
+    icone.style.cursor = "pointer";
+    const titulo = document.createElementNS(nsSvg, "title");
+    titulo.textContent = rotulo;
+    icone.appendChild(titulo);
+    icone.addEventListener("click", (ev) => { ev.stopPropagation(); aoClicar(); });
+    gMarcadores.appendChild(icone);
+  }
+
   // Evaporadoras já identificadas nesta planta -- coloridas pelo status,
-  // igual ao resto do sistema, com a "cara" de unidade interna (split).
+  // igual ao resto do sistema.
   const itens = ESTADO.equipamentos.filter(
     (e) => e.plantaId === planta.id && e.plantaX != null && e.plantaY != null
   );
   itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
     const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
-    const icone = criarIconeMarcador("evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", raioMarcador);
-    icone.setAttribute("transform", `translate(${e.plantaX},${e.plantaY})`);
-    icone.dataset.id = e.id;
-    icone.style.cursor = "pointer";
-    const titulo = document.createElementNS(nsSvg, "title");
-    titulo.textContent = rotulo;
-    icone.appendChild(titulo);
-    icone.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      mostrarPainelPlanta(e);
-    });
-    gMarcadores.appendChild(icone);
+    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e));
   });
 
-  // Condensadoras vinculadas a alguma evaporadora, marcadas nesta mesma
-  // planta -- mesmo esquema de cor, mas com a "cara" de unidade externa
-  // (quadrada, com ventoinha), pra dar pra distinguir de longe.
+  // Condensadoras vinculadas a alguma evaporadora, marcadas nesta mesma planta.
   const condensadorasAqui = ESTADO.equipamentos.filter(
     (e) => e.condensadoraPlantaId === planta.id && e.condensadoraX != null && e.condensadoraY != null
   );
   condensadorasAqui.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
-    const icone = criarIconeMarcador("condensadora", CORES_STATUS_MARCADOR[classe] || "#888", raioMarcador);
-    icone.setAttribute("transform", `translate(${e.condensadoraX},${e.condensadoraY})`);
-    icone.dataset.condensadoraDe = e.id;
-    icone.style.cursor = "pointer";
-    const titulo = document.createElementNS(nsSvg, "title");
-    titulo.textContent = "Condensadora — " + (e.codigoPlanta || e.patrimonio || e.ambiente || "");
-    icone.appendChild(titulo);
-    icone.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      mostrarPainelCondensadora(e);
-    });
-    gMarcadores.appendChild(icone);
+    const rotulo = "Condensadora — " + (e.codigoPlanta || e.patrimonio || e.ambiente || "");
+    marcarAparelho(e.condensadoraX, e.condensadoraY, "condensadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelCondensadora(e));
   });
 
   // Modo admin: mostra também os candidatos detectados automaticamente no
-  // arquivo que ainda não foram identificados -- clicar num candidato
-  // marca ele de uma vez, sem precisar acertar o pixel certo na mão.
+  // arquivo que ainda não foram identificados -- contorno tracejado em
+  // volta do próprio símbolo (ou um círculo solto, se por algum motivo a
+  // geometria dele não puder ser recuperada); clicar marca de uma vez.
   if (ESTADO.permissao === "admin" && planta.camadaEquipamento) {
-    try {
-      const dados = await carregarDadosPlanta(planta);
-      const candidatos = (dados.marcadoresPorCamada && dados.marcadoresPorCamada[planta.camadaEquipamento]) || [];
-      const ocupados = new Set(itens.map((e) => Math.round(e.plantaX * 10) + "," + Math.round(e.plantaY * 10)));
-      candidatos.forEach((cand) => {
-        const chave = Math.round(cand.x * 10) + "," + Math.round(cand.y * 10);
-        if (ocupados.has(chave)) return;
+    const ocupados = new Set(
+      [...itens.map((e) => [e.plantaX, e.plantaY]), ...condensadorasAqui.map((e) => [e.condensadoraX, e.condensadoraY])]
+        .map(([x, y]) => Math.round(x * 10) + "," + Math.round(y * 10))
+    );
+    candidatosCamada.forEach((cand) => {
+      const chave = Math.round(cand.x * 10) + "," + Math.round(cand.y * 10);
+      if (ocupados.has(chave)) return;
+      const elementos = (cand.nums || []).map((n) => svg.__pathPorNumero.get(n)).filter(Boolean);
+      if (elementos.length) {
+        const bbox = bboxUniao(elementos);
+        const pad = Math.max(bbox.width, bbox.height, 1) * 0.2;
+        const retangulo = document.createElementNS(nsSvg, "rect");
+        retangulo.setAttribute("x", bbox.x - pad);
+        retangulo.setAttribute("y", bbox.y - pad);
+        retangulo.setAttribute("width", bbox.width + pad * 2);
+        retangulo.setAttribute("height", bbox.height + pad * 2);
+        retangulo.setAttribute("rx", pad * 0.6);
+        retangulo.setAttribute("fill", "transparent");
+        retangulo.setAttribute("stroke", "#8B98A6");
+        retangulo.setAttribute("stroke-dasharray", `${pad * 0.6},${pad * 0.6}`);
+        retangulo.setAttribute("stroke-width", pad * 0.3);
+        retangulo.dataset.destaque = "1";
+        retangulo.style.cursor = "pointer";
+        retangulo.addEventListener("click", (ev) => { ev.stopPropagation(); salvarPosicaoPlanta(planta, cand.x, cand.y); });
+        gDestaques.appendChild(retangulo);
+      } else {
         const c = document.createElementNS(nsSvg, "circle");
         c.setAttribute("cx", cand.x);
         c.setAttribute("cy", cand.y);
@@ -4160,15 +4243,10 @@ async function renderMarcadoresPlanta() {
         c.setAttribute("stroke-dasharray", `${raioMarcador / 4},${raioMarcador / 4}`);
         c.setAttribute("stroke-width", raioMarcador / 5);
         c.style.cursor = "pointer";
-        c.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          salvarPosicaoPlanta(planta, cand.x, cand.y);
-        });
+        c.addEventListener("click", (ev) => { ev.stopPropagation(); salvarPosicaoPlanta(planta, cand.x, cand.y); });
         gMarcadores.appendChild(c);
-      });
-    } catch (err) {
-      console.error("Erro ao carregar candidatos:", err);
-    }
+      }
+    });
   }
 }
 
@@ -4176,6 +4254,7 @@ function mostrarPainelPlanta(item) {
   const painel = $("#plantaPainel");
   if (!painel) return;
   const temCondensadora = item.condensadoraPlantaId && item.condensadoraX != null;
+  const isAdmin = ESTADO.permissao === "admin";
   painel.innerHTML = `
     <h3 style="margin-top:0">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
     <div class="drawer-campo"><span class="rotulo">Patrimônio</span><span class="valor">${escapeHtml(item.patrimonio || "-")}</span></div>
@@ -4187,29 +4266,59 @@ function mostrarPainelPlanta(item) {
     <div class="drawer-campo"><span class="rotulo">Status</span><span class="valor">${estaAtrasado(item) ? "Atrasado" : escapeHtml(item.statusPreventiva || "-")}</span></div>
     ${temCondensadora ? '<button class="btn ghost" id="btnVerCondensadora" style="margin-top:10px;width:100%">📍 Ver condensadora</button>' : ""}
     <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:${temCondensadora ? "6" : "10"}px;width:100%">Ver ficha completa</button>
+    ${isAdmin ? '<button class="btn ghost" id="btnRemoverMarcacaoEvap" style="margin-top:6px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação nesta planta</button>' : ""}
   `;
   $("#btnAbrirDrawerDaPlanta")?.addEventListener("click", () => abrirDrawerEquipamento(item.id));
   $("#btnVerCondensadora")?.addEventListener("click", () => irParaMarcador(item.condensadoraPlantaId, item.condensadoraX, item.condensadoraY, () => mostrarPainelCondensadora(item)));
+  $("#btnRemoverMarcacaoEvap")?.addEventListener("click", async () => {
+    if (!confirm("Remover a marcação desse aparelho nesta planta?")) return;
+    try {
+      await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
+        plantaId: deleteField(), plantaX: deleteField(), plantaY: deleteField(),
+      });
+      toast("Marcação removida.");
+      $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao remover: " + err.message);
+    }
+  });
 }
 
 function mostrarPainelCondensadora(item) {
   const painel = $("#plantaPainel");
   if (!painel) return;
+  const isAdmin = ESTADO.permissao === "admin";
   painel.innerHTML = `
     <h3 style="margin-top:0">Condensadora — ${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
     <p class="muted" style="margin-top:-6px">Unidade externa vinculada a este aparelho.</p>
     <div class="drawer-campo"><span class="rotulo">Evaporadora</span><span class="valor">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Ambiente da evaporadora</span><span class="valor">${escapeHtml(item.ambiente || "-")}</span></div>
     <button class="btn ghost" id="btnVerEvaporadora" style="margin-top:10px;width:100%">📍 Ver evaporadora</button>
+    ${isAdmin ? '<button class="btn ghost" id="btnRemoverMarcacaoCond" style="margin-top:6px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação da condensadora</button>' : ""}
   `;
   $("#btnVerEvaporadora")?.addEventListener("click", () => irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item)));
+  $("#btnRemoverMarcacaoCond")?.addEventListener("click", async () => {
+    if (!confirm("Remover a marcação da condensadora desse aparelho?")) return;
+    try {
+      await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
+        condensadoraPlantaId: deleteField(), condensadoraX: deleteField(), condensadoraY: deleteField(),
+      });
+      toast("Marcação removida.");
+      $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao remover: " + err.message);
+    }
+  });
 }
 
 // Troca (se preciso) pra planta onde um marcador está, centraliza a
-// visão nele e mostra o painel certo -- usado pelos botões "Ver
-// condensadora"/"Ver evaporadora" pra pular de um pro outro mesmo quando
-// estão em plantas diferentes (ex: evaporadora no andar, condensadora na
-// cobertura).
+// visão nele, pisca um destaque em volta pra deixar bem claro qual é (é
+// fácil se perder entre vários símbolos parecidos) e mostra o painel
+// certo -- usado pelos botões "Ver condensadora"/"Ver evaporadora" pra
+// pular de um pro outro mesmo quando estão em plantas diferentes (ex:
+// evaporadora no andar, condensadora na cobertura).
 async function irParaMarcador(plantaId, x, y, aoChegar) {
   if (!plantaId || x == null || y == null) {
     toast("Essa posição ainda não foi marcada.");
@@ -4221,8 +4330,30 @@ async function irParaMarcador(plantaId, x, y, aoChegar) {
     if (svg) svg.dataset.plantaId = "";
     await renderLocalizacao();
   }
-  centralizarView($("#plantaSvg"), x, y);
+  const svg = $("#plantaSvg");
+  centralizarView(svg, x, y);
+  piscarDestaque(svg, x, y);
   aoChegar();
+}
+
+// Anel dourado pulsando por alguns segundos na posição pedida -- só pra
+// chamar atenção visual de "é esse aqui", sem mexer em nada dos dados.
+function piscarDestaque(svg, x, y) {
+  const gMarcadores = $("#plantaMarcadoresSvg");
+  if (!svg || !gMarcadores) return;
+  const [xmin, , xmax] = svg.__viewOriginal ? [svg.__viewOriginal.x, 0, svg.__viewOriginal.x + svg.__viewOriginal.w] : [0, 0, 100];
+  const raio = (xmax - xmin) / 55 || 1;
+  const nsSvg = "http://www.w3.org/2000/svg";
+  const anel = document.createElementNS(nsSvg, "circle");
+  anel.setAttribute("cx", x);
+  anel.setAttribute("cy", y);
+  anel.setAttribute("r", raio);
+  anel.setAttribute("fill", "none");
+  anel.setAttribute("stroke", "#C9A34E");
+  anel.setAttribute("stroke-width", raio / 3);
+  anel.classList.add("planta-pulso-destaque");
+  gMarcadores.appendChild(anel);
+  setTimeout(() => anel.remove(), 2600);
 }
 
 async function salvarPosicaoPlanta(planta, x, y) {
@@ -4264,7 +4395,7 @@ $("#plantaSvg")?.addEventListener("click", (ev) => {
   const svg = $("#plantaSvg");
   if (svg?.dataset.arrastou === "1") { svg.dataset.arrastou = "0"; return; } // era pan, não clique
   if (ESTADO.permissao !== "admin") return;
-  if (ev.target.closest("circle, g[data-id], g[data-condensadora-de]")) return; // marcador já tem seu próprio handler
+  if (ev.target.closest("circle, g[data-id], g[data-condensadora-de], [data-destaque]")) return; // marcador já tem seu próprio handler
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!svg || !planta) return;
   const { x, y } = svgPontoDeClique(svg, ev);
@@ -4314,7 +4445,7 @@ function ativarZoomPan(svg) {
   let viewInicialPinca = null;
 
   svg.addEventListener("pointerdown", (ev) => {
-    if (ev.target.closest("circle, g[data-id], g[data-condensadora-de]")) return; // deixa o clique do marcador acontecer
+    if (ev.target.closest("circle, g[data-id], g[data-condensadora-de], [data-destaque]")) return; // deixa o clique do marcador acontecer
     svg.setPointerCapture(ev.pointerId);
     ponteiros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moveu: 0 });
     if (ponteiros.size === 2) {

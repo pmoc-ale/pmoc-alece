@@ -212,7 +212,7 @@ async function parseDwf(arrayBuffer) {
   const ys = [];
   for (const [n, rec] of pathOf.entries()) {
     const layer = layerOf.get(n) || "SEM_CAMADA";
-    entities.push({ layer, stroke: rec.stroke, fill: rec.fill, sw: rec.sw, d: rec.d });
+    entities.push({ n, layer, stroke: rec.stroke, fill: rec.fill, sw: rec.sw, d: rec.d });
     const sm = DWF_START_RE.exec(rec.d);
     if (sm) {
       const [fx, fy] = dwfAplica(matriz, [parseFloat(sm[1]), parseFloat(sm[2])]);
@@ -224,7 +224,10 @@ async function parseDwf(arrayBuffer) {
 
   // Marcadores candidatos: centróide de cada cluster de arcos/círculos,
   // deduplicando posições idênticas (alguns exports duplicam o símbolo
-  // inteiro sobreposto -- confirmado num arquivo real).
+  // inteiro sobreposto -- confirmado num arquivo real). Guarda também os
+  // números dos objetos que formam o símbolo (nums) -- é o que permite
+  // depois destacar o próprio desenho original (não um ícone por cima)
+  // quando aquele candidato for identificado como um equipamento.
   const candidatosPorCamada = new Map();
   for (const cl of clusters) {
     const pts = [];
@@ -238,7 +241,7 @@ async function parseDwf(arrayBuffer) {
     const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
     const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
     if (!candidatosPorCamada.has(cl.layer)) candidatosPorCamada.set(cl.layer, []);
-    candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, n: pts.length });
+    candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: pts.length, nums: cl.nums });
   }
   const marcadoresPorCamada = {};
   for (const [layer, pontos] of candidatosPorCamada.entries()) {
