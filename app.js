@@ -4023,9 +4023,6 @@ async function renderLocalizacao() {
 
   renderMarcadoresPlanta();
 
-  const dica = $("#plantaDicaAdmin");
-  if (dica) dica.textContent = isAdmin ? " Para marcar/mover um aparelho, use o lápis ✏️ no canto da planta." : "";
-
   const btnNovaPlanta = $("#btnMostrarUploadPlanta");
   if (btnNovaPlanta) btnNovaPlanta.hidden = !isAdmin;
   const btnExcluirPlanta = $("#btnExcluirPlanta");
@@ -4363,7 +4360,11 @@ async function renderMarcadoresPlanta() {
   const condensadorasComPosicao = ESTADO.equipamentos
     .filter((e) => e.condensadoraPlantaId === planta.id && e.condensadoraX != null && e.condensadoraY != null && !extrairCodigoCondensadora(e.codigoPlanta))
     .map((e) => ({ codigo: null, x: e.condensadoraX, y: e.condensadoraY, __legado: e }));
-  [...condensadorasAqui, ...condensadorasComPosicao].forEach((cond) => {
+  [...condensadorasAqui, ...condensadorasComPosicao].forEach((condBruta) => {
+    // condBruta não carrega plantaId (nem o objeto {codigo,x,y} salvo em
+    // planta.condensadoras, nem o legado) -- sem isso, "Remover marcação"
+    // chamava doc(db, "plantas", undefined) e quebrava.
+    const cond = { ...condBruta, plantaId: planta.id };
     const vinculadas = cond.codigo ? evaporadorasQueApontamPara(cond.codigo) : (cond.__legado ? [cond.__legado] : []);
     let classe = null;
     ORDEM_URGENCIA.forEach((c) => {
