@@ -1103,39 +1103,13 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   min-width: 0;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
-  overflow: auto;
+  overflow: hidden;
   background: #fff;
 }
-.planta-imagem-wrap img {
+.planta-imagem-wrap svg {
   display: block;
   width: 100%;
-  height: auto;
-}
-#plantaMarcadores {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.planta-marcador {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(16, 38, 61, 0.4), var(--sombra-elevada);
-  cursor: pointer;
-  pointer-events: auto;
-  padding: 0;
-}
-.planta-marcador.pendente { background: var(--vermelho); }
-.planta-marcador.andamento { background: var(--amarelo); }
-.planta-marcador.concluido { background: var(--verde); }
-.planta-marcador.atrasado { background: var(--azul-900); }
-.planta-marcador.selecionado {
-  width: 22px;
-  height: 22px;
-  box-shadow: 0 0 0 3px var(--dourado), var(--sombra-elevada);
+  height: 70vh;
 }
 .planta-painel {
   flex: 1 1 35%;
@@ -1146,6 +1120,19 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   background: var(--azul-50);
   align-self: stretch;
 }
+.planta-camadas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 14px;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 12.5px;
+}
+.planta-camadas label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
 
 @media (max-width: 768px) {
   .planta-area {
@@ -1155,9 +1142,8 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     flex: 1 1 auto;
     width: 100%;
   }
-  .planta-marcador {
-    width: 20px;
-    height: 20px;
+  .planta-imagem-wrap svg {
+    height: 50vh;
   }
 }
 
