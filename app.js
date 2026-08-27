@@ -4035,8 +4035,13 @@ async function renderLocalizacao() {
     // A condensadora não escolhe aparelho nenhum (é por código -- ver
     // atualizarModoMarcacao), então essa lista só precisa existir pro
     // modo evaporadora, restrita ao prédio da planta aberta agora.
+    // Os dois lados precisam do MESMO fallback -- sem isso, uma planta
+    // sem "local" definido (undefined) nunca batia com nenhum aparelho
+    // (que caem em "SEDE" quando também não têm local), e a lista de
+    // Aparelho ficava sempre vazia sem erro nenhum aparecer na tela.
+    const localDaPlanta = planta.local || "SEDE";
     const itensDoPredio = ESTADO.equipamentos
-      .filter((e) => (e.local || "SEDE") === planta.local)
+      .filter((e) => (e.local || "SEDE") === localDaPlanta)
       .sort((a, b) => (a.ambiente || "").localeCompare(b.ambiente || ""));
     const selecionadoAntes = select.value;
     select.innerHTML = itensDoPredio.map((e) => {

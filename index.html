@@ -442,6 +442,42 @@
             <div class="planta-painel" id="plantaPainel">
               <p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>
             </div>
+            <div class="card planta-dropdown-marcacao" id="cardPosicionarPlanta" hidden>
+              <h2 style="font-size:15px">Editar marcações desta planta</h2>
+              <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar. Se o desenho não tiver o símbolo detectado ali, arraste o ícone certo lá embaixo pra dentro da planta.</p>
+              <div class="grid-form">
+                <label>O que estou marcando
+                  <span style="display:flex; gap:16px; align-items:center; height:38px;">
+                    <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="evaporadora" checked style="width:auto"> Evaporadora</label>
+                    <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="condensadora" style="width:auto"> Condensadora</label>
+                  </span>
+                </label>
+                <label id="campoEquipamentoWrap">Aparelho
+                  <select id="plantaEquipamentoSelect"></select>
+                </label>
+                <label id="campoCodigoEvapWrap">Código na planta (opcional, ex: E2/C4)
+                  <span style="display:flex; gap:8px;">
+                    <input type="text" id="plantaCodigoInput" placeholder="Ex: E2/C4" style="flex:1">
+                    <button type="button" class="btn ghost" id="btnSalvarCodigoEvap" style="flex-shrink:0; padding:0 12px;">Salvar código</button>
+                  </span>
+                </label>
+                <label id="campoCodigoCondWrap" hidden>Código desta condensadora (ex: C7)
+                  <input type="text" id="plantaCondensadoraCodigoInput" placeholder="Ex: C7">
+                </label>
+              </div>
+              <p class="muted" id="dicaModoMarcacao" style="margin-top:6px"></p>
+              <div class="planta-chips-arrastar">
+                <p class="muted" style="margin:0 0 6px">Ou arraste pra dentro da planta (útil quando o desenho não tem o símbolo detectado ali):</p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora">
+                    <i class="planta-legenda-icone planta-legenda-icone-evap"></i> Evaporadora
+                  </div>
+                  <div class="planta-chip-arrastavel" id="chipArrastarCond" data-tipo="condensadora">
+                    <i class="planta-legenda-icone planta-legenda-icone-cond"></i> Condensadora
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="planta-legenda">
@@ -457,42 +493,6 @@
           <summary>Camadas</summary>
           <div id="plantaCamadas" class="planta-camadas"></div>
         </details>
-      </div>
-      <div class="card" id="cardPosicionarPlanta" hidden>
-        <h2>Editar marcações desta planta</h2>
-        <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar. Se o desenho não tiver o símbolo detectado ali, arraste o ícone certo lá embaixo pra dentro da planta.</p>
-        <div class="grid-form">
-          <label>O que estou marcando
-            <span style="display:flex; gap:16px; align-items:center; height:38px;">
-              <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="evaporadora" checked style="width:auto"> Evaporadora</label>
-              <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="condensadora" style="width:auto"> Condensadora</label>
-            </span>
-          </label>
-          <label id="campoEquipamentoWrap">Aparelho
-            <select id="plantaEquipamentoSelect"></select>
-          </label>
-          <label id="campoCodigoEvapWrap">Código na planta (opcional, ex: E2/C4)
-            <span style="display:flex; gap:8px;">
-              <input type="text" id="plantaCodigoInput" placeholder="Ex: E2/C4" style="flex:1">
-              <button type="button" class="btn ghost" id="btnSalvarCodigoEvap" style="flex-shrink:0; padding:0 12px;">Salvar código</button>
-            </span>
-          </label>
-          <label id="campoCodigoCondWrap" hidden>Código desta condensadora (ex: C7)
-            <input type="text" id="plantaCondensadoraCodigoInput" placeholder="Ex: C7">
-          </label>
-        </div>
-        <p class="muted" id="dicaModoMarcacao" style="margin-top:6px"></p>
-        <div class="planta-chips-arrastar">
-          <p class="muted" style="margin:0 0 6px">Ou arraste pra dentro da planta (útil quando o desenho não tem o símbolo detectado ali):</p>
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora">
-              <i class="planta-legenda-icone planta-legenda-icone-evap"></i> Evaporadora
-            </div>
-            <div class="planta-chip-arrastavel" id="chipArrastarCond" data-tipo="condensadora">
-              <i class="planta-legenda-icone planta-legenda-icone-cond"></i> Condensadora
-            </div>
-          </div>
-        </div>
       </div>
     </section>
 

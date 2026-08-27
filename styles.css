@@ -1143,6 +1143,23 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   padding-top: 10px;
   border-top: 1px solid var(--borda);
 }
+.planta-dropdown-marcacao {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  z-index: 4;
+  width: min(380px, calc(100% - 20px));
+  max-height: 75%;
+  overflow-y: auto;
+  margin: 0;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+  animation: plantaDropdownAbrir 0.15s ease-out;
+}
+@keyframes plantaDropdownAbrir {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .planta-chip-arrastavel {
   display: inline-flex;
   align-items: center;
