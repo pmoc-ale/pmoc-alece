@@ -1121,22 +1121,62 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .planta-imagem-wrap svg.marcacao-ativa:active {
   cursor: crosshair;
 }
-.planta-toggle-marcacao {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-  border-radius: var(--raio);
-  background: #f4f6f8;
+.planta-editar-botao {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   border: 1px solid var(--borda);
+  background: #fff;
+  font-size: 15px;
+  line-height: 1;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
-.planta-toggle-marcacao.ativo {
+.planta-editar-botao.ativo {
   background: #fff4e5;
   border-color: #e0a63a;
-  color: #8a5a00;
+  box-shadow: 0 0 0 2px rgba(224, 166, 58, 0.35);
+}
+.planta-chips-arrastar {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borda);
+}
+.planta-chip-arrastavel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px dashed var(--borda);
+  border-radius: var(--raio);
+  cursor: grab;
+  user-select: none;
+  background: #f8f9fa;
+  touch-action: none;
+}
+.planta-chip-arrastavel:active {
+  cursor: grabbing;
+}
+.planta-fantasma-arrasto {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  width: 26px;
+  height: 26px;
+  opacity: 0.9;
+  background: #8B98A6;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.planta-fantasma-arrasto.evaporadora {
+  border-radius: 6px;
+}
+.planta-fantasma-arrasto.condensadora {
+  border-radius: 3px;
 }
 .planta-zoom-controles {
   position: absolute;

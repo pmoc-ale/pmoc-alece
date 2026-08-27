@@ -434,6 +434,7 @@
         <div class="planta-area">
           <div class="planta-imagem-wrap">
             <svg id="plantaSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+            <button type="button" class="planta-editar-botao" id="btnEditarPlanta" title="Editar marcações (posicionar/mover equipamentos)" hidden>✏️</button>
             <div class="planta-zoom-controles">
               <button type="button" id="btnPlantaZoomIn" title="Aproximar">+</button>
               <button type="button" id="btnPlantaZoomOut" title="Afastar">−</button>
@@ -459,12 +460,8 @@
         </details>
       </div>
       <div class="card" id="cardPosicionarPlanta" hidden>
-        <h2>Posicionar equipamentos nesta planta</h2>
-        <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar.</p>
-        <label class="planta-toggle-marcacao" id="wrapAtivarMarcacao">
-          <input type="checkbox" id="chkAtivarMarcacao" style="width:auto">
-          <span id="txtAtivarMarcacao">Marcação desligada — pode navegar na planta à vontade sem risco de criar ou mover marcador</span>
-        </label>
+        <h2>Editar marcações desta planta</h2>
+        <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar. Se o desenho não tiver o símbolo detectado ali, arraste o ícone certo lá embaixo pra dentro da planta.</p>
         <div class="grid-form">
           <label>O que estou marcando
             <span style="display:flex; gap:16px; align-items:center; height:38px;">
@@ -486,6 +483,17 @@
           </label>
         </div>
         <p class="muted" id="dicaModoMarcacao" style="margin-top:6px"></p>
+        <div class="planta-chips-arrastar">
+          <p class="muted" style="margin:0 0 6px">Ou arraste pra dentro da planta (útil quando o desenho não tem o símbolo detectado ali):</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora">
+              <i class="planta-legenda-icone planta-legenda-icone-evap"></i> Evaporadora
+            </div>
+            <div class="planta-chip-arrastavel" id="chipArrastarCond" data-tipo="condensadora">
+              <i class="planta-legenda-icone planta-legenda-icone-cond"></i> Condensadora
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -643,6 +651,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=2"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=14"></script>
+<script type="module" src="app.js?v=15"></script>
 </body>
 </html>
