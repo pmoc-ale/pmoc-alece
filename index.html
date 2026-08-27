@@ -411,6 +411,7 @@
               <svg id="uploadPlantaSvg" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
           </div>
+          <p class="muted" style="font-size:11.5px">Roda do mouse ou pinça (celular) pra dar zoom; arraste pra mover.</p>
           <div class="grid-form" style="margin-top:12px">
             <label>Nome da planta<input type="text" id="uploadPlantaNome" placeholder="Ex: Anexo 2 — 1º Piso"></label>
             <label>Prédio<select id="uploadPlantaLocal"></select></label>
@@ -432,10 +433,24 @@
         <div class="planta-area">
           <div class="planta-imagem-wrap">
             <svg id="plantaSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div class="planta-zoom-controles">
+              <button type="button" id="btnPlantaZoomIn" title="Aproximar">+</button>
+              <button type="button" id="btnPlantaZoomOut" title="Afastar">−</button>
+              <button type="button" id="btnPlantaZoomReset" title="Ver planta inteira">⤢</button>
+            </div>
           </div>
           <div class="planta-painel" id="plantaPainel">
             <p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>
           </div>
+        </div>
+        <div class="planta-legenda">
+          <span><i class="planta-legenda-swatch" style="background:#C00000"></i> Pendente</span>
+          <span><i class="planta-legenda-swatch" style="background:#9C6500"></i> Em andamento</span>
+          <span><i class="planta-legenda-swatch" style="background:#375623"></i> Concluída</span>
+          <span><i class="planta-legenda-swatch" style="background:#10263D"></i> Atrasado</span>
+          <span><i class="planta-legenda-icone planta-legenda-icone-evap"></i> Evaporadora</span>
+          <span><i class="planta-legenda-icone planta-legenda-icone-cond"></i> Condensadora</span>
+          <span><i class="planta-legenda-icone planta-legenda-icone-candidato"></i> Detectado, não identificado</span>
         </div>
         <details class="drawer-secao" style="margin-top:12px">
           <summary>Camadas</summary>
@@ -446,6 +461,12 @@
         <h2>Posicionar equipamentos nesta planta</h2>
         <p class="muted">Escolha um aparelho da lista, confira/preencha o código dele na planta (ex: E2/C4) e clique no ponto certo da planta pra marcar (ou mover) a posição — os círculos tracejados são posições de equipamento já detectadas automaticamente no desenho; clicar num deles marca na hora.</p>
         <div class="grid-form">
+          <label>O que estou marcando
+            <span style="display:flex; gap:16px; align-items:center; height:38px;">
+              <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="evaporadora" checked style="width:auto"> Evaporadora</label>
+              <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="condensadora" style="width:auto"> Condensadora</label>
+            </span>
+          </label>
           <label>Aparelho
             <select id="plantaEquipamentoSelect"></select>
           </label>

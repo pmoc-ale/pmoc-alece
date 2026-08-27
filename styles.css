@@ -1110,6 +1110,73 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   display: block;
   width: 100%;
   height: 70vh;
+  cursor: grab;
+}
+.planta-imagem-wrap svg:active {
+  cursor: grabbing;
+}
+.planta-zoom-controles {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 2;
+}
+.planta-zoom-controles button {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--raio-pequeno);
+  border: 1px solid var(--borda-forte);
+  background: #fff;
+  color: var(--azul-800);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--sombra);
+}
+.planta-zoom-controles button:hover {
+  background: var(--azul-50);
+}
+.planta-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: var(--sp-3);
+  font-size: 11.5px;
+  color: var(--texto-suave);
+}
+.planta-legenda span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.planta-legenda-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.planta-legenda-icone {
+  width: 14px;
+  height: 10px;
+  display: inline-block;
+  border: 1.5px solid var(--texto-suave);
+}
+.planta-legenda-icone-evap {
+  border-radius: 3px;
+}
+.planta-legenda-icone-cond {
+  border-radius: 2px;
+  width: 12px;
+  height: 12px;
+}
+.planta-legenda-icone-candidato {
+  border-radius: 50%;
+  width: 11px;
+  height: 11px;
+  border-style: dashed;
 }
 .planta-painel {
   flex: 1 1 35%;

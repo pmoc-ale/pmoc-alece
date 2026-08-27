@@ -3868,6 +3868,52 @@ const CORES_STATUS_MARCADOR = {
   atrasado: "#10263D",
 };
 
+// Desenha um marcador com a "cara" do equipamento (não uma bolinha
+// genérica): retângulo com veneziana pra evaporadora (split de parede),
+// quadrado com ventoinha pra condensadora (unidade externa) -- assim dá
+// pra reconhecer o tipo de longe, sem precisar clicar.
+function criarIconeMarcador(tipo, cor, raio) {
+  const nsSvg = "http://www.w3.org/2000/svg";
+  const g = document.createElementNS(nsSvg, "g");
+  const contorno = "#fff";
+  if (tipo === "condensadora") {
+    const corpo = document.createElementNS(nsSvg, "rect");
+    corpo.setAttribute("x", -raio); corpo.setAttribute("y", -raio);
+    corpo.setAttribute("width", raio * 2); corpo.setAttribute("height", raio * 2);
+    corpo.setAttribute("rx", raio * 0.15);
+    corpo.setAttribute("fill", cor); corpo.setAttribute("stroke", contorno); corpo.setAttribute("stroke-width", raio / 6);
+    g.appendChild(corpo);
+    const ventoinha = document.createElementNS(nsSvg, "circle");
+    ventoinha.setAttribute("cx", 0); ventoinha.setAttribute("cy", 0); ventoinha.setAttribute("r", raio * 0.55);
+    ventoinha.setAttribute("fill", "none"); ventoinha.setAttribute("stroke", contorno); ventoinha.setAttribute("stroke-width", raio / 9);
+    g.appendChild(ventoinha);
+    [0, 45, 90, 135].forEach((ang) => {
+      const rad = (ang * Math.PI) / 180;
+      const dx = Math.cos(rad) * raio * 0.5, dy = Math.sin(rad) * raio * 0.5;
+      const linha = document.createElementNS(nsSvg, "line");
+      linha.setAttribute("x1", -dx); linha.setAttribute("y1", -dy);
+      linha.setAttribute("x2", dx); linha.setAttribute("y2", dy);
+      linha.setAttribute("stroke", contorno); linha.setAttribute("stroke-width", raio / 11);
+      g.appendChild(linha);
+    });
+  } else {
+    const corpo = document.createElementNS(nsSvg, "rect");
+    corpo.setAttribute("x", -raio); corpo.setAttribute("y", -raio * 0.55);
+    corpo.setAttribute("width", raio * 2); corpo.setAttribute("height", raio * 1.1);
+    corpo.setAttribute("rx", raio * 0.25);
+    corpo.setAttribute("fill", cor); corpo.setAttribute("stroke", contorno); corpo.setAttribute("stroke-width", raio / 6);
+    g.appendChild(corpo);
+    [-0.22, 0, 0.22].forEach((f) => {
+      const linha = document.createElementNS(nsSvg, "line");
+      linha.setAttribute("x1", -raio * 0.62); linha.setAttribute("y1", raio * f);
+      linha.setAttribute("x2", raio * 0.62); linha.setAttribute("y2", raio * f);
+      linha.setAttribute("stroke", contorno); linha.setAttribute("stroke-width", raio / 11);
+      g.appendChild(linha);
+    });
+  }
+  return g;
+}
+
 async function renderLocalizacao() {
   const seletor = $("#plantaSeletor");
   if (!seletor) return;
@@ -3928,13 +3974,23 @@ async function renderLocalizacao() {
 
   if (isAdmin) {
     const select = $("#plantaEquipamentoSelect");
-    const itensDoPredio = ESTADO.equipamentos
-      .filter((e) => (e.local || "SEDE") === planta.local)
-      .sort((a, b) => (a.ambiente || "").localeCompare(b.ambiente || ""));
+    const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
+    // Marcando evaporadora: só faz sentido escolher entre os aparelhos
+    // desse prédio. Marcando condensadora: ela pode estar numa planta
+    // totalmente diferente da evaporadora (cobertura, por exemplo), então
+    // a lista não fica restrita ao prédio da planta aberta agora.
+    const itensBase = modoCondensadora
+      ? ESTADO.equipamentos
+      : ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === planta.local);
+    const itensDoPredio = itensBase.sort((a, b) =>
+      (a.local || "").localeCompare(b.local || "") || (a.ambiente || "").localeCompare(b.ambiente || "")
+    );
     const selecionadoAntes = select.value;
     select.innerHTML = itensDoPredio.map((e) => {
-      const marcado = e.plantaId === planta.id ? " ✓ já marcado" : "";
-      const rotulo = [e.codigoPlanta, e.patrimonio ? `Pat. ${e.patrimonio}` : null, e.ambiente].filter(Boolean).join(" — ");
+      const marcado = modoCondensadora
+        ? (e.condensadoraPlantaId ? " ✓ condensadora já marcada" : "")
+        : (e.plantaId === planta.id ? " ✓ já marcado" : "");
+      const rotulo = [e.local, e.codigoPlanta, e.patrimonio ? `Pat. ${e.patrimonio}` : null, e.ambiente].filter(Boolean).join(" — ");
       return `<option value="${e.id}">${escapeHtml(rotulo || e.id)}${marcado}</option>`;
     }).join("");
     if (itensDoPredio.some((e) => e.id === selecionadoAntes)) select.value = selecionadoAntes;
@@ -3955,7 +4011,10 @@ function montarSvgPlanta(planta, dados) {
   const svg = $("#plantaSvg");
   const [xmin, ymin, xmax, ymax] = dados.bbox;
   const pad = Math.max((xmax - xmin) * 0.03, 1);
-  svg.setAttribute("viewBox", `${xmin - pad} ${ymin - pad} ${xmax - xmin + pad * 2} ${ymax - ymin + pad * 2}`);
+  const viewInicial = { x: xmin - pad, y: ymin - pad, w: xmax - xmin + pad * 2, h: ymax - ymin + pad * 2 };
+  svg.setAttribute("viewBox", `${viewInicial.x} ${viewInicial.y} ${viewInicial.w} ${viewInicial.h}`);
+  svg.__viewOriginal = viewInicial;
+  ativarZoomPan(svg);
   svg.innerHTML = "";
 
   const nsSvg = "http://www.w3.org/2000/svg";
@@ -4031,34 +4090,51 @@ async function renderMarcadoresPlanta() {
 
   const raioMarcador = (() => {
     const [xmin, , xmax] = (_dadosPlantaCache.get(planta.id) || {}).bbox || [0, 0, 100];
-    return (xmax - xmin) / 120 || 1;
+    return (xmax - xmin) / 110 || 1;
   })();
 
-  // Aparelhos já identificados (têm plantaId + posição salva no próprio
-  // cadastro) -- coloridos pelo status, igual ao resto do sistema.
+  // Evaporadoras já identificadas nesta planta -- coloridas pelo status,
+  // igual ao resto do sistema, com a "cara" de unidade interna (split).
   const itens = ESTADO.equipamentos.filter(
     (e) => e.plantaId === planta.id && e.plantaX != null && e.plantaY != null
   );
   itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
     const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
-    const c = document.createElementNS(nsSvg, "circle");
-    c.setAttribute("cx", e.plantaX);
-    c.setAttribute("cy", e.plantaY);
-    c.setAttribute("r", raioMarcador);
-    c.setAttribute("fill", CORES_STATUS_MARCADOR[classe] || "#888");
-    c.setAttribute("stroke", "#fff");
-    c.setAttribute("stroke-width", raioMarcador / 6);
-    c.dataset.id = e.id;
-    c.style.cursor = "pointer";
+    const icone = criarIconeMarcador("evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", raioMarcador);
+    icone.setAttribute("transform", `translate(${e.plantaX},${e.plantaY})`);
+    icone.dataset.id = e.id;
+    icone.style.cursor = "pointer";
     const titulo = document.createElementNS(nsSvg, "title");
     titulo.textContent = rotulo;
-    c.appendChild(titulo);
-    c.addEventListener("click", (ev) => {
+    icone.appendChild(titulo);
+    icone.addEventListener("click", (ev) => {
       ev.stopPropagation();
       mostrarPainelPlanta(e);
     });
-    gMarcadores.appendChild(c);
+    gMarcadores.appendChild(icone);
+  });
+
+  // Condensadoras vinculadas a alguma evaporadora, marcadas nesta mesma
+  // planta -- mesmo esquema de cor, mas com a "cara" de unidade externa
+  // (quadrada, com ventoinha), pra dar pra distinguir de longe.
+  const condensadorasAqui = ESTADO.equipamentos.filter(
+    (e) => e.condensadoraPlantaId === planta.id && e.condensadoraX != null && e.condensadoraY != null
+  );
+  condensadorasAqui.forEach((e) => {
+    const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
+    const icone = criarIconeMarcador("condensadora", CORES_STATUS_MARCADOR[classe] || "#888", raioMarcador);
+    icone.setAttribute("transform", `translate(${e.condensadoraX},${e.condensadoraY})`);
+    icone.dataset.condensadoraDe = e.id;
+    icone.style.cursor = "pointer";
+    const titulo = document.createElementNS(nsSvg, "title");
+    titulo.textContent = "Condensadora — " + (e.codigoPlanta || e.patrimonio || e.ambiente || "");
+    icone.appendChild(titulo);
+    icone.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      mostrarPainelCondensadora(e);
+    });
+    gMarcadores.appendChild(icone);
   });
 
   // Modo admin: mostra também os candidatos detectados automaticamente no
@@ -4099,6 +4175,7 @@ async function renderMarcadoresPlanta() {
 function mostrarPainelPlanta(item) {
   const painel = $("#plantaPainel");
   if (!painel) return;
+  const temCondensadora = item.condensadoraPlantaId && item.condensadoraX != null;
   painel.innerHTML = `
     <h3 style="margin-top:0">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
     <div class="drawer-campo"><span class="rotulo">Patrimônio</span><span class="valor">${escapeHtml(item.patrimonio || "-")}</span></div>
@@ -4108,9 +4185,44 @@ function mostrarPainelPlanta(item) {
     <div class="drawer-campo"><span class="rotulo">Capacidade</span><span class="valor">${escapeHtml(item.capacidade || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Tipo de gás</span><span class="valor">${escapeHtml(item.tipoGas || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Status</span><span class="valor">${estaAtrasado(item) ? "Atrasado" : escapeHtml(item.statusPreventiva || "-")}</span></div>
-    <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:10px;width:100%">Ver ficha completa</button>
+    ${temCondensadora ? '<button class="btn ghost" id="btnVerCondensadora" style="margin-top:10px;width:100%">📍 Ver condensadora</button>' : ""}
+    <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:${temCondensadora ? "6" : "10"}px;width:100%">Ver ficha completa</button>
   `;
   $("#btnAbrirDrawerDaPlanta")?.addEventListener("click", () => abrirDrawerEquipamento(item.id));
+  $("#btnVerCondensadora")?.addEventListener("click", () => irParaMarcador(item.condensadoraPlantaId, item.condensadoraX, item.condensadoraY, () => mostrarPainelCondensadora(item)));
+}
+
+function mostrarPainelCondensadora(item) {
+  const painel = $("#plantaPainel");
+  if (!painel) return;
+  painel.innerHTML = `
+    <h3 style="margin-top:0">Condensadora — ${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
+    <p class="muted" style="margin-top:-6px">Unidade externa vinculada a este aparelho.</p>
+    <div class="drawer-campo"><span class="rotulo">Evaporadora</span><span class="valor">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "-")}</span></div>
+    <div class="drawer-campo"><span class="rotulo">Ambiente da evaporadora</span><span class="valor">${escapeHtml(item.ambiente || "-")}</span></div>
+    <button class="btn ghost" id="btnVerEvaporadora" style="margin-top:10px;width:100%">📍 Ver evaporadora</button>
+  `;
+  $("#btnVerEvaporadora")?.addEventListener("click", () => irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item)));
+}
+
+// Troca (se preciso) pra planta onde um marcador está, centraliza a
+// visão nele e mostra o painel certo -- usado pelos botões "Ver
+// condensadora"/"Ver evaporadora" pra pular de um pro outro mesmo quando
+// estão em plantas diferentes (ex: evaporadora no andar, condensadora na
+// cobertura).
+async function irParaMarcador(plantaId, x, y, aoChegar) {
+  if (!plantaId || x == null || y == null) {
+    toast("Essa posição ainda não foi marcada.");
+    return;
+  }
+  if (ESTADO.plantaSelecionada !== plantaId) {
+    ESTADO.plantaSelecionada = plantaId;
+    const svg = $("#plantaSvg");
+    if (svg) svg.dataset.plantaId = "";
+    await renderLocalizacao();
+  }
+  centralizarView($("#plantaSvg"), x, y);
+  aoChegar();
 }
 
 async function salvarPosicaoPlanta(planta, x, y) {
@@ -4120,12 +4232,13 @@ async function salvarPosicaoPlanta(planta, x, y) {
     return;
   }
   const id = select.value;
-  const codigoPlanta = $("#plantaCodigoInput")?.value.trim() || "";
+  const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
+  const campos = modoCondensadora
+    ? { condensadoraPlantaId: planta.id, condensadoraX: x, condensadoraY: y }
+    : { plantaId: planta.id, plantaX: x, plantaY: y, codigoPlanta: $("#plantaCodigoInput")?.value.trim() || "" };
   try {
-    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
-      plantaId: planta.id, plantaX: x, plantaY: y, codigoPlanta,
-    });
-    toast("Posição marcada.");
+    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), campos);
+    toast(modoCondensadora ? "Condensadora marcada." : "Posição marcada.");
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar posição: " + err.message);
@@ -4139,15 +4252,138 @@ $("#plantaSeletor")?.addEventListener("change", (ev) => {
   renderLocalizacao();
 });
 
+$("#btnPlantaZoomIn")?.addEventListener("click", () => $("#plantaSvg")?.__zoomIn?.());
+$("#btnPlantaZoomOut")?.addEventListener("click", () => $("#plantaSvg")?.__zoomOut?.());
+$("#btnPlantaZoomReset")?.addEventListener("click", () => $("#plantaSvg")?.__zoomReset?.());
+
+$all('input[name="modoMarcacao"]').forEach((radio) => {
+  radio.addEventListener("change", () => renderLocalizacao());
+});
+
 $("#plantaSvg")?.addEventListener("click", (ev) => {
-  if (ESTADO.permissao !== "admin") return;
-  if (ev.target.closest("circle")) return; // clique em marcador já tem seu próprio handler
   const svg = $("#plantaSvg");
+  if (svg?.dataset.arrastou === "1") { svg.dataset.arrastou = "0"; return; } // era pan, não clique
+  if (ESTADO.permissao !== "admin") return;
+  if (ev.target.closest("circle, g[data-id], g[data-condensadora-de]")) return; // marcador já tem seu próprio handler
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!svg || !planta) return;
   const { x, y } = svgPontoDeClique(svg, ev);
   salvarPosicaoPlanta(planta, Math.round(x * 100) / 100, Math.round(y * 100) / 100);
 });
+
+// ------------------------------------------------------------------
+// Zoom e pan da planta -- roda da mouse, arrastar (mouse ou dedo) e
+// pinça de dois dedos, tudo em cima do viewBox do SVG (assim os
+// marcadores, que já estão no mesmo espaço de coordenadas, continuam
+// clicáveis certinho sem nenhuma conta extra).
+// ------------------------------------------------------------------
+function ativarZoomPan(svg) {
+  if (!svg || svg.dataset.zoomPanAtivo === "1") return;
+  svg.dataset.zoomPanAtivo = "1";
+  svg.style.touchAction = "none";
+
+  function viewAtual() {
+    const [x, y, w, h] = (svg.getAttribute("viewBox") || "0 0 100 100").split(" ").map(Number);
+    return { x, y, w, h };
+  }
+  function aplicarView(v) {
+    svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+  }
+  function zoomEm(fatorEscala, cxTela, cyTela) {
+    const v = viewAtual();
+    const original = svg.__viewOriginal || v;
+    const pt = svgPontoDeClique(svg, { clientX: cxTela, clientY: cyTela });
+    let novaLargura = v.w * fatorEscala;
+    // não deixa afastar mais que a visão original nem aproximar demais
+    novaLargura = Math.min(Math.max(novaLargura, original.w / 40), original.w * 1.4);
+    const novaAltura = novaLargura * (v.h / v.w);
+    const novoX = pt.x - (pt.x - v.x) * (novaLargura / v.w);
+    const novoY = pt.y - (pt.y - v.y) * (novaAltura / v.h);
+    aplicarView({ x: novoX, y: novoY, w: novaLargura, h: novaAltura });
+  }
+
+  svg.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    zoomEm(ev.deltaY > 0 ? 1.15 : 1 / 1.15, ev.clientX, ev.clientY);
+  }, { passive: false });
+
+  // Arrastar (mouse) e pinça/arrastar (toque) via Pointer Events, que
+  // unificam os dois -- cada ponteiro ativo fica guardado por id.
+  const ponteiros = new Map();
+  let distanciaInicialPinca = null;
+  let viewInicialPinca = null;
+
+  svg.addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest("circle, g[data-id], g[data-condensadora-de]")) return; // deixa o clique do marcador acontecer
+    svg.setPointerCapture(ev.pointerId);
+    ponteiros.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, moveu: 0 });
+    if (ponteiros.size === 2) {
+      const [p1, p2] = [...ponteiros.values()];
+      distanciaInicialPinca = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      viewInicialPinca = viewAtual();
+    }
+  });
+
+  svg.addEventListener("pointermove", (ev) => {
+    const p = ponteiros.get(ev.pointerId);
+    if (!p) return;
+    const dx = ev.clientX - p.x, dy = ev.clientY - p.y;
+    p.moveu += Math.abs(dx) + Math.abs(dy);
+    if (p.moveu > 4) svg.dataset.arrastou = "1";
+
+    if (ponteiros.size === 2 && distanciaInicialPinca) {
+      p.x = ev.clientX; p.y = ev.clientY;
+      const [p1, p2] = [...ponteiros.values()];
+      const distanciaAtual = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      const fator = distanciaInicialPinca / Math.max(distanciaAtual, 1);
+      const meioX = (p1.x + p2.x) / 2, meioY = (p1.y + p2.y) / 2;
+      const original = svg.__viewOriginal || viewInicialPinca;
+      let novaLargura = viewInicialPinca.w * fator;
+      novaLargura = Math.min(Math.max(novaLargura, original.w / 40), original.w * 1.4);
+      const novaAltura = novaLargura * (viewInicialPinca.h / viewInicialPinca.w);
+      const ptMeio = svgPontoDeClique(svg, { clientX: meioX, clientY: meioY });
+      aplicarView({
+        x: ptMeio.x - (novaLargura / 2),
+        y: ptMeio.y - (novaAltura / 2),
+        w: novaLargura, h: novaAltura,
+      });
+      return;
+    }
+
+    if (ponteiros.size === 1) {
+      const v = viewAtual();
+      const escala = v.w / svg.getBoundingClientRect().width;
+      aplicarView({ x: v.x - dx * escala, y: v.y - dy * escala, w: v.w, h: v.h });
+      p.x = ev.clientX; p.y = ev.clientY;
+    }
+  });
+
+  function soltarPonteiro(ev) {
+    ponteiros.delete(ev.pointerId);
+    if (ponteiros.size < 2) { distanciaInicialPinca = null; viewInicialPinca = null; }
+  }
+  svg.addEventListener("pointerup", soltarPonteiro);
+  svg.addEventListener("pointercancel", soltarPonteiro);
+  svg.addEventListener("pointerleave", soltarPonteiro);
+
+  svg.__zoomIn = () => { const v = viewAtual(); zoomEm(1 / 1.4, svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2, svg.getBoundingClientRect().top + svg.getBoundingClientRect().height / 2); };
+  svg.__zoomOut = () => { const v = viewAtual(); zoomEm(1.4, svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2, svg.getBoundingClientRect().top + svg.getBoundingClientRect().height / 2); };
+  svg.__zoomReset = () => { if (svg.__viewOriginal) aplicarView(svg.__viewOriginal); };
+}
+
+// Centraliza a visão da planta num ponto específico, aproximando um
+// pouco se a visão atual estiver muito aberta -- usado pelos botões
+// "Ver condensadora"/"Ver evaporadora" pra deixar bem claro qual é o
+// marcador, em vez de só piscar em algum canto da planta inteira.
+function centralizarView(svg, x, y) {
+  if (!svg) return;
+  const original = svg.__viewOriginal;
+  if (!original) return;
+  const [, , wAtual, hAtual] = (svg.getAttribute("viewBox") || "").split(" ").map(Number);
+  const largura = Math.min(wAtual || original.w, original.w / 3);
+  const altura = largura * (original.h / original.w);
+  svg.setAttribute("viewBox", `${x - largura / 2} ${y - altura / 2} ${largura} ${altura}`);
+}
 
 // ------------------------------------------------------------------
 // Upload de planta (.dwf/.dwfx) -- lido inteiro no navegador (utils/
@@ -4213,7 +4449,10 @@ function montarSvgPreviewUpload(dados) {
   const svg = $("#uploadPlantaSvg");
   const [xmin, ymin, xmax, ymax] = dados.bbox;
   const pad = Math.max((xmax - xmin) * 0.03, 1);
-  svg.setAttribute("viewBox", `${xmin - pad} ${ymin - pad} ${xmax - xmin + pad * 2} ${ymax - ymin + pad * 2}`);
+  const viewInicial = { x: xmin - pad, y: ymin - pad, w: xmax - xmin + pad * 2, h: ymax - ymin + pad * 2 };
+  svg.setAttribute("viewBox", `${viewInicial.x} ${viewInicial.y} ${viewInicial.w} ${viewInicial.h}`);
+  svg.__viewOriginal = viewInicial;
+  ativarZoomPan(svg);
   svg.innerHTML = "";
   const nsSvg = "http://www.w3.org/2000/svg";
   const g = document.createElementNS(nsSvg, "g");
