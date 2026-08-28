@@ -4123,8 +4123,60 @@ function atualizarModoMarcacao() {
 }
 $("#btnEditarPlanta")?.addEventListener("click", () => {
   ESTADO.editandoPlanta = !ESTADO.editandoPlanta;
+  resetarTipoAcaoMarcacao();
   atualizarModoMarcacao();
   renderMarcadoresPlanta();
+});
+
+// Menu do lápis em dois níveis: primeiro escolhe o TIPO (evaporadora ou
+// condensadora, empilhados), só depois aparecem os botões + (adicionar
+// um aparelho novo) e − (descartar uma área que o sistema apontou errado
+// como equipamento) -- a Jovanna achou o menu anterior (tudo junto numa
+// linha só) confuso. Por baixo continua sendo os 3 mesmos radios
+// escondidos de sempre (evaporadora/condensadora/descartar), só a forma
+// de escolher que mudou.
+let _tipoMarcacaoAtual = null;
+
+function aplicarTipoAcaoMarcacao(tipo, acao) {
+  _tipoMarcacaoAtual = tipo;
+  const valorRadio = acao === "descartar" ? "descartar" : tipo;
+  const radio = $(`input[name="modoMarcacao"][value="${valorRadio}"]`);
+  if (radio) radio.checked = true;
+
+  $all(".planta-tipo-botao").forEach((b) => b.classList.toggle("ativo", b.dataset.tipo === tipo));
+  $all(".planta-acao-botao").forEach((b) => b.classList.toggle("ativo", b.dataset.acao === acao));
+  const acaoLinha = $("#plantaAcaoLinha");
+  if (acaoLinha) acaoLinha.hidden = false;
+  const campos = $("#camposAdicionarMarcacao");
+  if (campos) campos.hidden = acao !== "adicionar";
+  const chips = $("#plantaChipsArrastar");
+  if (chips) chips.hidden = acao !== "adicionar";
+  $("#chipArrastarEvap")?.toggleAttribute("hidden", tipo !== "evaporadora");
+  $("#chipArrastarCond")?.toggleAttribute("hidden", tipo !== "condensadora");
+
+  atualizarModoMarcacao();
+}
+
+function resetarTipoAcaoMarcacao() {
+  _tipoMarcacaoAtual = null;
+  $all(".planta-tipo-botao").forEach((b) => b.classList.remove("ativo"));
+  $all(".planta-acao-botao").forEach((b) => b.classList.remove("ativo"));
+  const acaoLinha = $("#plantaAcaoLinha");
+  if (acaoLinha) acaoLinha.hidden = true;
+  const campos = $("#camposAdicionarMarcacao");
+  if (campos) campos.hidden = true;
+  const chips = $("#plantaChipsArrastar");
+  if (chips) chips.hidden = true;
+}
+
+$all(".planta-tipo-botao").forEach((btn) => {
+  btn.addEventListener("click", () => aplicarTipoAcaoMarcacao(btn.dataset.tipo, "adicionar"));
+});
+$("#btnAcaoAdicionar")?.addEventListener("click", () => {
+  if (_tipoMarcacaoAtual) aplicarTipoAcaoMarcacao(_tipoMarcacaoAtual, "adicionar");
+});
+$("#btnAcaoRemover")?.addEventListener("click", () => {
+  if (_tipoMarcacaoAtual) aplicarTipoAcaoMarcacao(_tipoMarcacaoAtual, "descartar");
 });
 
 // Constrói o SVG da planta a partir do desenho vetorial já baixado: um

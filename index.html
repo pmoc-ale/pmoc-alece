@@ -441,25 +441,33 @@
             </div>
             <div class="planta-painel" id="plantaPainel" hidden></div>
             <div class="card planta-dropdown-marcacao" id="cardPosicionarPlanta" hidden>
-              <div class="planta-modo-linha">
-                <label class="planta-modo-icone" title="Marcar evaporadora (a peça que fica dentro da sala)">
-                  <input type="radio" name="modoMarcacao" value="evaporadora" checked>
+              <!-- Nível 1: escolhe o TIPO (evaporadora/condensadora), empilhados.
+                   Nível 2 (só aparece depois de escolher um tipo): + pra
+                   adicionar um aparelho novo, − pra descartar uma área que o
+                   sistema apontou errado como equipamento. -->
+              <div class="planta-tipo-linha" id="plantaTipoLinha">
+                <button type="button" class="planta-tipo-botao" data-tipo="evaporadora" title="Evaporadora (a peça que fica dentro da sala)">
                   <i class="planta-legenda-icone planta-legenda-icone-evap"></i>
                   <span>Evaporadora</span>
-                </label>
-                <label class="planta-modo-icone" title="Marcar condensadora (a peça que fica do lado de fora, cobertura etc.)">
-                  <input type="radio" name="modoMarcacao" value="condensadora">
+                </button>
+                <button type="button" class="planta-tipo-botao" data-tipo="condensadora" title="Condensadora (a peça que fica do lado de fora, cobertura etc.)">
                   <i class="planta-legenda-icone planta-legenda-icone-cond"></i>
                   <span>Condensadora</span>
-                </label>
-                <label class="planta-modo-icone" title="Descartar uma área tracejada que o sistema identificou errado (não é equipamento)">
-                  <input type="radio" name="modoMarcacao" value="descartar">
-                  <i class="planta-legenda-icone planta-legenda-icone-descartar"></i>
-                  <span>Descartar</span>
-                </label>
+                </button>
+              </div>
+              <div class="planta-acao-linha" id="plantaAcaoLinha" hidden>
+                <button type="button" class="planta-acao-botao ativo" id="btnAcaoAdicionar" data-acao="adicionar" title="Adicionar uma máquina num lugar que ainda não tem marcação">+</button>
+                <button type="button" class="planta-acao-botao" id="btnAcaoRemover" data-acao="descartar" title="Descartar uma área tracejada que o sistema identificou errado (não é equipamento)">−</button>
+              </div>
+              <!-- Radios de verdade que controlam a marcação -- ficam
+                   escondidos, os botões acima é que marcam neles. -->
+              <div hidden>
+                <input type="radio" name="modoMarcacao" value="evaporadora" checked>
+                <input type="radio" name="modoMarcacao" value="condensadora">
+                <input type="radio" name="modoMarcacao" value="descartar">
               </div>
               <p class="muted" id="dicaModoMarcacao" style="margin:6px 2px 0; font-size:12px;"></p>
-              <div class="grid-form">
+              <div class="grid-form" id="camposAdicionarMarcacao" hidden>
                 <label id="campoEquipamentoWrap" title="Aparelho">
                   <select id="plantaEquipamentoSelect"></select>
                 </label>
@@ -473,7 +481,7 @@
                   <input type="text" id="plantaCondensadoraCodigoInput" placeholder="Ex: C7">
                 </label>
               </div>
-              <div class="planta-chips-arrastar">
+              <div class="planta-chips-arrastar" id="plantaChipsArrastar" hidden>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                   <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora" title="Arrastar evaporadora pra dentro da planta (quando o desenho não é detectado ali)">
                     <i class="planta-legenda-icone planta-legenda-icone-evap"></i>
@@ -658,6 +666,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=3"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=17"></script>
+<script type="module" src="app.js?v=18"></script>
 </body>
 </html>
