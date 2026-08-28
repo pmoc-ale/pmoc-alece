@@ -442,13 +442,15 @@
             <div class="planta-painel" id="plantaPainel" hidden></div>
             <div class="card planta-dropdown-marcacao" id="cardPosicionarPlanta" hidden>
               <div class="planta-modo-linha">
-                <label class="planta-modo-icone" title="Marcar evaporadora">
+                <label class="planta-modo-icone" title="Marcar evaporadora (a peça que fica dentro da sala)">
                   <input type="radio" name="modoMarcacao" value="evaporadora" checked>
                   <i class="planta-legenda-icone planta-legenda-icone-evap"></i>
+                  <span>Evaporadora</span>
                 </label>
-                <label class="planta-modo-icone" title="Marcar condensadora">
+                <label class="planta-modo-icone" title="Marcar condensadora (a peça que fica do lado de fora, cobertura etc.)">
                   <input type="radio" name="modoMarcacao" value="condensadora">
                   <i class="planta-legenda-icone planta-legenda-icone-cond"></i>
+                  <span>Condensadora</span>
                 </label>
               </div>
               <div class="grid-form">
@@ -469,9 +471,11 @@
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
                   <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora" title="Arrastar evaporadora pra dentro da planta (quando o desenho não é detectado ali)">
                     <i class="planta-legenda-icone planta-legenda-icone-evap"></i>
+                    <span>Evaporadora</span>
                   </div>
                   <div class="planta-chip-arrastavel" id="chipArrastarCond" data-tipo="condensadora" title="Arrastar condensadora pra dentro da planta (quando o desenho não é detectado ali)">
                     <i class="planta-legenda-icone planta-legenda-icone-cond"></i>
+                    <span>Condensadora</span>
                   </div>
                 </div>
               </div>

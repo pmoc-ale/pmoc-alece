@@ -404,9 +404,21 @@ async function parseDwf(arrayBuffer) {
       // cluster acabou NÃO precisando ser dividido de verdade --
       // destacar um Path que na real desenha várias unidades juntas
       // recoloriria todas de uma vez, enganoso pra uma marcação
-      // individual.
-      const nums = gruposComNum.length === 1 ? cl.nums : [];
-      candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: g.length, nums });
+      // individual. Quando dividiu de verdade, guarda em vez disso a
+      // ÁREA (bbox) só dessa unidade -- sem isso, o app não tinha outro
+      // jeito de indicar "essa aqui foi marcada" a não ser um ícone
+      // genérico por cima do próprio desenho original (virava uma
+      // "figurinha" grudada em cima do símbolo de verdade). Com a área
+      // certa, dá pra desenhar só um contorno ao redor dela, sem
+      // recolorir nem empilhar nada.
+      const dividiuDeVerdade = gruposComNum.length > 1;
+      const nums = dividiuDeVerdade ? [] : cl.nums;
+      let bboxLocal = null;
+      if (dividiuDeVerdade) {
+        const gxs = g.map((p) => p.ponto[0]), gys = g.map((p) => p.ponto[1]);
+        bboxLocal = { x: Math.min(...gxs), y: Math.min(...gys), largura: Math.max(...gxs) - Math.min(...gxs), altura: Math.max(...gys) - Math.min(...gys) };
+      }
+      candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: g.length, nums, bboxLocal });
     });
   }
   const marcadoresPorCamada = {};
