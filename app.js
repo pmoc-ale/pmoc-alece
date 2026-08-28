@@ -2,7 +2,7 @@ import { db, auth, firebaseConfig } from "./firebase-config.js?v=4";
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   collection, collectionGroup, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, query,
-  orderBy, where, writeBatch, deleteDoc, addDoc, limit, deleteField, runTransaction,
+  orderBy, where, writeBatch, deleteDoc, addDoc, limit, deleteField, runTransaction, FieldPath,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
@@ -4297,7 +4297,14 @@ function montarSvgPlanta(planta, dados) {
     inp.addEventListener("change", async () => {
       const camada = inp.dataset.espessuraCamada;
       try {
-        await updateDoc(doc(db, "plantas", planta.id), { [`espessurasCamadas.${camada}`]: Number(inp.value) || 1 });
+        // FieldPath (não string com ponto) -- várias camadas do CAD têm
+        // nome começando com "..." (ex: "...ALVENARIA", visto num arquivo
+        // real), e usar `espessurasCamadas.${camada}` como string vira
+        // "espessurasCamadas....ALVENARIA", que o Firestore rejeita (ponto
+        // dentro do nome do campo é interpretado como separador de
+        // caminho). Com FieldPath, o nome da camada vai inteiro num só
+        // segmento, ponto ou não.
+        await updateDoc(doc(db, "plantas", planta.id), new FieldPath("espessurasCamadas", camada), Number(inp.value) || 1);
       } catch (err) {
         console.error(err);
         toast("Erro ao salvar a grossura: " + err.message);
@@ -4322,7 +4329,9 @@ function montarSvgPlanta(planta, dados) {
     inp.addEventListener("change", async () => {
       const camada = inp.dataset.corCamada;
       try {
-        await updateDoc(doc(db, "plantas", planta.id), { [`coresCamadas.${camada}`]: inp.value });
+        // FieldPath, mesmo motivo do espessurasCamadas acima (camada com
+        // ponto no nome quebraria uma string "coresCamadas.NOME").
+        await updateDoc(doc(db, "plantas", planta.id), new FieldPath("coresCamadas", camada), inp.value);
       } catch (err) {
         console.error(err);
         toast("Erro ao salvar a cor: " + err.message);
