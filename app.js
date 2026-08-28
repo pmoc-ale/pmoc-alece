@@ -3995,9 +3995,24 @@ async function renderLocalizacao() {
   if (!ESTADO.plantaSelecionada || !ESTADO.plantas.some((p) => p.id === ESTADO.plantaSelecionada)) {
     ESTADO.plantaSelecionada = ESTADO.plantas[0].id;
   }
-  seletor.innerHTML = ESTADO.plantas.map((p) =>
-    `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
-  ).join("");
+  // Agrupa por prédio/anexo (planta.local) -- a Jovanna pediu pra ficar
+  // como se fossem "pastas" separadas, pra achar mais fácil quando tem
+  // planta de vários anexos misturada. Só um prédio: não precisa de
+  // grupo, fica igual antes.
+  const prediosComPlanta = [...new Set(ESTADO.plantas.map((p) => p.local || "SEDE"))];
+  if (prediosComPlanta.length <= 1) {
+    seletor.innerHTML = ESTADO.plantas.map((p) =>
+      `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
+    ).join("");
+  } else {
+    seletor.innerHTML = prediosComPlanta.map((predio) => `
+      <optgroup label="${escapeHtml(predio)}">
+        ${ESTADO.plantas.filter((p) => (p.local || "SEDE") === predio).map((p) =>
+          `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
+        ).join("")}
+      </optgroup>`
+    ).join("");
+  }
   seletor.hidden = ESTADO.plantas.length <= 1;
 
   const planta = plantaPorId(ESTADO.plantaSelecionada);
@@ -4143,16 +4158,22 @@ function montarSvgPlanta(planta, dados) {
   // planta (ex: uma camada com cor difícil de enxergar). Fica salva no
   // documento da planta (coresCamadas: {camada: "#hex"}); quando não tem
   // override, usa a cor de verdade que veio do arquivo.
+  // Espessura customizada por camada (opcional, mesmo esquema da cor) --
+  // multiplica a espessura original de cada linha (ent.sw), não substitui
+  // por um valor fixo, então uma camada que já tinha linhas mais grossas
+  // que outra continua proporcional depois de ajustar.
   const coresCamadas = planta.coresCamadas || {};
+  const espessurasCamadas = planta.espessurasCamadas || {};
   const pathPorNumero = new Map();
   (dados.entities || []).forEach((ent) => {
     const p = document.createElementNS(nsSvg, "path");
     p.setAttribute("d", ent.d);
     if (ent.n != null) { p.dataset.n = ent.n; p.dataset.strokeOriginal = ent.stroke || ""; p.dataset.fillOriginal = ent.fill || ""; }
     const corCamada = coresCamadas[ent.layer];
+    const espessuraCamada = espessurasCamadas[ent.layer] || 1;
     if (ent.stroke) {
       p.setAttribute("stroke", corCamada || ent.stroke);
-      p.setAttribute("stroke-width", ent.sw || 1);
+      p.setAttribute("stroke-width", (ent.sw || 1) * espessuraCamada);
       p.setAttribute("fill", "none");
     }
     if (ent.fill) {
@@ -4200,6 +4221,7 @@ function montarSvgPlanta(planta, dados) {
     `<label class="planta-camada-linha">
       <input type="checkbox" checked data-camada="${escapeHtml(camada)}">
       <span>${escapeHtml(camada)}</span>
+      <input type="range" min="0.5" max="4" step="0.25" data-espessura-camada="${escapeHtml(camada)}" value="${espessurasCamadas[camada] || 1}" title="Grossura desta camada">
       <input type="color" data-cor-camada="${escapeHtml(camada)}" value="${corAtualDaCamada(camada)}" title="Cor desta camada">
     </label>`
   ).join("");
@@ -4207,6 +4229,27 @@ function montarSvgPlanta(planta, dados) {
     inp.addEventListener("change", () => {
       const g = gPorCamada[inp.dataset.camada];
       if (g) g.style.display = inp.checked ? "" : "none";
+    });
+  });
+  painelCamadas.querySelectorAll("input[data-espessura-camada]").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const camada = inp.dataset.espessuraCamada;
+      const fator = Number(inp.value) || 1;
+      (dados.entities || []).forEach((ent) => {
+        if (ent.layer !== camada || ent.n == null || !ent.stroke) return;
+        const p = pathPorNumero.get(ent.n);
+        if (!p) return;
+        p.setAttribute("stroke-width", (ent.sw || 1) * fator);
+      });
+    });
+    inp.addEventListener("change", async () => {
+      const camada = inp.dataset.espessuraCamada;
+      try {
+        await updateDoc(doc(db, "plantas", planta.id), { [`espessurasCamadas.${camada}`]: Number(inp.value) || 1 });
+      } catch (err) {
+        console.error(err);
+        toast("Erro ao salvar a grossura: " + err.message);
+      }
     });
   });
   painelCamadas.querySelectorAll("input[data-cor-camada]").forEach((inp) => {
@@ -4419,6 +4462,35 @@ async function renderMarcadoresPlanta() {
         el.setAttribute("y", ny - alturaTotal / 2);
       });
       gDestaques.appendChild(retanguloArea);
+      return;
+    }
+
+    // Condensadora marcada à mão (arrastando o chip, sem símbolo detectado
+    // ali) -- a Jovanna pediu pra parecer com o mesmo retângulo das
+    // detectadas automaticamente, em vez do ícone genérico. Tamanho fixo
+    // (proporcional à escala da planta, igual ao ícone antigo), só
+    // reposiciona arrastando -- sem redimensionar.
+    if (tipo === "condensadora") {
+      const largura = raioMarcador * 2.6, altura = raioMarcador * 1.3;
+      const retanguloFixo = document.createElementNS(nsSvg, "rect");
+      retanguloFixo.setAttribute("x", x - largura / 2);
+      retanguloFixo.setAttribute("y", y - altura / 2);
+      retanguloFixo.setAttribute("width", largura);
+      retanguloFixo.setAttribute("height", altura);
+      retanguloFixo.setAttribute("rx", Math.min(largura, altura) * 0.15);
+      retanguloFixo.setAttribute("fill", "transparent");
+      retanguloFixo.setAttribute("stroke", cor);
+      retanguloFixo.setAttribute("stroke-width", Math.min(largura, altura) * 0.12);
+      retanguloFixo.dataset.destaque = "1";
+      retanguloFixo.style.cursor = "pointer";
+      const tituloFixo = document.createElementNS(nsSvg, "title");
+      tituloFixo.textContent = rotulo;
+      retanguloFixo.appendChild(tituloFixo);
+      tornarInterativo(retanguloFixo, (el, nx, ny) => {
+        el.setAttribute("x", nx - largura / 2);
+        el.setAttribute("y", ny - altura / 2);
+      });
+      gDestaques.appendChild(retanguloFixo);
       return;
     }
 
