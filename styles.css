@@ -1178,34 +1178,59 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .planta-chip-arrastavel:active {
   cursor: grabbing;
 }
-.planta-modo-linha {
+.planta-tipo-linha {
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
 }
-.planta-modo-icone {
-  display: inline-flex;
+.planta-tipo-botao {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 12px 0 8px;
+  gap: 8px;
+  padding: 0 12px;
   height: 38px;
+  width: 100%;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
   cursor: pointer;
   background: #fff;
   font-size: 13px;
   font-weight: 600;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
 }
-.planta-modo-icone input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-.planta-modo-icone:has(input:checked) {
+.planta-tipo-botao.ativo {
   background: var(--azul-100);
   border-color: var(--azul-700);
+}
+.planta-acao-linha {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.planta-acao-botao {
+  flex: 1;
+  height: 36px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  cursor: pointer;
+  background: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--texto-suave);
+}
+.planta-acao-botao.ativo {
+  background: var(--azul-100);
+  border-color: var(--azul-700);
+  color: var(--azul-700);
+}
+#btnAcaoRemover.ativo {
+  background: #FDEAEA;
+  border-color: var(--vermelho);
+  color: var(--vermelho);
 }
 .planta-fantasma-arrasto {
   position: fixed;
