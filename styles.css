@@ -1287,6 +1287,23 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   height: 11px;
   border-style: dashed;
 }
+.planta-legenda-icone-descartar {
+  border-radius: 50%;
+  width: 11px;
+  height: 11px;
+  border-style: dashed;
+  border-color: var(--vermelho);
+  position: relative;
+}
+.planta-legenda-icone-descartar::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 50%;
+  border-top: 1.5px solid var(--vermelho);
+  transform: translateY(-50%) rotate(45deg);
+}
 .planta-pulso-destaque {
   transform-box: fill-box;
   transform-origin: 50% 50%;
@@ -1324,6 +1341,21 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   align-items: center;
   gap: 6px;
   cursor: pointer;
+}
+.planta-camada-linha span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planta-camada-linha input[type="color"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
