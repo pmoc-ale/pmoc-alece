@@ -1176,6 +1176,11 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .planta-chip-arrastavel:active {
   cursor: grabbing;
 }
+.planta-modo-linha {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
 .planta-modo-icone {
   display: inline-flex;
   align-items: center;
