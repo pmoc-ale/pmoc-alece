@@ -1331,7 +1331,7 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 }
 .planta-camadas {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 6px 14px;
   padding: var(--sp-3) var(--sp-4);
   font-size: 12.5px;
@@ -1356,6 +1356,11 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
+}
+.planta-camada-linha input[type="range"] {
+  width: 46px;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
 @media (max-width: 768px) {
