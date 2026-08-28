@@ -4847,7 +4847,20 @@ function ativarZoomPan(svg) {
     const [x, y, w, h] = (svg.getAttribute("viewBox") || "0 0 100 100").split(" ").map(Number);
     return { x, y, w, h };
   }
+  // Limita o quanto dá pra arrastar a planta pros lados -- sem isso, dava
+  // pra puxar a visão pra bem longe do desenho e ficar perdida numa área
+  // em branco. Deixa uma folga de meia largura/altura original pra fora
+  // de cada lado (dá pra "espiar" um pouco além da borda, só não afastar
+  // demais).
   function aplicarView(v) {
+    const original = svg.__viewOriginal;
+    if (original) {
+      const folgaX = original.w * 0.5, folgaY = original.h * 0.5;
+      const minX = original.x - folgaX, maxX = original.x + original.w + folgaX - v.w;
+      const minY = original.y - folgaY, maxY = original.y + original.h + folgaY - v.h;
+      v.x = Math.min(Math.max(v.x, minX), maxX);
+      v.y = Math.min(Math.max(v.y, minY), maxY);
+    }
     svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
   }
   function zoomEm(fatorEscala, cxTela, cyTela) {
