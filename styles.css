@@ -1163,8 +1163,9 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .planta-chip-arrastavel {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: 1px dashed var(--borda);
   border-radius: var(--raio);
   cursor: grab;
@@ -1174,6 +1175,28 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 }
 .planta-chip-arrastavel:active {
   cursor: grabbing;
+}
+.planta-modo-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  cursor: pointer;
+  background: #fff;
+}
+.planta-modo-icone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.planta-modo-icone:has(input:checked) {
+  background: var(--azul-100);
+  border-color: var(--azul-700);
 }
 .planta-fantasma-arrasto {
   position: fixed;
