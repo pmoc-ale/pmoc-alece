@@ -447,9 +447,15 @@
               <p class="muted">Escolha o que está marcando e clique no ponto certo da planta (ou num contorno tracejado, se já tiver sido detectado automaticamente) para marcar. Se o desenho não tiver o símbolo detectado ali, arraste o ícone certo lá embaixo pra dentro da planta.</p>
               <div class="grid-form">
                 <label>O que estou marcando
-                  <span style="display:flex; gap:16px; align-items:center; height:38px;">
-                    <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="evaporadora" checked style="width:auto"> Evaporadora</label>
-                    <label style="display:flex; align-items:center; gap:6px; font-weight:400;"><input type="radio" name="modoMarcacao" value="condensadora" style="width:auto"> Condensadora</label>
+                  <span style="display:flex; gap:10px; align-items:center; height:38px;">
+                    <label class="planta-modo-icone" title="Evaporadora">
+                      <input type="radio" name="modoMarcacao" value="evaporadora" checked>
+                      <i class="planta-legenda-icone planta-legenda-icone-evap"></i>
+                    </label>
+                    <label class="planta-modo-icone" title="Condensadora">
+                      <input type="radio" name="modoMarcacao" value="condensadora">
+                      <i class="planta-legenda-icone planta-legenda-icone-cond"></i>
+                    </label>
                   </span>
                 </label>
                 <label id="campoEquipamentoWrap">Aparelho
@@ -469,11 +475,11 @@
               <div class="planta-chips-arrastar">
                 <p class="muted" style="margin:0 0 6px">Ou arraste pra dentro da planta (útil quando o desenho não tem o símbolo detectado ali):</p>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                  <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora">
-                    <i class="planta-legenda-icone planta-legenda-icone-evap"></i> Evaporadora
+                  <div class="planta-chip-arrastavel" id="chipArrastarEvap" data-tipo="evaporadora" title="Evaporadora">
+                    <i class="planta-legenda-icone planta-legenda-icone-evap"></i>
                   </div>
-                  <div class="planta-chip-arrastavel" id="chipArrastarCond" data-tipo="condensadora">
-                    <i class="planta-legenda-icone planta-legenda-icone-cond"></i> Condensadora
+                  <div class="planta-chip-arrastavel" id="chipArrastarCond" data-tipo="condensadora" title="Condensadora">
+                    <i class="planta-legenda-icone planta-legenda-icone-cond"></i>
                   </div>
                 </div>
               </div>
@@ -648,7 +654,7 @@
 </aside>
 <div class="toast" id="toast"></div>
 <script src="utils/pdfGenerator.js"></script>
-<script src="utils/dwfParser.js?v=2"></script>
+<script src="utils/dwfParser.js?v=3"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
 <script type="module" src="app.js?v=15"></script>
 </body>

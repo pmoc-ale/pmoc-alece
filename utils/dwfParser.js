@@ -187,6 +187,81 @@ function dwfAplica(matriz, ponto) {
 
 const DWF_START_RE = /^M(-?[\d.eE+-]+),(-?[\d.eE+-]+)/;
 
+// Interpretador (bem simples) da mesma gramática de "d" do SVG/XPS: em vez
+// de olhar só o primeiro M (como o DWF_START_RE acima, usado pro bbox
+// geral), percorre o "d" inteiro mantendo a posição ABSOLUTA da caneta
+// através de M/m,H/h,V/v,L/l,A/a,Z/z (com repetição implícita de pares,
+// igual SVG) e devolve o ponto de início de CADA subpath (cada comando
+// novo de moveto). Precisa disso porque um objeto do CAD às vezes não é
+// um símbolo só -- é um bloco/desenho compondo VÁRIOS aparelhos dentro
+// de um <Path> só (confirmado num arquivo real: uma "caixa d'água" com
+// várias condensadoras desenhadas juntas como um Path gigante), e sem
+// olhar TODOS os subpaths não tem como separar cada aparelho de verdade.
+function dwfSubpathsDoD(d) {
+  const tokens = d.match(/[MmHhVvLlAaZzCcSsQqTt]|-?\d*\.?\d+(?:[eE][+-]?\d+)?/g) || [];
+  let i = 0;
+  let x = 0, y = 0, spX = 0, spY = 0;
+  const inicios = [];
+  let cmd = null;
+  const num = () => parseFloat(tokens[i++]);
+  const ARGS_POR_COMANDO = { c: 6, s: 4, q: 4, t: 2 };
+  while (i < tokens.length) {
+    if (/^[MmHhVvLlAaZzCcSsQqTt]$/.test(tokens[i])) { cmd = tokens[i]; i++; }
+    switch (cmd) {
+      case "M": x = num(); y = num(); spX = x; spY = y; inicios.push([x, y]); cmd = "L"; break;
+      case "m": x += num(); y += num(); spX = x; spY = y; inicios.push([x, y]); cmd = "l"; break;
+      case "L": x = num(); y = num(); break;
+      case "l": x += num(); y += num(); break;
+      case "H": x = num(); break;
+      case "h": x += num(); break;
+      case "V": y = num(); break;
+      case "v": y += num(); break;
+      case "A": case "a": {
+        num(); num(); num(); num(); num();
+        if (cmd === "A") { x = num(); y = num(); } else { x += num(); y += num(); }
+        break;
+      }
+      case "Z": case "z": x = spX; y = spY; break;
+      case "C": case "c": case "S": case "s": case "Q": case "q": case "T": case "t": {
+        const letra = cmd.toLowerCase();
+        const n = ARGS_POR_COMANDO[letra];
+        const vals = [];
+        for (let k = 0; k < n; k++) vals.push(num());
+        if (cmd === cmd.toUpperCase()) { x = vals[n - 2]; y = vals[n - 1]; } else { x += vals[n - 2]; y += vals[n - 1]; }
+        break;
+      }
+      default: i++; break; // token inesperado -- evita loop infinito
+    }
+  }
+  return inicios;
+}
+
+// Agrupa itens (cada um com um campo .ponto = [x,y]) por proximidade
+// espacial usando union-find ("single linkage": basta UM par próximo o
+// suficiente pra unir dois grupos) -- não dá pra andar em sequência
+// olhando só o ponto anterior porque o desenho pode visitar as partes
+// de um mesmo aparelho fora de ordem.
+function dwfAgruparPorProximidade(itens, limiar) {
+  const n = itens.length;
+  const pai = Array.from({ length: n }, (_, i) => i);
+  const acha = (i) => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+  const une = (i, j) => { const ri = acha(i), rj = acha(j); if (ri !== rj) pai[ri] = rj; };
+  const limiar2 = limiar * limiar;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = itens[i].ponto[0] - itens[j].ponto[0], dy = itens[i].ponto[1] - itens[j].ponto[1];
+      if (dx * dx + dy * dy <= limiar2) une(i, j);
+    }
+  }
+  const porRaiz = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = acha(i);
+    if (!porRaiz.has(r)) porRaiz.set(r, []);
+    porRaiz.get(r).push(itens[i]);
+  }
+  return [...porRaiz.values()];
+}
+
 // Função principal: recebe o ArrayBuffer do arquivo .dwf/.dwfx enviado
 // (window.JSZip precisa estar carregado). Devolve:
 //   { matriz, bbox, layers, entities, marcadoresPorCamada, camadaEquipamentoSugerida }
@@ -228,20 +303,111 @@ async function parseDwf(arrayBuffer) {
   // números dos objetos que formam o símbolo (nums) -- é o que permite
   // depois destacar o próprio desenho original (não um ícone por cima)
   // quando aquele candidato for identificado como um equipamento.
+  //
+  // Cada cluster referencia normalmente UM objeto (Path) só, ainda que
+  // repetido várias vezes no fluxo do W2X -- por isso olhar só o
+  // primeiro "M" de cada referência (comportamento original) é
+  // suficiente pro caso comum. Só que às vezes esse Path não é um
+  // símbolo -- é um bloco/desenho compondo VÁRIOS aparelhos juntos num
+  // "d" só (confirmado num arquivo real: uma cobertura com uma fileira
+  // de 11 condensadoras desenhadas dentro de um único Path, referenciado
+  // 110x no W2X contra as ~10x de um símbolo comum na mesma camada).
+  //
+  // Só vale a pena (e só é seguro) tentar separar um cluster assim
+  // quando ele é claramente um OUTLIER perto dos vizinhos da mesma
+  // camada -- comparar só o tamanho espacial de CADA símbolo (sem
+  // comparar com os irmãos primeiro) já se mostrou perigoso: testado
+  // contra o arquivo original das evaporadoras (26 já validadas antes),
+  // aplicar a divisão em TODO mundo fragmentou até os símbolos normais
+  // (que tem folgas internas maiores que a metade do próprio tamanho).
+  // Por isso agora só entra em ação quando a contagem de referências no
+  // W2X (nums.length) é bem maior que a mediana da própria camada --
+  // pros símbolos comuns (tamanho uniforme, caso раro de verdade) nada
+  // muda; só dispara pro bloco realmente fora do padrão.
+  const FATOR_OUTLIER = 2.5;
+  const tamanhosPorCamada = new Map(); // layer -> [nums.length de cada cluster]
+  clusters.forEach((cl) => {
+    if (!tamanhosPorCamada.has(cl.layer)) tamanhosPorCamada.set(cl.layer, []);
+    tamanhosPorCamada.get(cl.layer).push(cl.nums.length);
+  });
+  const medianaPorCamada = new Map();
+  for (const [layer, tamanhos] of tamanhosPorCamada.entries()) {
+    const ordenado = [...tamanhos].sort((a, b) => a - b);
+    medianaPorCamada.set(layer, ordenado[Math.floor(ordenado.length / 2)]);
+  }
+
   const candidatosPorCamada = new Map();
   for (const cl of clusters) {
-    const pts = [];
-    for (const n of cl.nums) {
+    const mediana = medianaPorCamada.get(cl.layer) || 0;
+    const ehOutlier = mediana > 0 && cl.nums.length >= mediana * FATOR_OUTLIER && cl.nums.length - mediana >= 5;
+
+    if (!ehOutlier) {
+      // Caminho original, sem mudança nenhuma: um ponto por cluster,
+      // olhando só o primeiro "M" de cada referência.
+      const pts = [];
+      for (const n of cl.nums) {
+        const rec = pathOf.get(n);
+        if (!rec) continue;
+        const sm = DWF_START_RE.exec(rec.d);
+        if (sm) pts.push(dwfAplica(matriz, [parseFloat(sm[1]), parseFloat(sm[2])]));
+      }
+      if (!pts.length) continue;
+      const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+      const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+      if (!candidatosPorCamada.has(cl.layer)) candidatosPorCamada.set(cl.layer, []);
+      candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: pts.length, nums: cl.nums });
+      continue;
+    }
+
+    // Outlier confirmado: lê TODOS os subpaths do(s) Path(s) desse
+    // cluster. O "tamanho normal de um símbolo" não dá pra medir pelos
+    // vizinhos da camada -- eles colapsam num ponto só (é assim que o
+    // caminho comum sempre funcionou, olhando só o primeiro M de cada
+    // referência). Em vez disso, estima quantos aparelhos esse bloco
+    // deve ter pela PROPORÇÃO entre as referências desse cluster e a
+    // mediana da camada (ex: 110 contra uma mediana de 10 -> ~11
+    // aparelhos), e busca (busca binária simples) o limiar de distância
+    // que separa os subpaths em aproximadamente essa quantidade de
+    // grupos -- assim funciona em qualquer escala de arquivo, sem
+    // número fixo. Validado contra um arquivo real: separa certinho os
+    // 11 pontos de um bloco que juntava 11 condensadoras num só.
+    const numerosUnicos = [...new Set(cl.nums)];
+    const pontosComNum = [];
+    for (const n of numerosUnicos) {
       const rec = pathOf.get(n);
       if (!rec) continue;
-      const sm = DWF_START_RE.exec(rec.d);
-      if (sm) pts.push(dwfAplica(matriz, [parseFloat(sm[1]), parseFloat(sm[2])]));
+      for (const p of dwfSubpathsDoD(rec.d)) pontosComNum.push({ ponto: dwfAplica(matriz, p), n });
     }
-    if (!pts.length) continue;
-    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
-    const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    if (!pontosComNum.length) continue;
+
+    const aparelhosEsperados = Math.max(1, Math.round(cl.nums.length / mediana));
+    const todosPontos = pontosComNum.map((p) => p.ponto);
+    const xsC = todosPontos.map((p) => p[0]), ysC = todosPontos.map((p) => p[1]);
+    let lo = 0.01, hi = Math.max(Math.max(...xsC) - Math.min(...xsC), Math.max(...ysC) - Math.min(...ysC));
+    let melhorGrupos = [pontosComNum];
+    for (let iter = 0; iter < 25 && hi - lo > 0.01; iter++) {
+      const meio = (lo + hi) / 2;
+      const grupos = dwfAgruparPorProximidade(pontosComNum, meio);
+      if (grupos.length >= aparelhosEsperados) {
+        melhorGrupos = grupos;
+        lo = meio; // ainda separando o suficiente, tenta um limiar maior (mais folga)
+      } else {
+        hi = meio; // já juntou demais, precisa de um limiar menor
+      }
+    }
+    const gruposComNum = melhorGrupos;
     if (!candidatosPorCamada.has(cl.layer)) candidatosPorCamada.set(cl.layer, []);
-    candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: pts.length, nums: cl.nums });
+    gruposComNum.forEach((g) => {
+      const cx = g.reduce((s, p) => s + p.ponto[0], 0) / g.length;
+      const cy = g.reduce((s, p) => s + p.ponto[1], 0) / g.length;
+      // Só guarda "nums" (pra destacar o desenho original) quando o
+      // cluster acabou NÃO precisando ser dividido de verdade --
+      // destacar um Path que na real desenha várias unidades juntas
+      // recoloriria todas de uma vez, enganoso pra uma marcação
+      // individual.
+      const nums = gruposComNum.length === 1 ? cl.nums : [];
+      candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: g.length, nums });
+    });
   }
   const marcadoresPorCamada = {};
   for (const [layer, pontos] of candidatosPorCamada.entries()) {
