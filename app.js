@@ -4013,7 +4013,7 @@ async function renderLocalizacao() {
       const dados = await carregarDadosPlanta(planta);
       montarSvgPlanta(planta, dados);
       svg.dataset.plantaId = planta.id;
-      $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+      limparPainelPlanta();
     } catch (err) {
       console.error(err);
       $("#plantaPainel").innerHTML = `<p class="muted">Erro ao carregar essa planta: ${escapeHtml(err.message)}</p>`;
@@ -4284,63 +4284,97 @@ async function renderMarcadoresPlanta() {
       gDestaques.appendChild(retangulo);
       return;
     }
-    const icone = criarIconeMarcador(tipo, cor, raioMarcador);
-    icone.setAttribute("transform", `translate(${x},${y})`);
-    icone.style.cursor = "pointer";
-    const titulo = document.createElementNS(nsSvg, "title");
-    titulo.textContent = rotulo;
-    icone.appendChild(titulo);
-    // O "click" nativo do navegador dispara no pointerup mesmo depois de
-    // um arrasto grande (não existe um limite de movimento embutido nele
-    // -- é exatamente por isso que o resto da planta usa esse mesmo
-    // truque da flag "arrastou" pra diferenciar). Sem isso, todo arrasto
-    // pra reposicionar também abriria o painel do aparelho logo em
-    // seguida.
-    icone.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      if (icone.dataset.arrastou === "1") { icone.dataset.arrastou = "0"; return; }
-      aoClicar();
-    });
 
-    // Arrastar pra reposicionar -- só faz sentido pro ícone genérico
-    // (fallback de quando não achou o símbolo real do CAD ali perto): o
-    // destaque em cima do desenho de verdade (acima) fica preso à
-    // posição do próprio símbolo desenhado, então "arrastar" ali não
-    // faria sentido nenhum. Só ativa no modo de edição, e só clique vira
-    // "abrir painel" -- um arrasto de verdade (movimento > alguns
-    // pixels) que vira reposicionamento.
-    if (aoMoverPara && marcacaoEstaAtiva()) {
-      icone.style.cursor = "grab";
-      let arrastando = false, moveu = 0, ultimoX = 0, ultimoY = 0;
-      icone.addEventListener("pointerdown", (ev) => {
+    // Clique abre o painel; arrastar (só no modo de edição) reposiciona
+    // -- mesma lógica pros dois casos abaixo (contorno de área dividida
+    // e ícone genérico), por isso virou uma função à parte. O "click"
+    // nativo do navegador dispara no pointerup mesmo depois de um
+    // arrasto grande (não existe limite de movimento embutido nele --
+    // por isso a flag "arrastou"), senão todo arrasto pra reposicionar
+    // também abriria o painel do aparelho logo em seguida.
+    function tornarInterativo(elemento, moverPreview) {
+      elemento.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        icone.setPointerCapture(ev.pointerId);
+        if (elemento.dataset.arrastou === "1") { elemento.dataset.arrastou = "0"; return; }
+        aoClicar();
+      });
+      if (!aoMoverPara || !marcacaoEstaAtiva()) return;
+      elemento.style.cursor = "grab";
+      let arrastando = false, moveu = 0, ultimoX = 0, ultimoY = 0;
+      elemento.addEventListener("pointerdown", (ev) => {
+        ev.stopPropagation();
+        elemento.setPointerCapture(ev.pointerId);
         arrastando = true; moveu = 0;
         ultimoX = ev.clientX; ultimoY = ev.clientY;
       });
-      icone.addEventListener("pointermove", (ev) => {
+      elemento.addEventListener("pointermove", (ev) => {
         if (!arrastando) return;
         moveu += Math.abs(ev.clientX - ultimoX) + Math.abs(ev.clientY - ultimoY);
         ultimoX = ev.clientX; ultimoY = ev.clientY;
         if (moveu > 5) {
           const { x: nx, y: ny } = svgPontoDeClique(svg, ev);
-          icone.setAttribute("transform", `translate(${nx},${ny})`);
+          moverPreview(elemento, nx, ny);
         }
       });
-      icone.addEventListener("pointerup", (ev) => {
+      elemento.addEventListener("pointerup", (ev) => {
         if (!arrastando) return;
         arrastando = false;
         if (moveu > 5) {
-          icone.dataset.arrastou = "1";
+          elemento.dataset.arrastou = "1";
           const planta = plantaPorId(ESTADO.plantaSelecionada);
           const { x: nx, y: ny } = svgPontoDeClique(svg, ev);
           const cand = candidatoMaisProximo(planta, nx, ny);
           aoMoverPara(cand ? cand.x : Math.round(nx * 100) / 100, cand ? cand.y : Math.round(ny * 100) / 100);
         }
       });
-      icone.addEventListener("pointercancel", () => { arrastando = false; });
+      elemento.addEventListener("pointercancel", () => { arrastando = false; });
     }
 
+    // Quando o candidato veio de um Path que precisou ser dividido em
+    // vários aparelhos (bloco do CAD desenhando várias unidades juntas
+    // -- ver dwfParser.js), não tem como recolorir só a unidade certa
+    // (o desenho é compartilhado por todas). Em vez de empilhar um
+    // ícone genérico por cima do desenho original (o que a Jovanna
+    // reportou como uma "figurinha" grudada em cima do símbolo de
+    // verdade), desenha só um contorno ao redor da área daquela unidade
+    // específica -- sem recolorir nada, sem duplicar nenhum ícone.
+    if (cand?.bboxLocal) {
+      const { x: bx, y: by, largura, altura } = cand.bboxLocal;
+      const pad = Math.max(largura, altura, 1) * 0.2;
+      const retanguloArea = document.createElementNS(nsSvg, "rect");
+      retanguloArea.setAttribute("x", bx - pad);
+      retanguloArea.setAttribute("y", by - pad);
+      retanguloArea.setAttribute("width", largura + pad * 2);
+      retanguloArea.setAttribute("height", altura + pad * 2);
+      retanguloArea.setAttribute("rx", pad * 0.6);
+      retanguloArea.setAttribute("fill", "transparent");
+      retanguloArea.setAttribute("stroke", cor);
+      retanguloArea.setAttribute("stroke-width", pad * 0.35);
+      retanguloArea.dataset.destaque = "1";
+      retanguloArea.style.cursor = "pointer";
+      const tituloArea = document.createElementNS(nsSvg, "title");
+      tituloArea.textContent = rotulo;
+      retanguloArea.appendChild(tituloArea);
+      // O retângulo (diferente do ícone) usa x/y absolutos, não uma
+      // transformação a partir da origem -- recentraliza mantendo o
+      // mesmo tamanho, em vez de aplicar um translate (que somaria com
+      // a posição já absoluta e jogaria ele pro lugar errado).
+      const larguraTotal = largura + pad * 2, alturaTotal = altura + pad * 2;
+      tornarInterativo(retanguloArea, (el, nx, ny) => {
+        el.setAttribute("x", nx - larguraTotal / 2);
+        el.setAttribute("y", ny - alturaTotal / 2);
+      });
+      gDestaques.appendChild(retanguloArea);
+      return;
+    }
+
+    const icone = criarIconeMarcador(tipo, cor, raioMarcador);
+    icone.setAttribute("transform", `translate(${x},${y})`);
+    icone.style.cursor = "pointer";
+    const titulo = document.createElementNS(nsSvg, "title");
+    titulo.textContent = rotulo;
+    icone.appendChild(titulo);
+    tornarInterativo(icone, (el, nx, ny) => { el.setAttribute("transform", `translate(${nx},${ny})`); });
     gMarcadores.appendChild(icone);
   }
 
@@ -4443,9 +4477,20 @@ async function renderMarcadoresPlanta() {
   }
 }
 
+// Fica escondido por padrão -- só aparece quando um marcador de
+// verdade é clicado, não com uma mensagem fixa tipo "selecione um
+// marcador" (a Jovanna não queria nada aparecendo o tempo todo ali).
+function limparPainelPlanta() {
+  const painel = $("#plantaPainel");
+  if (!painel) return;
+  painel.innerHTML = "";
+  painel.hidden = true;
+}
+
 function mostrarPainelPlanta(item) {
   const painel = $("#plantaPainel");
   if (!painel) return;
+  painel.hidden = false;
   const condensadora = condensadoraDoEquipamento(item);
   const isAdmin = ESTADO.permissao === "admin";
   painel.innerHTML = `
@@ -4470,7 +4515,7 @@ function mostrarPainelPlanta(item) {
         plantaId: deleteField(), plantaX: deleteField(), plantaY: deleteField(),
       });
       toast("Marcação removida.");
-      $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+      limparPainelPlanta();
     } catch (err) {
       console.error(err);
       toast("Erro ao remover: " + err.message);
@@ -4485,6 +4530,7 @@ function mostrarPainelPlanta(item) {
 function mostrarPainelCondensadora(cond) {
   const painel = $("#plantaPainel");
   if (!painel) return;
+  painel.hidden = false;
   const isAdmin = ESTADO.permissao === "admin";
   const vinculadas = cond.codigo ? evaporadorasQueApontamPara(cond.codigo) : [];
   painel.innerHTML = `
@@ -4516,7 +4562,7 @@ function mostrarPainelCondensadora(cond) {
         tx.update(plantaRef, { condensadoras: novaLista });
       });
       toast("Condensadora removida.");
-      $("#plantaPainel").innerHTML = '<p class="muted">Selecione um marcador na planta para ver os detalhes do aparelho.</p>';
+      limparPainelPlanta();
     } catch (err) {
       console.error(err);
       toast("Erro ao remover: " + err.message);
