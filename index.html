@@ -452,7 +452,13 @@
                   <i class="planta-legenda-icone planta-legenda-icone-cond"></i>
                   <span>Condensadora</span>
                 </label>
+                <label class="planta-modo-icone" title="Descartar uma área tracejada que o sistema identificou errado (não é equipamento)">
+                  <input type="radio" name="modoMarcacao" value="descartar">
+                  <i class="planta-legenda-icone planta-legenda-icone-descartar"></i>
+                  <span>Descartar</span>
+                </label>
               </div>
+              <p class="muted" id="dicaModoMarcacao" style="margin:6px 2px 0; font-size:12px;"></p>
               <div class="grid-form">
                 <label id="campoEquipamentoWrap" title="Aparelho">
                   <select id="plantaEquipamentoSelect"></select>
@@ -652,6 +658,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=3"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=15"></script>
+<script type="module" src="app.js?v=16"></script>
 </body>
 </html>

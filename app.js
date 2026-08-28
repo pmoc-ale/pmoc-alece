@@ -4076,12 +4076,13 @@ function marcacaoEstaAtiva() {
 }
 
 function atualizarModoMarcacao() {
-  const modoCondensadora = $('input[name="modoMarcacao"]:checked')?.value === "condensadora";
+  const modo = $('input[name="modoMarcacao"]:checked')?.value || "evaporadora";
+  const modoCondensadora = modo === "condensadora";
   const campoEquip = $("#campoEquipamentoWrap");
   const campoCodEvap = $("#campoCodigoEvapWrap");
   const campoCodCond = $("#campoCodigoCondWrap");
-  if (campoEquip) campoEquip.hidden = modoCondensadora;
-  if (campoCodEvap) campoCodEvap.hidden = modoCondensadora;
+  if (campoEquip) campoEquip.hidden = modo !== "evaporadora";
+  if (campoCodEvap) campoCodEvap.hidden = modo !== "evaporadora";
   if (campoCodCond) campoCodCond.hidden = !modoCondensadora;
 
   const isAdmin = ESTADO.permissao === "admin";
@@ -4098,7 +4099,9 @@ function atualizarModoMarcacao() {
 
   const dica = $("#dicaModoMarcacao");
   if (dica) {
-    dica.textContent = modoCondensadora
+    dica.textContent = modo === "descartar"
+      ? "Clique numa área tracejada que o sistema identificou errado (não é equipamento) pra descartar ela -- some da lista e não aparece mais como candidato."
+      : modoCondensadora
       ? "Marque cada condensadora com o código que já está desenhado na planta (ex: C7) -- qualquer evaporadora com \"Código na planta\" = algo/C7 vai achar essa condensadora sozinha, sem precisar escolher aparelho aqui."
       : "";
   }
@@ -4135,18 +4138,25 @@ function montarSvgPlanta(planta, dados) {
     gPorCamada[camada] = g;
   });
 
+  // Cor customizada por camada (opcional) -- a Jovanna pediu pra poder
+  // trocar a cor do desenho original do CAD depois de já ter subido a
+  // planta (ex: uma camada com cor difícil de enxergar). Fica salva no
+  // documento da planta (coresCamadas: {camada: "#hex"}); quando não tem
+  // override, usa a cor de verdade que veio do arquivo.
+  const coresCamadas = planta.coresCamadas || {};
   const pathPorNumero = new Map();
   (dados.entities || []).forEach((ent) => {
     const p = document.createElementNS(nsSvg, "path");
     p.setAttribute("d", ent.d);
     if (ent.n != null) { p.dataset.n = ent.n; p.dataset.strokeOriginal = ent.stroke || ""; p.dataset.fillOriginal = ent.fill || ""; }
+    const corCamada = coresCamadas[ent.layer];
     if (ent.stroke) {
-      p.setAttribute("stroke", ent.stroke);
+      p.setAttribute("stroke", corCamada || ent.stroke);
       p.setAttribute("stroke-width", ent.sw || 1);
       p.setAttribute("fill", "none");
     }
     if (ent.fill) {
-      p.setAttribute("fill", ent.fill);
+      p.setAttribute("fill", corCamada || ent.fill);
       if (!ent.stroke) p.setAttribute("stroke", "none");
     }
     if (!ent.stroke && !ent.fill) {
@@ -4175,14 +4185,53 @@ function montarSvgPlanta(planta, dados) {
   gMarcadores.id = "plantaMarcadoresSvg";
   svg.appendChild(gMarcadores);
 
+  // Cor "atual" de cada camada pra mostrar no seletor de cor -- pega o
+  // override salvo, ou senão a primeira cor de verdade que aparecer nos
+  // entities dessa camada (stroke ou fill, o que tiver primeiro).
+  function corAtualDaCamada(camada) {
+    if (coresCamadas[camada]) return coresCamadas[camada];
+    const ent = (dados.entities || []).find((e) => e.layer === camada && (e.stroke || e.fill));
+    const cor = ent ? (ent.stroke || ent.fill) : "#888888";
+    return /^#[0-9a-fA-F]{6}$/.test(cor) ? cor : "#888888"; // <input type=color> só aceita hex de 6 dígitos
+  }
+
   const painelCamadas = $("#plantaCamadas");
   painelCamadas.innerHTML = (dados.layers || []).map((camada) =>
-    `<label><input type="checkbox" checked data-camada="${escapeHtml(camada)}"> ${escapeHtml(camada)}</label>`
+    `<label class="planta-camada-linha">
+      <input type="checkbox" checked data-camada="${escapeHtml(camada)}">
+      <span>${escapeHtml(camada)}</span>
+      <input type="color" data-cor-camada="${escapeHtml(camada)}" value="${corAtualDaCamada(camada)}" title="Cor desta camada">
+    </label>`
   ).join("");
-  painelCamadas.querySelectorAll("input").forEach((inp) => {
+  painelCamadas.querySelectorAll("input[data-camada]").forEach((inp) => {
     inp.addEventListener("change", () => {
       const g = gPorCamada[inp.dataset.camada];
       if (g) g.style.display = inp.checked ? "" : "none";
+    });
+  });
+  painelCamadas.querySelectorAll("input[data-cor-camada]").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const camada = inp.dataset.corCamada;
+      const cor = inp.value;
+      // Aplica na hora, sem esperar salvar -- respeita se cada entity
+      // tinha stroke, fill, ou os dois (não inventa um fill onde não
+      // tinha, por exemplo).
+      (dados.entities || []).forEach((ent) => {
+        if (ent.layer !== camada || ent.n == null) return;
+        const p = pathPorNumero.get(ent.n);
+        if (!p) return;
+        if (ent.stroke) p.setAttribute("stroke", cor);
+        if (ent.fill) p.setAttribute("fill", cor);
+      });
+    });
+    inp.addEventListener("change", async () => {
+      const camada = inp.dataset.corCamada;
+      try {
+        await updateDoc(doc(db, "plantas", planta.id), { [`coresCamadas.${camada}`]: inp.value });
+      } catch (err) {
+        console.error(err);
+        toast("Erro ao salvar a cor: " + err.message);
+      }
     });
   });
 }
@@ -4236,7 +4285,12 @@ async function renderMarcadoresPlanta() {
   })();
 
   const dados = _dadosPlantaCache.get(planta.id);
-  const candidatosCamada = (planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [];
+  // Descarta os candidatos que a Jovanna já marcou como "não é
+  // equipamento" (o leitor automático às vezes erra) -- ver
+  // descartarCandidato/chaveCandidato.
+  const ignorados = new Set(planta.candidatosIgnorados || []);
+  const candidatosCamada = ((planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [])
+    .filter((c) => !ignorados.has(chaveCandidato(c)));
   // Mesma distância "razoável" usada no encaixe do clique (candidatoMaisProximo)
   // -- assim uma posição salva antes desse ajuste (de um clique impreciso)
   // também volta a bater com o símbolo real, sem precisar remarcar nada.
@@ -4450,6 +4504,10 @@ async function renderMarcadoresPlanta() {
         retangulo.addEventListener("click", (ev) => {
           ev.stopPropagation();
           if (!marcacaoEstaAtiva()) return;
+          if ($('input[name="modoMarcacao"]:checked')?.value === "descartar") {
+            descartarCandidato(planta, cand);
+            return;
+          }
           salvarPosicaoPlanta(planta, cand.x, cand.y);
         });
         gDestaques.appendChild(retangulo);
@@ -4469,6 +4527,10 @@ async function renderMarcadoresPlanta() {
         c.addEventListener("click", (ev) => {
           ev.stopPropagation();
           if (!marcacaoEstaAtiva()) return;
+          if ($('input[name="modoMarcacao"]:checked')?.value === "descartar") {
+            descartarCandidato(planta, cand);
+            return;
+          }
           salvarPosicaoPlanta(planta, cand.x, cand.y);
         });
         gMarcadores.appendChild(c);
@@ -4633,6 +4695,36 @@ function candidatoMaisProximo(planta, x, y) {
   return melhor && melhorDist <= distanciaMax ? melhor : null;
 }
 
+// Mesma chave usada pra deduplicar posições idênticas no leitor do CAD
+// (dwfParser.js) -- reaproveitada aqui pra marcar um candidato como
+// "não é equipamento" de um jeito estável, sem depender de nenhum outro
+// identificador (os candidatos automáticos não têm id próprio).
+function chaveCandidato(c) {
+  return Math.round(c.x * 10) + "," + Math.round(c.y * 10);
+}
+
+// O leitor automático às vezes acerta uma área que não é equipamento de
+// verdade (a Jovanna pediu essa saída). Guarda a chave da posição numa
+// lista de "ignorados" no próprio documento da planta -- transação
+// porque descartar vários rápido em sequência tem o mesmo risco de
+// corrida que já resolvemos pras condensadoras.
+async function descartarCandidato(planta, cand) {
+  const plantaRef = doc(db, "plantas", planta.id);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(plantaRef);
+      const listaAtual = (snap.exists() && snap.data().candidatosIgnorados) || [];
+      const chave = chaveCandidato(cand);
+      if (listaAtual.includes(chave)) return;
+      tx.update(plantaRef, { candidatosIgnorados: [...listaAtual, chave] });
+    });
+    toast("Área descartada -- não vai mais aparecer como candidato.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao descartar: " + err.message);
+  }
+}
+
 // Reposiciona um marcador já existente (arrastar, não criar) -- usa
 // direto o aparelho/código que o marcador já representa, sem depender
 // do que estiver selecionado no formulário (que pode ser outro
@@ -4780,6 +4872,7 @@ $("#plantaSvg")?.addEventListener("click", (ev) => {
   if (ESTADO.permissao !== "admin") return;
   if (!marcacaoEstaAtiva()) return; // toggle desligado -- só navegar, sem risco de marcar
   if (ev.target.closest("circle, g[data-id], g[data-condensadora-de], [data-destaque]")) return; // marcador já tem seu próprio handler
+  if ($('input[name="modoMarcacao"]:checked')?.value === "descartar") return; // descartar só clicando numa área tracejada, não cria nada no fundo
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!svg || !planta) return;
   const { x, y } = svgPontoDeClique(svg, ev);
