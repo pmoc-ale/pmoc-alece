@@ -4392,8 +4392,17 @@ async function renderMarcadoresPlanta() {
   // equipamento" (o leitor automático às vezes erra) -- ver
   // descartarCandidato/chaveCandidato.
   const ignorados = new Set(planta.candidatosIgnorados || []);
+  // Aprende com os descartes: cada vez que ela descarta um candidato,
+  // guarda o "tamanho" dele (qtdPontos) em planta.limiarQtdPontos se for
+  // maior que o que já tinha -- daí candidatos parecidos (do mesmo
+  // tamanho pra baixo) nem aparecem mais como "detectado, não
+  // identificado" pra ela ter que descartar um por um. Limitado a 9
+  // (ver descartarCandidato) porque em todo arquivo real já visto,
+  // equipamento de verdade nunca teve menos que 10.
+  const limiarAprendido = planta.limiarQtdPontos || 0;
   const candidatosCamada = ((planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [])
-    .filter((c) => !ignorados.has(chaveCandidato(c)));
+    .filter((c) => !ignorados.has(chaveCandidato(c)))
+    .filter((c) => (c.qtdPontos ?? Infinity) > limiarAprendido);
   // Mesma distância "razoável" usada no encaixe do clique (candidatoMaisProximo)
   // -- assim uma posição salva antes desse ajuste (de um clique impreciso)
   // também volta a bater com o símbolo real, sem precisar remarcar nada.
@@ -4970,15 +4979,31 @@ function chaveCandidato(c) {
 // lista de "ignorados" no próprio documento da planta -- transação
 // porque descartar vários rápido em sequência tem o mesmo risco de
 // corrida que já resolvemos pras condensadoras.
+//
+// Aproveita o descarte pra "aprender": sobe planta.limiarQtdPontos até
+// o tamanho (qtdPontos) desse candidato, se for maior que o que já
+// tinha -- assim candidatos do mesmo tamanho pra baixo, nessa mesma
+// planta, já nem aparecem mais como "detectado, não identificado" (ver
+// filtro em renderMarcadoresPlanta). Travado num teto de 9: em todo
+// arquivo real já testado, equipamento de verdade nunca teve menos que
+// 10 "pontos" -- mesmo que ela descarte algo maior por engano, o limiar
+// não sobe a ponto de esconder equipamento de verdade.
+const LIMIAR_QTD_PONTOS_TETO = 9;
 async function descartarCandidato(planta, cand) {
   const plantaRef = doc(db, "plantas", planta.id);
   try {
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(plantaRef);
-      const listaAtual = (snap.exists() && snap.data().candidatosIgnorados) || [];
+      const dadosAtuais = snap.exists() ? snap.data() : {};
+      const listaAtual = dadosAtuais.candidatosIgnorados || [];
       const chave = chaveCandidato(cand);
-      if (listaAtual.includes(chave)) return;
-      tx.update(plantaRef, { candidatosIgnorados: [...listaAtual, chave] });
+      const atualizacao = {};
+      if (!listaAtual.includes(chave)) atualizacao.candidatosIgnorados = [...listaAtual, chave];
+      const limiarAtual = dadosAtuais.limiarQtdPontos || 0;
+      const tamanhoCandidato = Math.min(cand.qtdPontos || 0, LIMIAR_QTD_PONTOS_TETO);
+      if (tamanhoCandidato > limiarAtual) atualizacao.limiarQtdPontos = tamanhoCandidato;
+      if (Object.keys(atualizacao).length === 0) return;
+      tx.update(plantaRef, atualizacao);
     });
     toast("Área descartada -- não vai mais aparecer como candidato.");
   } catch (err) {
@@ -5333,8 +5358,9 @@ function ativarZoomPan(svg) {
       // Amortece a pinça: sem isso, no celular o gesto "pega" fácil demais
       // e um movimento pequeno de dedo já dispara um zoom enorme, ficando
       // difícil de controlar. Elevar a razão a um expoente < 1 pede mais
-      // percurso físico dos dedos pro mesmo tanto de zoom.
-      const fator = Math.pow(razaoBruta, 0.5);
+      // percurso físico dos dedos pro mesmo tanto de zoom -- 0.5 ainda
+      // estava sensível demais (relato real), baixado pra 0.3.
+      const fator = Math.pow(razaoBruta, 0.3);
       const meioX = (p1.x + p2.x) / 2, meioY = (p1.y + p2.y) / 2;
       const original = svg.__viewOriginal || viewInicialPinca;
       let novaLargura = viewInicialPinca.w * fator;
@@ -6599,6 +6625,65 @@ async function apagarDadosTecnicos() {
     toast("Erro ao apagar dados técnicos: " + err.message);
   } finally {
     btnApagarDadosTecnicos.disabled = false;
+  }
+}
+
+// Corrige aparelhos que ficaram apontando pra uma planta que já não
+// existe mais -- de exclusões feitas ANTES da correção de excluir
+// planta ter passado a limpar isso junto. Não apaga nada do cadastro,
+// só os campos de posição/marcação (plantaId/plantaX/plantaY e o
+// equivalente de condensadora).
+const btnLimparMarcacoesOrfas = $("#btnLimparMarcacoesOrfas");
+if (btnLimparMarcacoesOrfas) {
+  btnLimparMarcacoesOrfas.addEventListener("click", limparMarcacoesOrfas);
+}
+
+async function limparMarcacoesOrfas() {
+  const statusEl = $("#statusLimparOrfas");
+  const idsValidos = new Set(ESTADO.plantas.map((p) => p.id));
+  const afetados = ESTADO.equipamentos.filter(
+    (e) => (e.plantaId && !idsValidos.has(e.plantaId)) || (e.condensadoraPlantaId && !idsValidos.has(e.condensadoraPlantaId))
+  );
+
+  if (!afetados.length) {
+    toast("Nenhuma marcação órfã encontrada -- está tudo certo.");
+    if (statusEl) statusEl.textContent = "Última verificação: nada encontrado.";
+    return;
+  }
+
+  const confirmado = window.confirm(
+    `Encontrei ${afetados.length} aparelho(s) marcado(s) numa planta que já foi excluída. Limpar só a marcação deles (o cadastro não é afetado)?`
+  );
+  if (!confirmado) return;
+
+  btnLimparMarcacoesOrfas.disabled = true;
+  toast("Limpando marcações órfãs...");
+  try {
+    await registrarAuditoria("Limpar marcações órfãs", `${afetados.length} aparelho(s) corrigido(s)`);
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < afetados.length; inicio += TAMANHO_LOTE) {
+      const pedaco = afetados.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((e) => {
+        const campos = {};
+        if (e.plantaId && !idsValidos.has(e.plantaId)) {
+          campos.plantaId = deleteField(); campos.plantaX = deleteField(); campos.plantaY = deleteField();
+          campos.plantaLargura = deleteField(); campos.plantaAltura = deleteField(); campos.plantaAngulo = deleteField();
+        }
+        if (e.condensadoraPlantaId && !idsValidos.has(e.condensadoraPlantaId)) {
+          campos.condensadoraPlantaId = deleteField(); campos.condensadoraX = deleteField(); campos.condensadoraY = deleteField();
+        }
+        batch.update(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", e.id), campos);
+      });
+      await batch.commit();
+    }
+    toast(`Corrigido! ${afetados.length} marcação(ões) órfã(s) limpa(s).`);
+    if (statusEl) statusEl.textContent = `Última limpeza: ${afetados.length} corrigido(s).`;
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao limpar marcações órfãs: " + err.message);
+  } finally {
+    btnLimparMarcacoesOrfas.disabled = false;
   }
 }
 
