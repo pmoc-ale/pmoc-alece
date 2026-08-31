@@ -4451,6 +4451,13 @@ async function renderMarcadoresPlanta() {
     // verdade), desenha só um contorno ao redor da área daquela unidade
     // específica -- sem recolorir nada, sem duplicar nenhum ícone.
     if (cand?.bboxLocal) {
+      // cand.bboxLocal já vem em espaço TRANSFORMADO (dwfParser.js aplica
+      // a matriz nos pontos antes de calcular esse bbox) -- por isso
+      // desenha em gMarcadores (fora do gRaiz), não gDestaques (que fica
+      // dentro do gRaiz e reaplicaria a matriz de novo, jogando o
+      // retângulo pra um lugar errado -- bug real, confirmado com um
+      // teste isolado comparando a posição de tela do retângulo com a
+      // do símbolo de verdade).
       const { x: bx, y: by, largura, altura } = cand.bboxLocal;
       const pad = Math.max(largura, altura, 1) * 0.2;
       const retanguloArea = document.createElementNS(nsSvg, "rect");
@@ -4476,7 +4483,7 @@ async function renderMarcadoresPlanta() {
         el.setAttribute("x", nx - larguraTotal / 2);
         el.setAttribute("y", ny - alturaTotal / 2);
       });
-      gDestaques.appendChild(retanguloArea);
+      gMarcadores.appendChild(retanguloArea);
       return;
     }
 
@@ -4486,6 +4493,11 @@ async function renderMarcadoresPlanta() {
     // ("figurinha" -- a Jovanna não gostava disso). Tamanho começa no
     // padrão (proporcional à escala da planta) mas dá pra ajustar
     // arrastando a alcinha do canto, guardando o tamanho escolhido.
+    // x/y (e o que svgPontoDeClique devolve) já são espaço TRANSFORMADO
+    // (mesmo espaço do viewBox) -- por isso vai em gMarcadores (fora do
+    // gRaiz), não gDestaques (senão a matriz seria aplicada de novo e o
+    // retângulo apareceria bem longe de onde a pessoa realmente marcou --
+    // era esse o bug real por trás de "sempre vai pro canto").
     {
       const tamanhoPadrao = { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3 };
       let { largura, altura } = tamanhoCustom || tamanhoPadrao;
@@ -4511,7 +4523,7 @@ async function renderMarcadoresPlanta() {
         centroX = nx; centroY = ny;
         atualizarRetanguloManual();
       });
-      gDestaques.appendChild(retanguloManual);
+      gMarcadores.appendChild(retanguloManual);
 
       // Alcinha de redimensionar, só no modo de edição -- arrasta o canto
       // inferior direito, crescendo/encolhendo o retângulo em volta do
@@ -4551,7 +4563,7 @@ async function renderMarcadoresPlanta() {
           alca.addEventListener("pointermove", aoMoverAlca);
           alca.addEventListener("pointerup", aoSoltarAlca, { once: true });
         });
-        gDestaques.appendChild(alca);
+        gMarcadores.appendChild(alca);
       }
     }
   }
