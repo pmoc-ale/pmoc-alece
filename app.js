@@ -4544,8 +4544,8 @@ async function renderMarcadoresPlanta() {
     // retângulo apareceria bem longe de onde a pessoa realmente marcou --
     // era esse o bug real por trás de "sempre vai pro canto").
     {
-      const tamanhoPadrao = { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3 };
-      let { largura, altura } = tamanhoCustom || tamanhoPadrao;
+      const tamanhoPadrao = { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3, angulo: 0 };
+      let { largura, altura, angulo } = { ...tamanhoPadrao, ...(tamanhoCustom || {}) };
       let centroX = x, centroY = y;
       const retanguloManual = document.createElementNS(nsSvg, "rect");
       function atualizarRetanguloManual() {
@@ -4556,32 +4556,49 @@ async function renderMarcadoresPlanta() {
         retanguloManual.setAttribute("rx", Math.min(largura, altura) * 0.15);
         retanguloManual.setAttribute("stroke-width", Math.min(largura, altura) * 0.12);
       }
+      // Girar não muda x/y/width/height de cada peça -- só o transform
+      // "rotate" delas em volta do mesmo centro (pra ficar reto pra
+      // paredes/salas desenhadas inclinadas na planta). As 3 peças
+      // (retângulo + as duas alcinhas) precisam girar juntas.
+      const elementosRotacionados = [retanguloManual];
+      function atualizarRotacaoTodos() {
+        if (angulo) {
+          const t = `rotate(${angulo},${centroX},${centroY})`;
+          elementosRotacionados.forEach((el) => el.setAttribute("transform", t));
+        } else {
+          elementosRotacionados.forEach((el) => el.removeAttribute("transform"));
+        }
+      }
       retanguloManual.setAttribute("fill", "transparent");
       retanguloManual.setAttribute("stroke", cor);
       retanguloManual.dataset.destaque = "1";
       retanguloManual.style.cursor = "pointer";
       atualizarRetanguloManual();
+      atualizarRotacaoTodos();
       const tituloManual = document.createElementNS(nsSvg, "title");
       tituloManual.textContent = rotulo;
       retanguloManual.appendChild(tituloManual);
-      // A alcinha (definida mais abaixo) precisa acompanhar o retângulo
-      // enquanto ele é arrastado pra reposicionar -- senão fica pra trás,
-      // solta no lugar antigo, até o próximo re-render. Essa referência
-      // muda de "não faz nada" pra "reposiciona de verdade" assim que a
-      // alcinha existe (só existe no modo de edição).
-      let posicionarAlcaSeExistir = () => {};
+      // As alcinhas (definidas mais abaixo) precisam acompanhar o
+      // retângulo enquanto ele é arrastado pra reposicionar -- senão
+      // ficam pra trás, soltas no lugar antigo, até o próximo re-render.
+      // Essa referência muda de "não faz nada" pra "reposiciona de
+      // verdade" assim que elas existem (só existem no modo de edição).
+      let posicionarAlcasSeExistir = () => {};
       tornarInterativo(retanguloManual, (el, nx, ny) => {
         centroX = nx; centroY = ny;
         atualizarRetanguloManual();
-        posicionarAlcaSeExistir();
+        atualizarRotacaoTodos();
+        posicionarAlcasSeExistir();
       });
       gMarcadores.appendChild(retanguloManual);
 
-      // Alcinha de redimensionar, só no modo de edição -- arrasta o canto
-      // inferior direito, crescendo/encolhendo o retângulo em volta do
-      // mesmo centro (o lugar marcado não muda, só o tamanho). Salva uma
-      // vez só, ao soltar (igual reposicionar).
+      // Alcinhas de ajustar, só no modo de edição -- uma pra redimensionar
+      // (canto inferior direito) e outra pra girar (círculo acima do
+      // topo). Salva os três valores juntos, de uma vez só, ao soltar
+      // qualquer uma delas -- evita salvar um valor sem o outro.
       if (aoRedimensionarPara && marcacaoEstaAtiva()) {
+        const salvar = () => aoRedimensionarPara(Math.round(largura * 100) / 100, Math.round(altura * 100) / 100, Math.round(angulo));
+
         const alca = document.createElementNS(nsSvg, "rect");
         const tamanhoAlca = Math.max(Math.min(largura, altura) * 0.35, raioMarcador * 0.4);
         function posicionarAlca() {
@@ -4595,7 +4612,26 @@ async function renderMarcadoresPlanta() {
         alca.setAttribute("stroke-width", tamanhoAlca * 0.15);
         alca.style.cursor = "nwse-resize";
         posicionarAlca();
-        posicionarAlcaSeExistir = posicionarAlca;
+        elementosRotacionados.push(alca);
+        atualizarRotacaoTodos();
+
+        const alcaGirar = document.createElementNS(nsSvg, "circle");
+        const distGirar = Math.max(largura, altura) * 0.15 + raioMarcador * 0.5;
+        function posicionarAlcaGirar() {
+          alcaGirar.setAttribute("cx", centroX);
+          alcaGirar.setAttribute("cy", centroY - altura / 2 - distGirar);
+          alcaGirar.setAttribute("r", tamanhoAlca * 0.5);
+        }
+        alcaGirar.setAttribute("fill", cor);
+        alcaGirar.setAttribute("stroke", "#fff");
+        alcaGirar.setAttribute("stroke-width", tamanhoAlca * 0.15);
+        alcaGirar.style.cursor = "grab";
+        posicionarAlcaGirar();
+        elementosRotacionados.push(alcaGirar);
+        atualizarRotacaoTodos();
+
+        posicionarAlcasSeExistir = () => { posicionarAlca(); posicionarAlcaGirar(); atualizarRotacaoTodos(); };
+
         alca.addEventListener("pointerdown", (ev) => {
           ev.stopPropagation();
           alca.setPointerCapture(ev.pointerId);
@@ -4603,20 +4639,51 @@ async function renderMarcadoresPlanta() {
           const pInicial = svgPontoDeClique(svg, ev);
           function aoMoverAlca(ev2) {
             const pAtual = svgPontoDeClique(svg, ev2);
-            largura = Math.max(inicioLargura + (pAtual.x - pInicial.x) * 2, raioMarcador * 0.5);
-            altura = Math.max(inicioAltura + (pAtual.y - pInicial.y) * 2, raioMarcador * 0.5);
+            const dx = pAtual.x - pInicial.x, dy = pAtual.y - pInicial.y;
+            // Desfaz o giro atual no movimento do mouse -- senão, com o
+            // retângulo girado, arrastar "pra baixo-direita" na tela não
+            // bateria com o canto de verdade dele (que também girou).
+            const rad = (-angulo * Math.PI) / 180;
+            const dxLocal = dx * Math.cos(rad) - dy * Math.sin(rad);
+            const dyLocal = dx * Math.sin(rad) + dy * Math.cos(rad);
+            largura = Math.max(inicioLargura + dxLocal * 2, raioMarcador * 0.5);
+            altura = Math.max(inicioAltura + dyLocal * 2, raioMarcador * 0.5);
             atualizarRetanguloManual();
             posicionarAlca();
+            posicionarAlcaGirar();
           }
           function aoSoltarAlca() {
             alca.removeEventListener("pointermove", aoMoverAlca);
             alca.removeEventListener("pointerup", aoSoltarAlca);
-            aoRedimensionarPara(Math.round(largura * 100) / 100, Math.round(altura * 100) / 100);
+            salvar();
           }
           alca.addEventListener("pointermove", aoMoverAlca);
           alca.addEventListener("pointerup", aoSoltarAlca, { once: true });
         });
         gMarcadores.appendChild(alca);
+
+        alcaGirar.addEventListener("pointerdown", (ev) => {
+          ev.stopPropagation();
+          alcaGirar.setPointerCapture(ev.pointerId);
+          alcaGirar.style.cursor = "grabbing";
+          function aoMoverGirar(ev2) {
+            const pAtual = svgPontoDeClique(svg, ev2);
+            // Ângulo do centro até o mouse; +90 porque a alcinha começa
+            // "pra cima" (ângulo 0), não "pra direita" (que seria o 0 de
+            // atan2 puro).
+            angulo = Math.round((Math.atan2(pAtual.y - centroY, pAtual.x - centroX) * 180) / Math.PI + 90);
+            atualizarRotacaoTodos();
+          }
+          function aoSoltarGirar() {
+            alcaGirar.removeEventListener("pointermove", aoMoverGirar);
+            alcaGirar.removeEventListener("pointerup", aoSoltarGirar);
+            alcaGirar.style.cursor = "grab";
+            salvar();
+          }
+          alcaGirar.addEventListener("pointermove", aoMoverGirar);
+          alcaGirar.addEventListener("pointerup", aoSoltarGirar, { once: true });
+        });
+        gMarcadores.appendChild(alcaGirar);
       }
     }
   }
@@ -4629,8 +4696,8 @@ async function renderMarcadoresPlanta() {
   itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
     const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
-    const tamanhoEvap = (e.plantaLargura && e.plantaAltura) ? { largura: e.plantaLargura, altura: e.plantaAltura } : null;
-    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e), (nx, ny) => reposicionarEvaporadora(e, nx, ny), tamanhoEvap, (nl, na) => redimensionarEvaporadora(e, nl, na));
+    const tamanhoEvap = (e.plantaLargura && e.plantaAltura) ? { largura: e.plantaLargura, altura: e.plantaAltura, angulo: e.plantaAngulo || 0 } : null;
+    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e), (nx, ny) => reposicionarEvaporadora(e, nx, ny), tamanhoEvap, (nl, na, ang) => redimensionarEvaporadora(e, nl, na, ang));
   });
 
   // Condensadoras marcadas nesta planta (pelo código, não por aparelho --
@@ -4656,8 +4723,8 @@ async function renderMarcadoresPlanta() {
     });
     const cor = classe ? (CORES_STATUS_MARCADOR[classe] || "#888") : "#8B98A6";
     const rotulo = "Condensadora " + (cond.codigo || "") + (vinculadas.length ? ` — ${vinculadas.length} aparelho(s)` : " — sem evaporadora vinculada ainda");
-    const tamanhoCond = (cond.largura && cond.altura) ? { largura: cond.largura, altura: cond.altura } : null;
-    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond), cond.codigo ? (nx, ny) => reposicionarCondensadora(planta, cond.codigo, nx, ny) : null, tamanhoCond, cond.codigo ? (nl, na) => redimensionarCondensadora(planta, cond.codigo, nl, na) : null);
+    const tamanhoCond = (cond.largura && cond.altura) ? { largura: cond.largura, altura: cond.altura, angulo: cond.angulo || 0 } : null;
+    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond), cond.codigo ? (nx, ny) => reposicionarCondensadora(planta, cond.codigo, nx, ny) : null, tamanhoCond, cond.codigo ? (nl, na, ang) => redimensionarCondensadora(planta, cond.codigo, nl, na, ang) : null);
   });
 
   // Modo admin: mostra também os candidatos detectados automaticamente no
@@ -4769,7 +4836,7 @@ function mostrarPainelPlanta(item) {
         // aparelho de novo (talvez num lugar bem diferente), ele herdava
         // em silêncio o tamanho antigo em vez de começar no padrão.
         plantaId: deleteField(), plantaX: deleteField(), plantaY: deleteField(),
-        plantaLargura: deleteField(), plantaAltura: deleteField(),
+        plantaLargura: deleteField(), plantaAltura: deleteField(), plantaAngulo: deleteField(),
       });
       toast("Marcação removida.");
       limparPainelPlanta();
@@ -4934,11 +5001,12 @@ async function reposicionarEvaporadora(item, x, y) {
   }
 }
 
-// Tamanho do retângulo marcado à mão (arrastando a alcinha no canto) --
-// mesma ideia da posição, só que guardando largura/altura em vez de x/y.
-async function redimensionarEvaporadora(item, largura, altura) {
+// Tamanho e ângulo do retângulo marcado à mão (arrastando as alcinhas) --
+// mesma ideia da posição, só que guardando largura/altura/ângulo em vez
+// de x/y. Ângulo é opcional (0 = sem giro, retângulo reto).
+async function redimensionarEvaporadora(item, largura, altura, angulo) {
   try {
-    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), { plantaLargura: largura, plantaAltura: altura });
+    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), { plantaLargura: largura, plantaAltura: altura, plantaAngulo: angulo || 0 });
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar tamanho: " + err.message);
@@ -4961,13 +5029,13 @@ async function reposicionarCondensadora(planta, codigo, x, y) {
   }
 }
 
-async function redimensionarCondensadora(planta, codigo, largura, altura) {
+async function redimensionarCondensadora(planta, codigo, largura, altura, angulo) {
   const plantaRef = doc(db, "plantas", planta.id);
   try {
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(plantaRef);
       const listaAtual = (snap.exists() && snap.data().condensadoras) || [];
-      const novaLista = listaAtual.map((c) => normalizarCodigo(c.codigo) === normalizarCodigo(codigo) ? { ...c, largura, altura } : c);
+      const novaLista = listaAtual.map((c) => normalizarCodigo(c.codigo) === normalizarCodigo(codigo) ? { ...c, largura, altura, angulo: angulo || 0 } : c);
       tx.update(plantaRef, { condensadoras: novaLista });
     });
   } catch (err) {
