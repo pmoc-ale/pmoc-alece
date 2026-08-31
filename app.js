@@ -4212,29 +4212,70 @@ function montarSvgPlanta(planta, dados) {
   gMarcadores.id = "plantaMarcadoresSvg";
   svg.appendChild(gMarcadores);
 
-  // Cor "atual" de cada camada pra mostrar no seletor de cor -- pega o
-  // override salvo, ou senão a primeira cor de verdade que aparecer nos
-  // entities dessa camada (stroke ou fill, o que tiver primeiro).
-  function corAtualDaCamada(camada) {
-    if (coresCamadas[camada]) return coresCamadas[camada];
+  // Cor de verdade da camada, direto do arquivo -- ignora qualquer
+  // override, é o que "voltar ao original" restaura.
+  function corOriginalDaCamada(camada) {
     const ent = (dados.entities || []).find((e) => e.layer === camada && (e.stroke || e.fill));
     const cor = ent ? (ent.stroke || ent.fill) : "#888888";
     return /^#[0-9a-fA-F]{6}$/.test(cor) ? cor : "#888888"; // <input type=color> só aceita hex de 6 dígitos
   }
+  // Cor "atual" de cada camada pra mostrar no seletor de cor -- pega o
+  // override salvo, ou senão a cor original.
+  function corAtualDaCamada(camada) {
+    return coresCamadas[camada] || corOriginalDaCamada(camada);
+  }
 
   const painelCamadas = $("#plantaCamadas");
-  painelCamadas.innerHTML = (dados.layers || []).map((camada) =>
-    `<label class="planta-camada-linha">
+  painelCamadas.innerHTML = (dados.layers || []).map((camada) => {
+    const temOverride = coresCamadas[camada] || espessurasCamadas[camada];
+    return `<label class="planta-camada-linha">
       <input type="checkbox" checked data-camada="${escapeHtml(camada)}">
       <span>${escapeHtml(camada)}</span>
+      <button type="button" class="planta-camada-resetar" data-resetar-camada="${escapeHtml(camada)}" title="Voltar essa camada pra cor e grossura originais do arquivo" ${temOverride ? "" : "hidden"}>↺</button>
       <input type="range" min="0.5" max="4" step="0.25" data-espessura-camada="${escapeHtml(camada)}" value="${espessurasCamadas[camada] || 1}" title="Grossura desta camada">
       <input type="color" data-cor-camada="${escapeHtml(camada)}" value="${corAtualDaCamada(camada)}" title="Cor desta camada">
-    </label>`
+    </label>`;
+  }
   ).join("");
   painelCamadas.querySelectorAll("input[data-camada]").forEach((inp) => {
     inp.addEventListener("change", () => {
       const g = gPorCamada[inp.dataset.camada];
       if (g) g.style.display = inp.checked ? "" : "none";
+    });
+  });
+  // Botão "voltar ao original" -- some depois de usado (não tem mais
+  // override pra desfazer), e reverte cor/grossura na hora, sem precisar
+  // recarregar a página.
+  painelCamadas.querySelectorAll("button[data-resetar-camada]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const camada = btn.dataset.resetarCamada;
+      const corOriginal = corOriginalDaCamada(camada);
+      (dados.entities || []).forEach((ent) => {
+        if (ent.layer !== camada || ent.n == null) return;
+        const p = pathPorNumero.get(ent.n);
+        if (!p) return;
+        if (ent.stroke) { p.setAttribute("stroke", ent.stroke); p.setAttribute("stroke-width", ent.sw || 1); }
+        if (ent.fill) p.setAttribute("fill", ent.fill);
+      });
+      const linha = btn.closest(".planta-camada-linha");
+      const inputCor = linha?.querySelector("input[data-cor-camada]");
+      if (inputCor) inputCor.value = corOriginal;
+      const inputEspessura = linha?.querySelector("input[data-espessura-camada]");
+      if (inputEspessura) inputEspessura.value = 1;
+      btn.hidden = true;
+      try {
+        // updateDoc aceita vários pares campo/valor -- os dois campos
+        // (cor e grossura) somem numa escrita só. FieldPath de novo, pelo
+        // mesmo motivo de sempre (nome de camada pode ter ponto).
+        await updateDoc(
+          doc(db, "plantas", planta.id),
+          new FieldPath("coresCamadas", camada), deleteField(),
+          new FieldPath("espessurasCamadas", camada), deleteField()
+        );
+      } catch (err) {
+        console.error(err);
+        toast("Erro ao voltar ao original: " + err.message);
+      }
     });
   });
   painelCamadas.querySelectorAll("input[data-espessura-camada]").forEach((inp) => {
@@ -4250,6 +4291,8 @@ function montarSvgPlanta(planta, dados) {
     });
     inp.addEventListener("change", async () => {
       const camada = inp.dataset.espessuraCamada;
+      const btnResetar = inp.closest(".planta-camada-linha")?.querySelector("button[data-resetar-camada]");
+      if (btnResetar) btnResetar.hidden = false;
       try {
         // FieldPath (não string com ponto) -- várias camadas do CAD têm
         // nome começando com "..." (ex: "...ALVENARIA", visto num arquivo
@@ -4282,6 +4325,8 @@ function montarSvgPlanta(planta, dados) {
     });
     inp.addEventListener("change", async () => {
       const camada = inp.dataset.corCamada;
+      const btnResetar = inp.closest(".planta-camada-linha")?.querySelector("button[data-resetar-camada]");
+      if (btnResetar) btnResetar.hidden = false;
       try {
         // FieldPath, mesmo motivo do espessurasCamadas acima (camada com
         // ponto no nome quebraria uma string "coresCamadas.NOME").
@@ -4519,9 +4564,16 @@ async function renderMarcadoresPlanta() {
       const tituloManual = document.createElementNS(nsSvg, "title");
       tituloManual.textContent = rotulo;
       retanguloManual.appendChild(tituloManual);
+      // A alcinha (definida mais abaixo) precisa acompanhar o retângulo
+      // enquanto ele é arrastado pra reposicionar -- senão fica pra trás,
+      // solta no lugar antigo, até o próximo re-render. Essa referência
+      // muda de "não faz nada" pra "reposiciona de verdade" assim que a
+      // alcinha existe (só existe no modo de edição).
+      let posicionarAlcaSeExistir = () => {};
       tornarInterativo(retanguloManual, (el, nx, ny) => {
         centroX = nx; centroY = ny;
         atualizarRetanguloManual();
+        posicionarAlcaSeExistir();
       });
       gMarcadores.appendChild(retanguloManual);
 
@@ -4543,6 +4595,7 @@ async function renderMarcadoresPlanta() {
         alca.setAttribute("stroke-width", tamanhoAlca * 0.15);
         alca.style.cursor = "nwse-resize";
         posicionarAlca();
+        posicionarAlcaSeExistir = posicionarAlca;
         alca.addEventListener("pointerdown", (ev) => {
           ev.stopPropagation();
           alca.setPointerCapture(ev.pointerId);
@@ -4712,7 +4765,11 @@ function mostrarPainelPlanta(item) {
     if (!confirm("Remover a marcação desse aparelho nesta planta?")) return;
     try {
       await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
+        // Limpa também o tamanho customizado -- senão, ao marcar esse
+        // aparelho de novo (talvez num lugar bem diferente), ele herdava
+        // em silêncio o tamanho antigo em vez de começar no padrão.
         plantaId: deleteField(), plantaX: deleteField(), plantaY: deleteField(),
+        plantaLargura: deleteField(), plantaAltura: deleteField(),
       });
       toast("Marcação removida.");
       limparPainelPlanta();

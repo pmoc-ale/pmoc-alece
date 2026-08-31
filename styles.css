@@ -1387,6 +1387,21 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   flex-shrink: 0;
   cursor: pointer;
 }
+.planta-camada-resetar {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--texto-suave);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.planta-camada-resetar:hover {
+  color: var(--azul-700);
+}
 
 @media (max-width: 768px) {
   .planta-imagem-wrap svg {
