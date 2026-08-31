@@ -5136,9 +5136,38 @@ $("#plantaSeletor")?.addEventListener("change", (ev) => {
 $("#btnExcluirPlanta")?.addEventListener("click", async () => {
   const planta = plantaPorId(ESTADO.plantaSelecionada);
   if (!planta) return;
-  if (!confirm(`Excluir a planta "${planta.nome}"? Os aparelhos marcados nela ficam com a posição "perdida" até serem marcados de novo (o cadastro deles não é afetado).`)) return;
+  // Excluir só a planta deixava plantaId/plantaX/plantaY (e o
+  // equivalente de condensadora) apontando pra um documento que não
+  // existe mais -- o aparelho continuava "parecendo marcado" (o botão
+  // "Ver na planta" ainda aparecia), só que clicar nele caía em
+  // renderLocalizacao(), que sozinho corrige ESTADO.plantaSelecionada
+  // pra primeira planta da lista quando o id não bate com nenhuma real,
+  // e usava a posição antiga (de outra planta) nessa planta errada --
+  // dava a impressão de "ainda marcado" em lugar nenhum de verdade.
+  // Agora limpa a marcação de todo mundo afetado junto com a planta,
+  // numa escrita só.
+  const afetados = ESTADO.equipamentos.filter(
+    (e) => e.plantaId === planta.id || e.condensadoraPlantaId === planta.id
+  );
+  const aviso = afetados.length
+    ? ` ${afetados.length} aparelho(s) marcado(s) nela vão ficar sem posição (o cadastro deles não é afetado, só a marcação some).`
+    : "";
+  if (!confirm(`Excluir a planta "${planta.nome}"?${aviso}`)) return;
   try {
-    await deleteDoc(doc(db, "plantas", planta.id));
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "plantas", planta.id));
+    afetados.forEach((e) => {
+      const campos = {};
+      if (e.plantaId === planta.id) {
+        campos.plantaId = deleteField(); campos.plantaX = deleteField(); campos.plantaY = deleteField();
+        campos.plantaLargura = deleteField(); campos.plantaAltura = deleteField(); campos.plantaAngulo = deleteField();
+      }
+      if (e.condensadoraPlantaId === planta.id) {
+        campos.condensadoraPlantaId = deleteField(); campos.condensadoraX = deleteField(); campos.condensadoraY = deleteField();
+      }
+      batch.update(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", e.id), campos);
+    });
+    await batch.commit();
     ESTADO.plantaSelecionada = null;
     toast("Planta excluída.");
   } catch (err) {
