@@ -7122,9 +7122,6 @@ function iniciarSincronizacaoCiclos() {
         const dataB = b.dataFechamento || b.criadoEm || b.dataInicio || "";
         return dataB.localeCompare(dataA);
       });
-      
-    // RASTREADOR: Vai imprimir no console tudo que achou no banco
-    console.log(" CICLOS ENCONTRADOS NO BANCO:", ESTADO.ciclos);
     renderCiclos();
   }, (err) => {
     console.error("Erro na busca de ciclos:", err);
