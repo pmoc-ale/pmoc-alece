@@ -421,11 +421,22 @@ async function parseDwf(arrayBuffer) {
       candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: g.length, nums, bboxLocal });
     });
   }
+  // Descarta candidatos pequenos demais pra serem um símbolo de
+  // equipamento de verdade -- confirmado num arquivo real (ANEXO_II_3):
+  // a camada de equipamento tinha 153 candidatos, mas 151 eram só
+  // detalhes pequenos (parafuso, conexão, ponto de hachura) com 1 a 4
+  // "pontos" (qtdPontos), e só 2 eram equipamento de verdade (24 e 28
+  // pontos). Em todos os arquivos já testados, um símbolo de equipamento
+  // de verdade sempre tem 10 pontos ou mais (10, 15, 16, 24, 28, 108);
+  // ruído nunca passou de 4 -- o limiar fica bem no meio dessa folga.
+  const QTD_PONTOS_MINIMA = 5;
+
   const marcadoresPorCamada = {};
   for (const [layer, pontos] of candidatosPorCamada.entries()) {
     const vistos = new Set();
     const unicos = [];
     for (const p of pontos) {
+      if (p.qtdPontos < QTD_PONTOS_MINIMA) continue;
       const chave = Math.round(p.x * 10) + "," + Math.round(p.y * 10);
       if (vistos.has(chave)) continue;
       vistos.add(chave);
