@@ -627,6 +627,16 @@
       </div>
 
       <div class="subview" id="subview-cfg-avancado">
+        <div class="card">
+          <h2>Manutenção</h2>
+          <p class="muted" style="margin-bottom: 16px;">
+            Corrige inconsistências nos dados -- não apaga nada do cadastro, só limpa referências quebradas.
+          </p>
+          <button class="btn ghost" id="btnLimparMarcacoesOrfas" style="width: 100%;">
+            Limpar marcações de plantas já excluídas
+          </button>
+          <p class="muted" id="statusLimparOrfas" style="margin-top: 8px; font-size: 12.5px;"></p>
+        </div>
         <div class="card" style="border-color: #FECACA; background-color: #FEF2F2;">
           <h2 style="color: #991B1B;">Apagar Dados do Sistema</h2>
           <p style="font-size: 13px; color: #7F1D1D; margin-bottom: 16px;">
@@ -666,6 +676,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=4"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=24"></script>
+<script type="module" src="app.js?v=25"></script>
 </body>
 </html>
