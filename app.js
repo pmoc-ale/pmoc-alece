@@ -3927,52 +3927,6 @@ const CORES_STATUS_MARCADOR = {
   atrasado: "#10263D",
 };
 
-// Desenha um marcador com a "cara" do equipamento (não uma bolinha
-// genérica): retângulo com veneziana pra evaporadora (split de parede),
-// quadrado com ventoinha pra condensadora (unidade externa) -- assim dá
-// pra reconhecer o tipo de longe, sem precisar clicar.
-function criarIconeMarcador(tipo, cor, raio) {
-  const nsSvg = "http://www.w3.org/2000/svg";
-  const g = document.createElementNS(nsSvg, "g");
-  const contorno = "#fff";
-  if (tipo === "condensadora") {
-    const corpo = document.createElementNS(nsSvg, "rect");
-    corpo.setAttribute("x", -raio); corpo.setAttribute("y", -raio);
-    corpo.setAttribute("width", raio * 2); corpo.setAttribute("height", raio * 2);
-    corpo.setAttribute("rx", raio * 0.15);
-    corpo.setAttribute("fill", cor); corpo.setAttribute("stroke", contorno); corpo.setAttribute("stroke-width", raio / 6);
-    g.appendChild(corpo);
-    const ventoinha = document.createElementNS(nsSvg, "circle");
-    ventoinha.setAttribute("cx", 0); ventoinha.setAttribute("cy", 0); ventoinha.setAttribute("r", raio * 0.55);
-    ventoinha.setAttribute("fill", "none"); ventoinha.setAttribute("stroke", contorno); ventoinha.setAttribute("stroke-width", raio / 9);
-    g.appendChild(ventoinha);
-    [0, 45, 90, 135].forEach((ang) => {
-      const rad = (ang * Math.PI) / 180;
-      const dx = Math.cos(rad) * raio * 0.5, dy = Math.sin(rad) * raio * 0.5;
-      const linha = document.createElementNS(nsSvg, "line");
-      linha.setAttribute("x1", -dx); linha.setAttribute("y1", -dy);
-      linha.setAttribute("x2", dx); linha.setAttribute("y2", dy);
-      linha.setAttribute("stroke", contorno); linha.setAttribute("stroke-width", raio / 11);
-      g.appendChild(linha);
-    });
-  } else {
-    const corpo = document.createElementNS(nsSvg, "rect");
-    corpo.setAttribute("x", -raio); corpo.setAttribute("y", -raio * 0.55);
-    corpo.setAttribute("width", raio * 2); corpo.setAttribute("height", raio * 1.1);
-    corpo.setAttribute("rx", raio * 0.25);
-    corpo.setAttribute("fill", cor); corpo.setAttribute("stroke", contorno); corpo.setAttribute("stroke-width", raio / 6);
-    g.appendChild(corpo);
-    [-0.22, 0, 0.22].forEach((f) => {
-      const linha = document.createElementNS(nsSvg, "line");
-      linha.setAttribute("x1", -raio * 0.62); linha.setAttribute("y1", raio * f);
-      linha.setAttribute("x2", raio * 0.62); linha.setAttribute("y2", raio * f);
-      linha.setAttribute("stroke", contorno); linha.setAttribute("stroke-width", raio / 11);
-      g.appendChild(linha);
-    });
-  }
-  return g;
-}
-
 async function renderLocalizacao() {
   const seletor = $("#plantaSeletor");
   if (!seletor) return;
@@ -4414,7 +4368,7 @@ async function renderMarcadoresPlanta() {
   // "quadrado rosa" da planta virar visualmente o marcador, em vez de um
   // ícone genérico por cima. Só cai no ícone quando não há um símbolo
   // real ali (ex: condensadora marcada à mão numa área sem esse desenho).
-  function marcarAparelho(x, y, tipo, cor, rotulo, aoClicar, aoMoverPara) {
+  function marcarAparelho(x, y, tipo, cor, rotulo, aoClicar, aoMoverPara, tamanhoCustom, aoRedimensionarPara) {
     const cand = candidatoPerto(x, y);
     const elementos = cand?.nums?.map((n) => svg.__pathPorNumero.get(n)).filter(Boolean) || [];
     if (elementos.length) {
@@ -4526,43 +4480,80 @@ async function renderMarcadoresPlanta() {
       return;
     }
 
-    // Condensadora marcada à mão (arrastando o chip, sem símbolo detectado
-    // ali) -- a Jovanna pediu pra parecer com o mesmo retângulo das
-    // detectadas automaticamente, em vez do ícone genérico. Tamanho fixo
-    // (proporcional à escala da planta, igual ao ícone antigo), só
-    // reposiciona arrastando -- sem redimensionar.
-    if (tipo === "condensadora") {
-      const largura = raioMarcador * 2.6, altura = raioMarcador * 1.3;
-      const retanguloFixo = document.createElementNS(nsSvg, "rect");
-      retanguloFixo.setAttribute("x", x - largura / 2);
-      retanguloFixo.setAttribute("y", y - altura / 2);
-      retanguloFixo.setAttribute("width", largura);
-      retanguloFixo.setAttribute("height", altura);
-      retanguloFixo.setAttribute("rx", Math.min(largura, altura) * 0.15);
-      retanguloFixo.setAttribute("fill", "transparent");
-      retanguloFixo.setAttribute("stroke", cor);
-      retanguloFixo.setAttribute("stroke-width", Math.min(largura, altura) * 0.12);
-      retanguloFixo.dataset.destaque = "1";
-      retanguloFixo.style.cursor = "pointer";
-      const tituloFixo = document.createElementNS(nsSvg, "title");
-      tituloFixo.textContent = rotulo;
-      retanguloFixo.appendChild(tituloFixo);
-      tornarInterativo(retanguloFixo, (el, nx, ny) => {
-        el.setAttribute("x", nx - largura / 2);
-        el.setAttribute("y", ny - altura / 2);
+    // Marcado à mão (arrastando o chip, sem símbolo detectado ali) --
+    // tanto evaporadora quanto condensadora: retângulo com contorno igual
+    // ao das detectadas automaticamente, em vez do ícone genérico
+    // ("figurinha" -- a Jovanna não gostava disso). Tamanho começa no
+    // padrão (proporcional à escala da planta) mas dá pra ajustar
+    // arrastando a alcinha do canto, guardando o tamanho escolhido.
+    {
+      const tamanhoPadrao = { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3 };
+      let { largura, altura } = tamanhoCustom || tamanhoPadrao;
+      let centroX = x, centroY = y;
+      const retanguloManual = document.createElementNS(nsSvg, "rect");
+      function atualizarRetanguloManual() {
+        retanguloManual.setAttribute("x", centroX - largura / 2);
+        retanguloManual.setAttribute("y", centroY - altura / 2);
+        retanguloManual.setAttribute("width", largura);
+        retanguloManual.setAttribute("height", altura);
+        retanguloManual.setAttribute("rx", Math.min(largura, altura) * 0.15);
+        retanguloManual.setAttribute("stroke-width", Math.min(largura, altura) * 0.12);
+      }
+      retanguloManual.setAttribute("fill", "transparent");
+      retanguloManual.setAttribute("stroke", cor);
+      retanguloManual.dataset.destaque = "1";
+      retanguloManual.style.cursor = "pointer";
+      atualizarRetanguloManual();
+      const tituloManual = document.createElementNS(nsSvg, "title");
+      tituloManual.textContent = rotulo;
+      retanguloManual.appendChild(tituloManual);
+      tornarInterativo(retanguloManual, (el, nx, ny) => {
+        centroX = nx; centroY = ny;
+        atualizarRetanguloManual();
       });
-      gDestaques.appendChild(retanguloFixo);
-      return;
-    }
+      gDestaques.appendChild(retanguloManual);
 
-    const icone = criarIconeMarcador(tipo, cor, raioMarcador);
-    icone.setAttribute("transform", `translate(${x},${y})`);
-    icone.style.cursor = "pointer";
-    const titulo = document.createElementNS(nsSvg, "title");
-    titulo.textContent = rotulo;
-    icone.appendChild(titulo);
-    tornarInterativo(icone, (el, nx, ny) => { el.setAttribute("transform", `translate(${nx},${ny})`); });
-    gMarcadores.appendChild(icone);
+      // Alcinha de redimensionar, só no modo de edição -- arrasta o canto
+      // inferior direito, crescendo/encolhendo o retângulo em volta do
+      // mesmo centro (o lugar marcado não muda, só o tamanho). Salva uma
+      // vez só, ao soltar (igual reposicionar).
+      if (aoRedimensionarPara && marcacaoEstaAtiva()) {
+        const alca = document.createElementNS(nsSvg, "rect");
+        const tamanhoAlca = Math.max(Math.min(largura, altura) * 0.35, raioMarcador * 0.4);
+        function posicionarAlca() {
+          alca.setAttribute("x", centroX + largura / 2 - tamanhoAlca / 2);
+          alca.setAttribute("y", centroY + altura / 2 - tamanhoAlca / 2);
+          alca.setAttribute("width", tamanhoAlca);
+          alca.setAttribute("height", tamanhoAlca);
+        }
+        alca.setAttribute("fill", cor);
+        alca.setAttribute("stroke", "#fff");
+        alca.setAttribute("stroke-width", tamanhoAlca * 0.15);
+        alca.style.cursor = "nwse-resize";
+        posicionarAlca();
+        alca.addEventListener("pointerdown", (ev) => {
+          ev.stopPropagation();
+          alca.setPointerCapture(ev.pointerId);
+          const inicioLargura = largura, inicioAltura = altura;
+          const pInicial = svgPontoDeClique(svg, ev);
+          function aoMoverAlca(ev2) {
+            const pAtual = svgPontoDeClique(svg, ev2);
+            largura = Math.max(inicioLargura + (pAtual.x - pInicial.x) * 2, raioMarcador * 0.5);
+            altura = Math.max(inicioAltura + (pAtual.y - pInicial.y) * 2, raioMarcador * 0.5);
+            atualizarRetanguloManual();
+            posicionarAlca();
+          }
+          function aoSoltarAlca() {
+            alca.removeEventListener("pointermove", aoMoverAlca);
+            alca.removeEventListener("pointerup", aoSoltarAlca);
+            aoRedimensionarPara(Math.round(largura * 100) / 100, Math.round(altura * 100) / 100);
+          }
+          alca.addEventListener("pointermove", aoMoverAlca);
+          alca.addEventListener("pointerup", aoSoltarAlca, { once: true });
+        });
+        gDestaques.appendChild(alca);
+      }
+    }
   }
 
   // Evaporadoras já identificadas nesta planta -- coloridas pelo status,
@@ -4573,7 +4564,8 @@ async function renderMarcadoresPlanta() {
   itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
     const rotulo = e.codigoPlanta || e.patrimonio || e.ambiente || "";
-    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e), (nx, ny) => reposicionarEvaporadora(e, nx, ny));
+    const tamanhoEvap = (e.plantaLargura && e.plantaAltura) ? { largura: e.plantaLargura, altura: e.plantaAltura } : null;
+    marcarAparelho(e.plantaX, e.plantaY, "evaporadora", CORES_STATUS_MARCADOR[classe] || "#888", rotulo, () => mostrarPainelPlanta(e), (nx, ny) => reposicionarEvaporadora(e, nx, ny), tamanhoEvap, (nl, na) => redimensionarEvaporadora(e, nl, na));
   });
 
   // Condensadoras marcadas nesta planta (pelo código, não por aparelho --
@@ -4599,7 +4591,8 @@ async function renderMarcadoresPlanta() {
     });
     const cor = classe ? (CORES_STATUS_MARCADOR[classe] || "#888") : "#8B98A6";
     const rotulo = "Condensadora " + (cond.codigo || "") + (vinculadas.length ? ` — ${vinculadas.length} aparelho(s)` : " — sem evaporadora vinculada ainda");
-    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond), cond.codigo ? (nx, ny) => reposicionarCondensadora(planta, cond.codigo, nx, ny) : null);
+    const tamanhoCond = (cond.largura && cond.altura) ? { largura: cond.largura, altura: cond.altura } : null;
+    marcarAparelho(cond.x, cond.y, "condensadora", cor, rotulo, () => mostrarPainelCondensadora(cond), cond.codigo ? (nx, ny) => reposicionarCondensadora(planta, cond.codigo, nx, ny) : null, tamanhoCond, cond.codigo ? (nl, na) => redimensionarCondensadora(planta, cond.codigo, nl, na) : null);
   });
 
   // Modo admin: mostra também os candidatos detectados automaticamente no
@@ -4872,6 +4865,17 @@ async function reposicionarEvaporadora(item, x, y) {
   }
 }
 
+// Tamanho do retângulo marcado à mão (arrastando a alcinha no canto) --
+// mesma ideia da posição, só que guardando largura/altura em vez de x/y.
+async function redimensionarEvaporadora(item, largura, altura) {
+  try {
+    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), { plantaLargura: largura, plantaAltura: altura });
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar tamanho: " + err.message);
+  }
+}
+
 async function reposicionarCondensadora(planta, codigo, x, y) {
   const plantaRef = doc(db, "plantas", planta.id);
   try {
@@ -4885,6 +4889,21 @@ async function reposicionarCondensadora(planta, codigo, x, y) {
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar posição: " + err.message);
+  }
+}
+
+async function redimensionarCondensadora(planta, codigo, largura, altura) {
+  const plantaRef = doc(db, "plantas", planta.id);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(plantaRef);
+      const listaAtual = (snap.exists() && snap.data().condensadoras) || [];
+      const novaLista = listaAtual.map((c) => normalizarCodigo(c.codigo) === normalizarCodigo(codigo) ? { ...c, largura, altura } : c);
+      tx.update(plantaRef, { condensadoras: novaLista });
+    });
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar tamanho: " + err.message);
   }
 }
 
@@ -5048,6 +5067,15 @@ $all(".planta-chip-arrastavel").forEach((chip) => {
       if (!svg || !planta) return;
       const retSvg = svg.getBoundingClientRect();
       if (e.clientX < retSvg.left || e.clientX > retSvg.right || e.clientY < retSvg.top || e.clientY > retSvg.bottom) return; // soltou fora da planta, cancela
+      // O painel do lápis fica desenhado POR CIMA da planta (ancorado
+      // naquele canto) -- soltar ainda em cima dele calcularia a posição
+      // como se fosse o que tem embaixo do painel, sempre o mesmo canto,
+      // não o lugar de verdade que a pessoa mirou. Cancela nesse caso.
+      const elementoNoPonto = document.elementFromPoint(e.clientX, e.clientY);
+      if (elementoNoPonto && elementoNoPonto.closest("#cardPosicionarPlanta")) {
+        toast("Solte fora do painel do lápis, em cima da planta.");
+        return;
+      }
       const { x, y } = svgPontoDeClique(svg, e);
       const cand = candidatoMaisProximo(planta, x, y);
       if (cand) salvarPosicaoPlanta(planta, cand.x, cand.y);
