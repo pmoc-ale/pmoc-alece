@@ -422,14 +422,17 @@ async function parseDwf(arrayBuffer) {
     });
   }
   // Descarta candidatos pequenos demais pra serem um símbolo de
-  // equipamento de verdade -- confirmado num arquivo real (ANEXO_II_3):
-  // a camada de equipamento tinha 153 candidatos, mas 151 eram só
-  // detalhes pequenos (parafuso, conexão, ponto de hachura) com 1 a 4
-  // "pontos" (qtdPontos), e só 2 eram equipamento de verdade (24 e 28
-  // pontos). Em todos os arquivos já testados, um símbolo de equipamento
-  // de verdade sempre tem 10 pontos ou mais (10, 15, 16, 24, 28, 108);
-  // ruído nunca passou de 4 -- o limiar fica bem no meio dessa folga.
-  const QTD_PONTOS_MINIMA = 5;
+  // equipamento de verdade. Em todos os arquivos reais já testados, um
+  // símbolo de equipamento de verdade sempre tem 10 "pontos" ou mais (10,
+  // 15, 16, 18, 20, 24, 28, 30, 108); ruído (parafuso, conexão, ponto de
+  // hachura, cota) nunca passou de 8 -- confirmado inclusive num arquivo
+  // real (ANEXO_II 4º piso) onde a própria camada de equipamento
+  // misturava 4 detalhes de 5 pontos com 2 aparelhos de verdade (18 e
+  // 30). O limiar fica no teto seguro (mesmo valor já usado como teto do
+  // aprendizado por descarte em app.js -- LIMIAR_QTD_PONTOS_TETO) em vez
+  // de bem no meio da folga, pra pegar esse tipo de ruído já na primeira
+  // vez que a planta é aberta, sem precisar descartar manualmente antes.
+  const QTD_PONTOS_MINIMA = 9;
 
   const marcadoresPorCamada = {};
   for (const [layer, pontos] of candidatosPorCamada.entries()) {
