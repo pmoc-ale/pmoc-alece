@@ -3999,19 +3999,38 @@ async function renderLocalizacao() {
 
   atualizarModoMarcacao();
 
+  // Os dois lados precisam do MESMO fallback -- sem isso, uma planta sem
+  // "local" definido (undefined) nunca batia com nenhum aparelho (que
+  // caem em "SEDE" quando também não têm local).
+  const localDaPlanta = planta.local || "SEDE";
+  const itensDoPredio = ESTADO.equipamentos
+    .filter((e) => (e.local || "SEDE") === localDaPlanta)
+    .sort((a, b) => (a.ambiente || "").localeCompare(b.ambiente || ""));
+
+  // Aviso de conferência: cruza o cadastro com o que já tem marcação em
+  // ALGUMA planta desse prédio (pode ser essa planta aberta agora ou
+  // outro andar do mesmo prédio -- não dá pra saber em qual andar
+  // exato cada aparelho cadastrado deveria estar, só o prédio). Pega o
+  // problema oposto do limiar de detecção (candidato sobrando): aparelho
+  // que existe no cadastro mas nunca foi marcado em planta nenhuma --
+  // seja porque a planta ainda não foi conferida, seja porque o desenho
+  // dele está numa camada que o sistema não reconhece como equipamento.
+  const resumo = $("#plantaResumoDeteccao");
+  if (resumo) {
+    const semMarcacao = itensDoPredio.filter((e) => !e.plantaId && !e.condensadoraPlantaId);
+    if (!itensDoPredio.length) {
+      resumo.hidden = true;
+    } else if (semMarcacao.length) {
+      resumo.hidden = false;
+      resumo.textContent = `⚠ ${semMarcacao.length} de ${itensDoPredio.length} equipamento(s) cadastrado(s) em "${localDaPlanta}" ainda sem marcação em planta nenhuma.`;
+    } else {
+      resumo.hidden = false;
+      resumo.textContent = `✓ Todos os ${itensDoPredio.length} equipamento(s) cadastrado(s) em "${localDaPlanta}" já têm marcação em alguma planta.`;
+    }
+  }
+
   if (isAdmin) {
     const select = $("#plantaEquipamentoSelect");
-    // A condensadora não escolhe aparelho nenhum (é por código -- ver
-    // atualizarModoMarcacao), então essa lista só precisa existir pro
-    // modo evaporadora, restrita ao prédio da planta aberta agora.
-    // Os dois lados precisam do MESMO fallback -- sem isso, uma planta
-    // sem "local" definido (undefined) nunca batia com nenhum aparelho
-    // (que caem em "SEDE" quando também não têm local), e a lista de
-    // Aparelho ficava sempre vazia sem erro nenhum aparecer na tela.
-    const localDaPlanta = planta.local || "SEDE";
-    const itensDoPredio = ESTADO.equipamentos
-      .filter((e) => (e.local || "SEDE") === localDaPlanta)
-      .sort((a, b) => (a.ambiente || "").localeCompare(b.ambiente || ""));
     const selecionadoAntes = select.value;
     select.innerHTML = itensDoPredio.map((e) => {
       const marcado = e.plantaId === planta.id ? " ✓ já marcado" : "";
