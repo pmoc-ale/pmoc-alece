@@ -4442,7 +4442,22 @@ async function renderMarcadoresPlanta() {
   // ícone genérico por cima. Só cai no ícone quando não há um símbolo
   // real ali (ex: condensadora marcada à mão numa área sem esse desenho).
   function marcarAparelho(x, y, tipo, cor, rotulo, aoClicar, aoMoverPara, tamanhoCustom, aoRedimensionarPara) {
-    const cand = candidatoPerto(x, y);
+    // Só procura um símbolo real por perto quando ELA NUNCA customizou
+    // esse marcador (nem redimensionou, nem girou) -- assim que ela
+    // mexe na alcinha de tamanho ou de girar, o valor salvo (largura +
+    // altura, sempre os dois juntos -- ver "salvar" mais abaixo) vira a
+    // fonte da verdade, e não deve mais ser trocado por um candidato
+    // próximo. Sem essa checagem, um marcador colocado (de propósito) em
+    // cima do símbolo de verdade -- o caso mais comum, já que é onde o
+    // equipamento realmente está desenhado -- perdia o tamanho/ângulo
+    // customizado toda vez que a planta recarregava (a posição salva
+    // continuava batendo com o candidato, então voltava a cair no
+    // destaque em volta do desenho original, sem o giro/tamanho dela).
+    // Bug real, relatado como "não fica onde eu coloquei" -- só
+    // aparecia depois de recarregar, nunca durante o próprio arrasto,
+    // porque dentro da mesma sessão o retângulo já criado é só movido/
+    // girado no lugar (marcarAparelho não é chamado de novo).
+    const cand = tamanhoCustom ? null : candidatoPerto(x, y);
     const elementos = cand?.nums?.map((n) => svg.__pathPorNumero.get(n)).filter(Boolean) || [];
     if (elementos.length) {
       elementos.forEach((p) => {
