@@ -4675,12 +4675,31 @@ async function renderMarcadoresPlanta() {
           ev.stopPropagation();
           alcaGirar.setPointerCapture(ev.pointerId);
           alcaGirar.style.cursor = "grabbing";
+          // Calcular um ângulo ABSOLUTO do zero a cada quadro (como fazia
+          // antes) tem uma descontinuidade: Math.atan2 pula de +180° pra
+          // -180° bem na direção "esquerda do centro" -- exatamente uma
+          // das 4 direções (reta) que alguém tentaria arrastar pra deixar
+          // o retângulo "certinho". Nesse ponto, um tremor mínimo do
+          // mouse fazia o ângulo saltar quase 360° de uma vez, dando a
+          // impressão de "não importa o que eu faça, sempre volta torta"
+          // (bug real, relatado). Em vez disso, acompanha só a VARIAÇÃO
+          // do ângulo do mouse desde que começou a arrastar, "desembrulhando"
+          // qualquer salto de mais de 180° entre um quadro e o outro --
+          // assim não existe mais direção nenhuma onde o giro trava.
+          const anguloInicial = angulo;
+          const pInicial = svgPontoDeClique(svg, ev);
+          const anguloMouseInicial = (Math.atan2(pInicial.y - centroY, pInicial.x - centroX) * 180) / Math.PI;
+          let anguloMouseAnterior = anguloMouseInicial;
+          let voltas = 0;
           function aoMoverGirar(ev2) {
             const pAtual = svgPontoDeClique(svg, ev2);
-            // Ângulo do centro até o mouse; +90 porque a alcinha começa
-            // "pra cima" (ângulo 0), não "pra direita" (que seria o 0 de
-            // atan2 puro).
-            angulo = Math.round((Math.atan2(pAtual.y - centroY, pAtual.x - centroX) * 180) / Math.PI + 90);
+            const anguloMouseAtual = (Math.atan2(pAtual.y - centroY, pAtual.x - centroX) * 180) / Math.PI;
+            const diferenca = anguloMouseAtual - anguloMouseAnterior;
+            if (diferenca > 180) voltas -= 1;
+            else if (diferenca < -180) voltas += 1;
+            anguloMouseAnterior = anguloMouseAtual;
+            const anguloMouseContinuo = anguloMouseAtual + voltas * 360;
+            angulo = Math.round(anguloInicial + (anguloMouseContinuo - anguloMouseInicial));
             atualizarRotacaoTodos();
           }
           function aoSoltarGirar() {
@@ -5528,20 +5547,26 @@ function ativarZoomPan(svg) {
       // Amortece a pinça: sem isso, no celular o gesto "pega" fácil demais
       // e um movimento pequeno de dedo já dispara um zoom enorme, ficando
       // difícil de controlar. Elevar a razão a um expoente < 1 pede mais
-      // percurso físico dos dedos pro mesmo tanto de zoom -- 0.5 ainda
-      // estava sensível demais (relato real), baixado pra 0.3.
-      const fator = Math.pow(razaoBruta, 0.3);
+      // percurso físico dos dedos pro mesmo tanto de zoom -- 0.5 tava
+      // sensível demais, 0.3 ficou sensível de menos (dois relatos reais
+      // opostos); 0.4 fica no meio dos dois.
+      const fator = Math.pow(razaoBruta, 0.4);
       const meioX = (p1.x + p2.x) / 2, meioY = (p1.y + p2.y) / 2;
       const original = svg.__viewOriginal || viewInicialPinca;
       let novaLargura = viewInicialPinca.w * fator;
       novaLargura = Math.min(Math.max(novaLargura, original.w / 40), original.w * 1.4);
       const novaAltura = novaLargura * (viewInicialPinca.h / viewInicialPinca.w);
+      // Mantém o ponto que está embaixo do meio dos dedos NO MESMO lugar
+      // da tela -- antes só recentralizava a visão nesse ponto (só ficava
+      // certo se a pinça acontecesse bem no centro da tela; em qualquer
+      // outro lugar, o desenho "escorregava" pro centro a cada pinça,
+      // ficando descentralizado -- relato real). Mesma fórmula (já
+      // validada) do zoom da roda do mouse em zoomEm(), aplicada aqui.
+      const vAtual = viewAtual();
       const ptMeio = svgPontoDeClique(svg, { clientX: meioX, clientY: meioY });
-      aplicarView({
-        x: ptMeio.x - (novaLargura / 2),
-        y: ptMeio.y - (novaAltura / 2),
-        w: novaLargura, h: novaAltura,
-      });
+      const novoX = ptMeio.x - (ptMeio.x - vAtual.x) * (novaLargura / vAtual.w);
+      const novoY = ptMeio.y - (ptMeio.y - vAtual.y) * (novaAltura / vAtual.h);
+      aplicarView({ x: novoX, y: novoY, w: novaLargura, h: novaAltura });
       return;
     }
 
