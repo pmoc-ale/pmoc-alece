@@ -1329,6 +1329,19 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   border-top: 1.5px solid var(--vermelho);
   transform: translateY(-50%) rotate(45deg);
 }
+/* Candidato clicado uma vez, esperando o segundo clique de confirmação
+   (ver aoClicarCandidatoNaoIdentificado no app.js) -- contorno sólido
+   dourado, em vez do tracejado cinza padrão, pra ficar bem claro qual
+   está selecionado. */
+.planta-candidato-selecionado {
+  stroke: #E8A317 !important;
+  stroke-dasharray: none !important;
+  animation: pulsarCandidatoSelecionado 1.1s ease-in-out infinite;
+}
+@keyframes pulsarCandidatoSelecionado {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.45; }
+}
 .planta-pulso-destaque {
   transform-box: fill-box;
   transform-origin: 50% 50%;

@@ -4071,7 +4071,7 @@ function atualizarModoMarcacao() {
     dica.textContent = modo === "descartar"
       ? "Clique numa área tracejada que o sistema identificou errado (não é equipamento) pra descartar ela -- some da lista e não aparece mais como candidato."
       : modoCondensadora
-      ? "Marque cada condensadora com o código que já está desenhado na planta (ex: C7) -- qualquer evaporadora com \"Código na planta\" = algo/C7 vai achar essa condensadora sozinha, sem precisar escolher aparelho aqui."
+      ? "Clique numa área tracejada: o sistema já chuta o código (pelo padrão de numeração e tentando ler o que está desenhado do lado) -- confira/corrija e clique de novo pra confirmar. Qualquer evaporadora com \"Código na planta\" = algo/C7 vai achar essa condensadora sozinha, sem precisar escolher aparelho aqui."
       : "";
   }
 }
@@ -4768,14 +4768,10 @@ async function renderMarcadoresPlanta() {
         retangulo.setAttribute("stroke-width", pad * 0.3);
         retangulo.dataset.destaque = "1";
         retangulo.style.cursor = marcacaoEstaAtiva() ? "pointer" : "default";
+        if (candidatoSelecionadoParaConfirmar?.chave === chaveCandidato(cand)) retangulo.classList.add("planta-candidato-selecionado");
         retangulo.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          if (!marcacaoEstaAtiva()) return;
-          if ($('input[name="modoMarcacao"]:checked')?.value === "descartar") {
-            descartarCandidato(planta, cand);
-            return;
-          }
-          salvarPosicaoPlanta(planta, cand.x, cand.y);
+          aoClicarCandidatoNaoIdentificado(planta, cand, retangulo);
         });
         gDestaques.appendChild(retangulo);
       } else {
@@ -4791,14 +4787,10 @@ async function renderMarcadoresPlanta() {
         c.setAttribute("stroke-dasharray", `${raioMarcador / 4},${raioMarcador / 4}`);
         c.setAttribute("stroke-width", raioMarcador / 5);
         c.style.cursor = marcacaoEstaAtiva() ? "pointer" : "default";
+        if (candidatoSelecionadoParaConfirmar?.chave === chaveCandidato(cand)) c.classList.add("planta-candidato-selecionado");
         c.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          if (!marcacaoEstaAtiva()) return;
-          if ($('input[name="modoMarcacao"]:checked')?.value === "descartar") {
-            descartarCandidato(planta, cand);
-            return;
-          }
-          salvarPosicaoPlanta(planta, cand.x, cand.y);
+          aoClicarCandidatoNaoIdentificado(planta, cand, c);
         });
         gMarcadores.appendChild(c);
       }
@@ -4966,6 +4958,31 @@ function candidatoMaisProximo(planta, x, y) {
   return melhor && melhorDist <= distanciaMax ? melhor : null;
 }
 
+// Chuta o próximo código provável pelo padrão espacial dos códigos já
+// confirmados nessa planta -- ex: se os dois vizinhos confirmados mais
+// próximos são "C6" e "C7" (nessa ordem, do mais perto pro mais longe),
+// chuta "C8" pra continuar a mesma progressão. É só um palpite rápido
+// pra economizar digitação (a Jovanna pediu); se estiver errado, corrige
+// o campo antes de confirmar -- não tenta ser perfeito.
+function sugerirProximoCodigo(prefixoPadrao, confirmados, x, y) {
+  const comNumero = confirmados
+    .map((c) => {
+      if (c.x == null || c.y == null) return null;
+      const m = /^([A-Za-z]*)(\d+)$/.exec(normalizarCodigo(c.codigo));
+      if (!m) return null;
+      return { x: c.x, y: c.y, prefixo: m[1] || prefixoPadrao, numero: parseInt(m[2], 10) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
+  if (!comNumero.length) return "";
+  const [maisProximo, segundo] = comNumero;
+  if (segundo && Math.abs(maisProximo.numero - segundo.numero) === 1) {
+    const direcao = maisProximo.numero > segundo.numero ? 1 : -1;
+    return maisProximo.prefixo + (maisProximo.numero + direcao);
+  }
+  return maisProximo.prefixo + (maisProximo.numero + 1);
+}
+
 // Mesma chave usada pra deduplicar posições idênticas no leitor do CAD
 // (dwfParser.js) -- reaproveitada aqui pra marcar um candidato como
 // "não é equipamento" de um jeito estável, sem depender de nenhum outro
@@ -5009,6 +5026,159 @@ async function descartarCandidato(planta, cand) {
   } catch (err) {
     console.error(err);
     toast("Erro ao descartar: " + err.message);
+  }
+}
+
+// ------------------------------------------------------------------
+// Leitura automática do código perto de um candidato -- a Jovanna pediu
+// pra parar de digitar toda vez o código que já está desenhado do lado
+// do símbolo (ex: o hexágono "C7" da planta). Usa OCR (Tesseract.js,
+// carregado no index.html) numa imagem recortada só daquela área.
+//
+// ATENÇÃO: essa parte eu não consegui testar de verdade -- meu ambiente
+// aqui não tem acesso à internet pra baixar o Tesseract.js e ler uma
+// imagem de teste, só dá pra revisar o código com calma. Funciona sem
+// travar nada se o OCR falhar ou não achar nada (só não preenche o
+// código sozinho, continua tendo que digitar); mas a taxa de acerto de
+// verdade só dá pra saber testando ao vivo.
+// ------------------------------------------------------------------
+
+// Recorta só uma área pequena da planta (em volta de x,y) numa imagem,
+// numa resolução fixa (não depende do tamanho real do desenho) -- fica
+// bem mais rápido pro OCR do que mandar a planta inteira.
+function recortarPlantaParaCanvas(svg, x, y, raioRecorte) {
+  return new Promise((resolve) => {
+    try {
+      const clone = svg.cloneNode(true);
+      clone.querySelectorAll("#plantaDestaquesSvg, #plantaMarcadoresSvg").forEach((el) => el.remove());
+      const TAMANHO_PX = 300;
+      clone.setAttribute("viewBox", `${x - raioRecorte} ${y - raioRecorte} ${raioRecorte * 2} ${raioRecorte * 2}`);
+      clone.setAttribute("width", TAMANHO_PX);
+      clone.setAttribute("height", TAMANHO_PX);
+      clone.removeAttribute("style");
+      const serializado = new XMLSerializer().serializeToString(clone);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = TAMANHO_PX;
+        canvas.height = TAMANHO_PX;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, TAMANHO_PX, TAMANHO_PX);
+        ctx.drawImage(img, 0, 0, TAMANHO_PX, TAMANHO_PX);
+        resolve(canvas);
+      };
+      img.onerror = () => resolve(null);
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(serializado);
+    } catch (err) {
+      console.warn("Erro ao recortar a planta pro OCR:", err);
+      resolve(null);
+    }
+  });
+}
+
+// Worker do Tesseract.js reaproveitado entre leituras (criar um novo a
+// cada clique seria bem mais lento) -- só cria na primeira vez que
+// precisar.
+let _tesseractWorkerPromise = null;
+function _obterTesseractWorker() {
+  if (typeof Tesseract === "undefined") return Promise.resolve(null);
+  if (!_tesseractWorkerPromise) {
+    _tesseractWorkerPromise = Tesseract.createWorker("eng")
+      .then(async (worker) => {
+        await worker.setParameters({ tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/" });
+        return worker;
+      })
+      .catch((err) => { console.warn("Tesseract não iniciou:", err); return null; });
+  }
+  return _tesseractWorkerPromise;
+}
+
+// Tenta ler o código desenhado perto de (x,y); devolve o texto lido (só
+// se parecer mesmo um código, tipo "C7" ou "E1/C7") ou null se não achar
+// nada plausível -- nunca lança erro pra fora, só desiste em silêncio.
+async function tentarLerCodigoPorOcr(svg, x, y) {
+  try {
+    const worker = await _obterTesseractWorker();
+    if (!worker) return null;
+    const raioMarcadorAtual = (() => {
+      const [xmin, , xmax] = (_dadosPlantaCache.get(ESTADO.plantaSelecionada) || {}).bbox || [0, 0, 100];
+      return (xmax - xmin) / 110 || 1;
+    })();
+    // Recorte bem mais generoso que o marcador em si -- o código costuma
+    // ficar do lado, ligado por uma linha, não em cima do símbolo.
+    const canvas = await recortarPlantaParaCanvas(svg, x, y, raioMarcadorAtual * 8);
+    if (!canvas) return null;
+    const { data } = await worker.recognize(canvas);
+    const texto = (data?.text || "").replace(/\s+/g, "").toUpperCase();
+    return /^[A-Z]?\d{1,3}(\/[A-Z]?\d{1,3})?$/.test(texto) && texto.length ? texto : null;
+  } catch (err) {
+    console.warn("OCR não conseguiu ler o código:", err);
+    return null;
+  }
+}
+
+// ------------------------------------------------------------------
+// Fluxo de dois cliques pra marcar um candidato detectado automaticamente
+// (a Jovanna pediu): o primeiro clique SELECIONA (sugere um código pelo
+// padrão de numeração na hora, e tenta ler o de verdade por OCR em
+// segundo plano -- se achar algo plausível, troca a sugestão); o segundo
+// clique no MESMO candidato confirma e salva de vez. Clicar num
+// candidato diferente troca a seleção. Só existe pra facilitar (não é
+// obrigatório usar a sugestão -- pode digitar/corrigir o código livre
+// antes de confirmar).
+// ------------------------------------------------------------------
+let candidatoSelecionadoParaConfirmar = null; // { chave, x, y } ou null
+
+function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
+  if (!marcacaoEstaAtiva()) return;
+  const modo = $('input[name="modoMarcacao"]:checked')?.value || "evaporadora";
+  if (modo === "descartar") {
+    descartarCandidato(planta, cand);
+    candidatoSelecionadoParaConfirmar = null;
+    return;
+  }
+
+  const chave = chaveCandidato(cand);
+  if (candidatoSelecionadoParaConfirmar?.chave === chave) {
+    candidatoSelecionadoParaConfirmar = null;
+    salvarPosicaoPlanta(planta, cand.x, cand.y);
+    return;
+  }
+
+  candidatoSelecionadoParaConfirmar = { chave, x: cand.x, y: cand.y };
+  elemento?.classList.add("planta-candidato-selecionado");
+
+  const modoCondensadora = modo === "condensadora";
+  const campoCodigo = modoCondensadora ? $("#plantaCondensadoraCodigoInput") : $("#plantaCodigoInput");
+  if (campoCodigo && !campoCodigo.value.trim()) {
+    const prefixoPadrao = modoCondensadora ? "C" : "E";
+    const confirmados = modoCondensadora
+      ? (planta.condensadoras || []).map((c) => ({ x: c.x, y: c.y, codigo: c.codigo }))
+      : ESTADO.equipamentos
+          .filter((e) => e.plantaId === planta.id && e.plantaX != null)
+          .map((e) => ({ x: e.plantaX, y: e.plantaY, codigo: e.codigoPlanta }));
+    const sugestao = sugerirProximoCodigo(prefixoPadrao, confirmados, cand.x, cand.y);
+    if (sugestao) {
+      campoCodigo.value = sugestao;
+      campoCodigo.dataset.sugeridoAutomaticamente = sugestao;
+    }
+  }
+  toast("Clique de novo pra confirmar (ou ajuste o código antes).");
+
+  const svg = $("#plantaSvg");
+  if (campoCodigo && svg) {
+    tentarLerCodigoPorOcr(svg, cand.x, cand.y).then((lido) => {
+      if (!lido) return;
+      if (candidatoSelecionadoParaConfirmar?.chave !== chave) return; // já mudou de candidato
+      const valorAtual = campoCodigo.value.trim();
+      // Só troca se o campo ainda tiver o palpite automático (ou estiver
+      // vazio) -- se ela já digitou/corrigiu por conta própria, não
+      // sobrescreve o que ela escreveu.
+      if (valorAtual && valorAtual !== campoCodigo.dataset.sugeridoAutomaticamente) return;
+      campoCodigo.value = lido;
+      toast(`Li "${lido}" na planta -- confira antes de confirmar.`);
+    });
   }
 }
 
