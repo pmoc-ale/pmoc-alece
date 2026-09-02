@@ -110,6 +110,10 @@
 
     <!-- VIEW 2: CONFIG / CRONOGRAMA -->
     <section class="view" id="view-config">
+      <div class="alert-banner" id="avisoModoAdicionarPredio" hidden style="margin-bottom:12px">
+        <span class="alert-banner-icon"></span>
+        <span class="alert-banner-text" id="avisoModoAdicionarPredioTexto"></span>
+      </div>
       <div class="card">
         <h2>Parâmetros Iniciais</h2>
         <p class="muted">Defina a base do calendário para o início do ciclo de manutenção.</p>
@@ -142,8 +146,8 @@
       <!-- Bloco de Ação (Launchpad) -->
       <div class="launchpad-card">
         <div class="launchpad-texto">
-          <h3>Pronto para processar?</h3>
-          <p>Ao clicar em gerar, o sistema calculará as rotas e datas de todos os equipamentos com base nas regras acima. <strong>Isso reescreverá o cronograma atual.</strong></p>
+          <h3 id="launchpadTitulo">Pronto para processar?</h3>
+          <p id="launchpadAviso">Ao clicar em gerar, o sistema calculará as rotas e datas de todos os equipamentos com base nas regras acima. <strong>Isso reescreverá o cronograma atual.</strong></p>
           <div id="resumoCapacidade" class="launchpad-resumo"></div>
         </div>
         <button class="btn primary" id="btnGerar" style="background: var(--dourado); color: var(--azul-900); padding: 12px 24px; font-size: 15px; flex-shrink: 0;">
@@ -678,6 +682,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=5"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=33"></script>
+<script type="module" src="app.js?v=34"></script>
 </body>
 </html>

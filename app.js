@@ -222,6 +222,11 @@ const ESTADO = {
   usuarioNome: null,
   permissao: "padrao",
 configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANEXO 1", "ANEXO 2", "ANEXO 3", "ANEXO 4"], fotoObrigatoria: false },
+  // Ligado enquanto a tela de Cronograma está mostrando só o(s) prédio(s)
+  // novo(s) de uma planilha (fluxo de "adicionar", não o de gerar tudo do
+  // zero) -- ver processarArquivo/confirmarAdicaoPredioNovo.
+  modoAdicionarPredio: false,
+  itensParaAdicionarPredio: null,
   selecaoEquipamentos: new Set(),
   selecaoHistorico: new Set(),
   equipes: [],
@@ -671,6 +676,16 @@ $all(".subtab").forEach((btn) => {
 
 $all(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
+    // Sair da aba Cronograma sem clicar em "Gerar/Adicionar" abandona o
+    // fluxo de "adicionar prédio novo" -- sem isso, um "modo adicionar"
+    // esquecido a meio caminho ia continuar escondendo os outros prédios
+    // da tela de Capacidade da próxima vez que ela abrisse essa aba pra
+    // qualquer outro motivo.
+    if (btn.dataset.view !== "config" && ESTADO.modoAdicionarPredio) {
+      ESTADO.modoAdicionarPredio = false;
+      ESTADO.itensParaAdicionarPredio = null;
+      atualizarVisualModoAdicionarPredio();
+    }
     $all(".tab").forEach((b) => b.classList.remove("active"));
     $all(".view").forEach((v) => v.classList.remove("active"));
     // Marca TODOS os botões que apontam pra essa mesma view (não só o que
@@ -690,7 +705,7 @@ $all(".tab").forEach((btn) => {
     if (btn.dataset.view === "feriados") renderFeriados();
     if (btn.dataset.view === "ordens") renderOrdens();
     if (btn.dataset.view === "historico") renderHistorico();
-    if (btn.dataset.view === "config") renderCapacidadesPorPredio();
+    if (btn.dataset.view === "config") { renderCapacidadesPorPredio(); atualizarVisualModoAdicionarPredio(); }
     if (btn.dataset.view === "auditoria") renderAuditoria();
     if (btn.dataset.view === "config-site") preencherFormularioConfigSite();
   });
@@ -950,7 +965,27 @@ function processarArquivo(file) {
         if (querAdicionar) {
           const resultado = linhasParaItens(todasAsLinhas);
           if (resultado.erro) { toast(resultado.erro); return; }
-          adicionarPrediosAoCicloAtual(resultado.itens);
+          const prediosExistentes = new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"));
+          const itensNovos = resultado.itens.filter((i) => !prediosExistentes.has(i.local || "SEDE"));
+          const prediosIgnorados = [...new Set(
+            resultado.itens.filter((i) => prediosExistentes.has(i.local || "SEDE")).map((i) => i.local || "SEDE")
+          )];
+          if (!itensNovos.length) {
+            toast(`Nenhum prédio novo nessa planilha -- ${prediosIgnorados.join(", ")} já existe no cadastro atual. Pra atualizar um prédio existente, use "Substituir tudo".`);
+            return;
+          }
+          if (prediosIgnorados.length) {
+            toast(`Vou preparar só o(s) prédio(s) novo(s) -- ${prediosIgnorados.join(", ")} já existe no cadastro e foi ignorado dessa planilha.`);
+          }
+          // Mostra na tela de Cronograma (mesma tela usada pra gerar tudo
+          // pela primeira vez) só o(s) prédio(s) novo(s), pra ela ajustar
+          // capacidade/rodízio com a mesma interface de sempre, em vez de
+          // perguntar isso em caixinhas soltas.
+          ESTADO.modoAdicionarPredio = true;
+          ESTADO.itensParaAdicionarPredio = itensNovos;
+          irParaAba("config");
+          const hojeUtil = $("#dataInicio");
+          if (hojeUtil && !hojeUtil.value) hojeUtil.value = formatISO(new Date());
           return;
         }
         const querSubstituir = window.confirm(
@@ -988,7 +1023,7 @@ function processarArquivo(file) {
 // equipamento, sem mexer em ESTADO nem na tela -- extraído assim pra
 // poder ser reaproveitado tanto pelo fluxo de "primeira vez" (classificar,
 // abaixo) quanto pelo de "adicionar um prédio novo ao cronograma que já
-// está rodando" (adicionarPrediosAoCicloAtual), sem duplicar a lógica de
+// está rodando" (confirmarAdicaoPredioNovo), sem duplicar a lógica de
 // leitura de coluna/limpeza de valor/id estável por patrimônio.
 function linhasParaItens(rows) {
   const headers = Object.keys(rows[0]).map((h) => h.trim());
@@ -1105,18 +1140,38 @@ function classificar(rows) {
   renderPreview(resultado.itens);
 }
 
-// Acrescenta o(s) prédio(s) que ainda NÃO existem no cadastro atual ao
-// ciclo já em andamento, sem apagar nem reagendar nada dos prédios que
+// Acrescenta o(s) prédio(s) preparados em ESTADO.itensParaAdicionarPredio
+// (só prédio que ainda NÃO existe no cadastro atual -- ver processarArquivo)
+// ao ciclo já em andamento, sem apagar nem reagendar nada dos prédios que
 // já existem -- cada prédio já anda no próprio ritmo, com sua própria
 // equipe (mesmo agrupamento por "local" que gerarCronograma usa), então
 // adicionar um prédio novo não mexe na equipe nem nas datas de nenhum
-// outro. Só aceita prédio NOVO de propósito: se a planilha trouxer um
-// prédio que já está cadastrado, essas linhas são ignoradas (avisado no
-// final) -- atualizar um prédio já existente é uma decisão diferente
-// (poderia duplicar ou embaralhar o que uma equipe já está executando),
-// por isso continua exigindo "Substituir tudo" de propósito.
-async function adicionarPrediosAoCicloAtual(itensDaPlanilha) {
-  const prediosExistentes = new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"));
+// outro. Lê capacidade/data/rodízio dos MESMOS campos da tela de
+// Cronograma (Parâmetros Iniciais + Capacidade por Prédio) -- a mesma
+// interface de sempre, só que preenchida com o(s) prédio(s) novo(s) em
+// vez da lista inteira (ver locaisParaConfigurar).
+async function confirmarAdicaoPredioNovo() {
+  const itensDaPlanilha = ESTADO.itensParaAdicionarPredio;
+  if (!itensDaPlanilha || !itensDaPlanilha.length) {
+    toast("Nada pra adicionar -- volte na aba Levantamento e suba a planilha do prédio novo.");
+    return;
+  }
+
+  const dataInicioStr = $("#dataInicio")?.value;
+  if (!dataInicioStr) {
+    toast("Escolha a data de início.");
+    return;
+  }
+  const diasSemana = Math.min(7, Math.max(1, parseInt($("#diasSemana")?.value, 10) || 5));
+  const DIAS_UTEIS = NOMES_DIAS.slice(0, diasSemana);
+  function ehDiaUtilLocal(data) {
+    return DIAS_UTEIS.includes(NOMES_DIAS[(data.getDay() + 6) % 7]) && !estaEmFeriado(data);
+  }
+  const [anoI, mesI, diaI] = dataInicioStr.split("-");
+  const dataInicioBase = new Date(anoI, parseInt(mesI, 10) - 1, diaI, 12, 0, 0);
+  while (!ehDiaUtilLocal(dataInicioBase)) dataInicioBase.setDate(dataInicioBase.getDate() + 1);
+
+  const capacidades = lerCapacidadesDaTela();
   const porPredio = new Map();
   itensDaPlanilha.forEach((item) => {
     const local = item.local || "SEDE";
@@ -1124,150 +1179,141 @@ async function adicionarPrediosAoCicloAtual(itensDaPlanilha) {
     porPredio.get(local).push(item);
   });
 
-  const prediosNovos = [...porPredio.keys()].filter((l) => !prediosExistentes.has(l));
-  const prediosIgnorados = [...porPredio.keys()].filter((l) => prediosExistentes.has(l));
+  $("#btnGerar").disabled = true;
+  try {
+    const idsExistentes = new Set(ESTADO.equipamentos.map((e) => e.id));
+    const todosNovosItens = [];
+    const resumo = [];
+    const prediosAdicionados = new Set();
 
-  if (!prediosNovos.length) {
-    toast(`Nenhum prédio novo nessa planilha -- ${prediosIgnorados.join(", ")} já existe no cadastro atual. Pra atualizar um prédio existente, use "Substituir tudo".`);
-    return;
-  }
+    for (const [local, itensDoPredio] of porPredio.entries()) {
+      const cap = capacidades[local] || { nEquipes: 1, aparelhosDia: 2, modoRodizio: false, equipesAtivas: [] };
+      const nEquipes = Math.max(1, cap.nEquipes || 1);
+      const aparelhosDia = Math.max(1, cap.aparelhosDia || 1);
 
-  const DIAS_UTEIS = NOMES_DIAS.slice(0, (ESTADO.config && ESTADO.config.diasSemana) || 5);
-  function ehDiaUtilLocal(data) {
-    return DIAS_UTEIS.includes(NOMES_DIAS[(data.getDay() + 6) % 7]) && !estaEmFeriado(data);
-  }
-  const dataInicioBase = new Date();
-  dataInicioBase.setHours(12, 0, 0, 0);
-  while (!ehDiaUtilLocal(dataInicioBase)) dataInicioBase.setDate(dataInicioBase.getDate() + 1);
-
-  const idsExistentes = new Set(ESTADO.equipamentos.map((e) => e.id));
-  const todosNovosItens = [];
-  const resumo = [];
-  // Só entra aqui um prédio que passou pelas duas perguntas sem cancelar
-  // -- se ela cancelar um prédio específico, ele fica de fora até da
-  // lista mestre de prédios (ver registro abaixo, depois do laço), pra
-  // não sobrar um prédio "fantasma" sem nenhum equipamento cadastrado.
-  const prediosRealmenteAdicionados = new Set();
-
-  for (const local of prediosNovos) {
-    const itensDoPredio = porPredio.get(local);
-
-    // Pergunta a capacidade desse prédio novo -- a mesma pergunta que a
-    // tela de "Capacidade por Prédio" faria na primeira vez; sem isso
-    // teria que adivinhar quantas equipes atendem ali.
-    const nEquipesResp = window.prompt(
-      `Prédio novo: "${local}" (${itensDoPredio.length} equipamento(s)).\n\nQuantas equipes vão atender esse prédio?`,
-      "1"
-    );
-    if (nEquipesResp === null) { resumo.push(`${local}: cancelado, não foi adicionado.`); continue; }
-    const nEquipes = Math.max(1, parseInt(nEquipesResp, 10) || 1);
-
-    const aparelhosDiaResp = window.prompt(
-      `Quantos aparelhos por dia CADA equipe de "${local}" consegue fazer?`,
-      "2"
-    );
-    if (aparelhosDiaResp === null) { resumo.push(`${local}: cancelado, não foi adicionado.`); continue; }
-    const aparelhosDia = Math.max(1, parseInt(aparelhosDiaResp, 10) || 1);
-    prediosRealmenteAdicionados.add(local);
-
-    // Cria (ou reaproveita) as equipes desse prédio no Firestore -- sem
-    // isso elas não apareceriam na aba Equipes depois, só o nome ficaria
-    // "pendurado" no equipamento sem um registro de verdade por trás.
-    // Guarda o nome de cada uma num mapa local (em vez de reconsultar
-    // ESTADO.equipes logo em seguida) porque ESTADO.equipes só é
-    // atualizado quando o listener em tempo real do Firebase recebe o
-    // dado de volta -- não instantâneo -- e ler de volta rápido demais
-    // podia ainda não achar a equipe recém-criada.
-    const mapaEquipeLocal = new Map();
-    for (let ordemEq = 1; ordemEq <= nEquipes; ordemEq++) {
-      const existente = ESTADO.equipes.find((e) => e.predio === local && e.ordem === ordemEq);
-      if (existente) {
-        mapaEquipeLocal.set(ordemEq, existente.nome);
-      } else {
-        const nome = `Equipe ${ordemEq}`;
-        await addDoc(collection(db, "equipes"), { predio: local, ordem: ordemEq, nome });
-        mapaEquipeLocal.set(ordemEq, nome);
+      if (cap.modoRodizio && (!cap.equipesAtivas || !cap.equipesAtivas.length)) {
+        toast(`"${local}": marcou rodízio mas não selecionou nenhuma equipe. Cadastre equipe(s) nesse prédio em Configurações > Equipes primeiro, ou desmarque "Fazer rodízio".`);
+        continue;
       }
+
+      // Fora do modo rodízio, cria (ou reaproveita) as equipes desse
+      // prédio no Firestore -- sem isso elas não apareceriam na aba
+      // Equipes depois, só o nome ficaria "pendurado" no equipamento sem
+      // um registro de verdade por trás. Guarda o nome de cada uma num
+      // mapa local (em vez de reconsultar ESTADO.equipes logo em
+      // seguida) porque ESTADO.equipes só atualiza quando o listener em
+      // tempo real do Firebase recebe o dado de volta -- não instantâneo.
+      const mapaEquipeLocal = new Map();
+      if (!cap.modoRodizio) {
+        for (let ordemEq = 1; ordemEq <= nEquipes; ordemEq++) {
+          const existente = ESTADO.equipes.find((e) => e.predio === local && e.ordem === ordemEq);
+          if (existente) {
+            mapaEquipeLocal.set(ordemEq, existente.nome);
+          } else {
+            const nome = `Equipe ${ordemEq}`;
+            await addDoc(collection(db, "equipes"), { predio: local, ordem: ordemEq, nome });
+            mapaEquipeLocal.set(ordemEq, nome);
+          }
+        }
+      }
+
+      const capacidadeDia = nEquipes * aparelhosDia;
+      let dataCursor = new Date(dataInicioBase);
+      let contador = 0;
+      let diasUteisAgendados = 0;
+      let grupoAmbienteAtual = null;
+      let indiceGrupo = -1;
+      let ordem = 0;
+
+      itensDoPredio.forEach((item) => {
+        // Evita colidir com um ID já existente (patrimônio repetido em
+        // outro prédio, por engano de digitação na planilha) -- sem
+        // isso, o batch.set ia SOBRESCREVER o equipamento existente,
+        // apagando o histórico/status dele.
+        if (idsExistentes.has(item.id)) {
+          item.id = `${item.id}_novo_${Math.random().toString(36).slice(2, 6)}`;
+        }
+        idsExistentes.add(item.id);
+
+        const chaveAmbiente = `${item.setor}||${item.ambiente}`;
+        if (chaveAmbiente !== grupoAmbienteAtual) {
+          grupoAmbienteAtual = chaveAmbiente;
+          indiceGrupo++;
+        }
+        const slotDaSala = indiceGrupo % nEquipes;
+
+        if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
+          const pool = cap.equipesAtivas;
+          const indiceNoPool = (diasUteisAgendados * nEquipes + slotDaSala) % pool.length;
+          item.equipeResponsavel = pool[indiceNoPool];
+        } else {
+          const ordemEquipe = slotDaSala + 1;
+          item.equipeResponsavel = mapaEquipeLocal.get(ordemEquipe) || `Equipe ${ordemEquipe}`;
+        }
+
+        ordem++;
+        item.ordemExecucao = ordem;
+        item.dataAgendada = formatISO(dataCursor);
+        item.diaPlanejado = NOMES_DIAS[(dataCursor.getDay() + 6) % 7];
+        const diffDias = Math.floor((dataCursor - dataInicioBase) / 86400000);
+        item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
+
+        contador++;
+        if (contador >= capacidadeDia) {
+          contador = 0;
+          diasUteisAgendados++;
+          do { dataCursor.setDate(dataCursor.getDate() + 1); } while (!ehDiaUtilLocal(dataCursor));
+        }
+        todosNovosItens.push(item);
+      });
+
+      prediosAdicionados.add(local);
+      const diasNecessarios = Math.ceil(itensDoPredio.length / capacidadeDia);
+      resumo.push(`${local}: ${itensDoPredio.length} equipamento(s), começa ${formatISO(dataInicioBase)}, ~${diasNecessarios} dia(s) úteis.`);
     }
 
-    const capacidadeDia = nEquipes * aparelhosDia;
-    let dataCursor = new Date(dataInicioBase);
-    let contador = 0;
-    let grupoAmbienteAtual = null;
-    let indiceGrupo = -1;
-    let ordem = 0;
+    if (!todosNovosItens.length) {
+      toast("Nada foi adicionado.");
+      return;
+    }
 
-    itensDoPredio.forEach((item) => {
-      // Evita colidir com um ID já existente (patrimônio repetido em
-      // outro prédio, por engano de digitação na planilha) -- sem isso,
-      // o batch.set ia SOBRESCREVER o equipamento existente, apagando
-      // o histórico/status dele.
-      if (idsExistentes.has(item.id)) {
-        item.id = `${item.id}_novo_${Math.random().toString(36).slice(2, 6)}`;
-      }
-      idsExistentes.add(item.id);
+    // Registra o(s) prédio(s) que realmente foram adicionados na lista
+    // mestre de prédios (Configurações -> "Prédio"/"Anexo") -- sem isso,
+    // o cadastro/cronograma desse prédio até funcionava, mas ele não
+    // aparecia nos seletores de "Prédio" espalhados pelo sistema
+    // (cadastrar equipamento manual, subir planta de CAD, tela de
+    // Equipes), porque todos eles listam a partir dessa lista, não a
+    // partir de quem já tem equipamento cadastrado.
+    const prediosNaListaMestre = new Set((ESTADO.configSite && ESTADO.configSite.predios) || []);
+    const prediosParaRegistrar = [...prediosAdicionados].filter((l) => !prediosNaListaMestre.has(l));
+    if (prediosParaRegistrar.length) {
+      const novaConfigSite = { ...(ESTADO.configSite || {}), predios: [...prediosNaListaMestre, ...prediosParaRegistrar] };
+      await setDoc(doc(db, "config", "site"), novaConfigSite);
+      ESTADO.configSite = novaConfigSite;
+    }
 
-      const chaveAmbiente = `${item.setor}||${item.ambiente}`;
-      if (chaveAmbiente !== grupoAmbienteAtual) {
-        grupoAmbienteAtual = chaveAmbiente;
-        indiceGrupo++;
-      }
-      const slotDaSala = indiceGrupo % nEquipes;
-      const ordemEquipe = slotDaSala + 1;
-      item.equipeResponsavel = mapaEquipeLocal.get(ordemEquipe) || `Equipe ${ordemEquipe}`;
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < todosNovosItens.length; inicio += TAMANHO_LOTE) {
+      const pedaco = todosNovosItens.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((item) => batch.set(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), item));
+      await batch.commit();
+    }
 
-      ordem++;
-      item.ordemExecucao = ordem;
-      item.dataAgendada = formatISO(dataCursor);
-      item.diaPlanejado = NOMES_DIAS[(dataCursor.getDay() + 6) % 7];
-      const diffDias = Math.floor((dataCursor - dataInicioBase) / 86400000);
-      item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
+    await registrarAuditoria("Adicionar prédio ao cronograma", `${[...prediosAdicionados].join(", ")} -- ${todosNovosItens.length} equipamento(s) acrescentado(s), sem mexer nos outros prédios`);
 
-      contador++;
-      if (contador >= capacidadeDia) {
-        contador = 0;
-        do { dataCursor.setDate(dataCursor.getDate() + 1); } while (!ehDiaUtilLocal(dataCursor));
-      }
-      todosNovosItens.push(item);
-    });
+    toast(`Adicionado! ${resumo.join(" ")}`);
 
-    const diasNecessarios = Math.ceil(itensDoPredio.length / capacidadeDia);
-    resumo.push(`${local}: ${itensDoPredio.length} equipamento(s), ${nEquipes} equipe(s), começa ${formatISO(dataInicioBase)}, ~${diasNecessarios} dia(s) úteis.`);
+    ESTADO.modoAdicionarPredio = false;
+    ESTADO.itensParaAdicionarPredio = null;
+    atualizarVisualModoAdicionarPredio();
+    irParaAba("calendar");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao adicionar: " + err.message);
+  } finally {
+    $("#btnGerar").disabled = false;
   }
-
-  if (!todosNovosItens.length) {
-    toast("Nada foi adicionado.");
-    return;
-  }
-
-  // Registra o(s) prédio(s) que realmente foram adicionados na lista
-  // mestre de prédios (Configurações -> "Prédio"/"Anexo") -- sem isso, o
-  // cadastro/cronograma desse prédio até funcionava, mas ele não
-  // aparecia nos seletores de "Prédio" espalhados pelo sistema (cadastrar
-  // equipamento manual, subir planta de CAD, tela de Equipes), porque
-  // todos eles listam a partir dessa lista, não a partir de quem já tem
-  // equipamento cadastrado.
-  const prediosNaListaMestre = new Set((ESTADO.configSite && ESTADO.configSite.predios) || []);
-  const prediosParaRegistrar = [...prediosRealmenteAdicionados].filter((l) => !prediosNaListaMestre.has(l));
-  if (prediosParaRegistrar.length) {
-    const novaConfigSite = { ...(ESTADO.configSite || {}), predios: [...prediosNaListaMestre, ...prediosParaRegistrar] };
-    await setDoc(doc(db, "config", "site"), novaConfigSite);
-    ESTADO.configSite = novaConfigSite;
-  }
-
-  const TAMANHO_LOTE = 400;
-  for (let inicio = 0; inicio < todosNovosItens.length; inicio += TAMANHO_LOTE) {
-    const pedaco = todosNovosItens.slice(inicio, inicio + TAMANHO_LOTE);
-    const batch = writeBatch(db);
-    pedaco.forEach((item) => batch.set(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), item));
-    await batch.commit();
-  }
-
-  await registrarAuditoria("Adicionar prédio ao cronograma", `${[...prediosRealmenteAdicionados].join(", ")} -- ${todosNovosItens.length} equipamento(s) acrescentado(s), sem mexer nos outros prédios`);
-
-  let msg = `Adicionado! ${resumo.join(" ")}`;
-  if (prediosIgnorados.length) msg += ` (ignorado: ${prediosIgnorados.join(", ")} -- já existe no cadastro; pra atualizar, use "Substituir tudo")`;
-  toast(msg);
 }
 
 function renderPreview(itens) {
@@ -1287,7 +1333,10 @@ function renderPreview(itens) {
     <tbody>${itens.map((i) => `<tr>${cols.map((c) => `<td>${c[1](i) ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 
-$("#btnGerar").addEventListener("click", gerarCronograma);
+$("#btnGerar").addEventListener("click", () => {
+  if (ESTADO.modoAdicionarPredio) confirmarAdicaoPredioNovo();
+  else gerarCronograma();
+});
 
 function estaEmFeriado(date) {
   if (!date || !ESTADO.feriados || ESTADO.feriados.length === 0) return false;
@@ -2150,9 +2199,44 @@ function slugLocal(local) {
 }
 
 function locaisParaConfigurar() {
+  // No fluxo de "adicionar prédio novo", a tela de Capacidade deve
+  // mostrar só o(s) prédio(s) que estão sendo adicionados agora -- não a
+  // lista inteira -- senão pareceria que "Gerar Cronograma" ali vai
+  // reprocessar tudo de novo (ver confirmarAdicaoPredioNovo).
+  if (ESTADO.modoAdicionarPredio && ESTADO.itensParaAdicionarPredio) {
+    const setNovo = new Set(ESTADO.itensParaAdicionarPredio.map((e) => e.local || "SEDE"));
+    return [...setNovo].sort();
+  }
   const origem = ESTADO.equipamentos.length ? ESTADO.equipamentos : ESTADO.itensCarregados;
   const set = new Set(origem.map((e) => e.local || "SEDE"));
   return set.size ? [...set].sort() : ["SEDE"];
+}
+
+// Troca os textos/avisos da aba Cronograma entre o modo normal ("Gerar
+// Cronograma" reescreve tudo) e o modo "adicionar prédio novo" (só
+// acrescenta o(s) prédio(s) de agora, sem tocar no resto) -- mesma tela,
+// só avisando com clareza qual dos dois vai acontecer ao clicar no botão.
+function atualizarVisualModoAdicionarPredio() {
+  const aviso = $("#avisoModoAdicionarPredio");
+  const avisoTexto = $("#avisoModoAdicionarPredioTexto");
+  const titulo = $("#launchpadTitulo");
+  const textoLaunchpad = $("#launchpadAviso");
+  const botao = $("#btnGerar");
+  if (!aviso || !avisoTexto || !titulo || !textoLaunchpad || !botao) return;
+
+  if (ESTADO.modoAdicionarPredio && ESTADO.itensParaAdicionarPredio) {
+    const predios = [...new Set(ESTADO.itensParaAdicionarPredio.map((e) => e.local || "SEDE"))];
+    aviso.hidden = false;
+    avisoTexto.textContent = `Adicionando prédio novo: ${predios.join(", ")} (${ESTADO.itensParaAdicionarPredio.length} equipamento(s)). Ajuste a capacidade abaixo e clique em "Adicionar ao Cronograma" -- os outros prédios já cadastrados não são tocados.`;
+    titulo.textContent = "Pronto para adicionar?";
+    textoLaunchpad.innerHTML = `Ao clicar, o sistema agenda só o(s) equipamento(s) de <strong>${escapeHtml(predios.join(", "))}</strong> a partir da data de início acima. <strong>Os outros prédios continuam exatamente como estão.</strong>`;
+    botao.textContent = "Adicionar ao Cronograma";
+  } else {
+    aviso.hidden = true;
+    titulo.textContent = "Pronto para processar?";
+    textoLaunchpad.innerHTML = `Ao clicar em gerar, o sistema calculará as rotas e datas de todos os equipamentos com base nas regras acima. <strong>Isso reescreverá o cronograma atual.</strong>`;
+    botao.textContent = "Gerar Cronograma";
+  }
 }
 
 function iniciarSincronizacaoEquipes() {

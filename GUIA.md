@@ -78,7 +78,7 @@ Seu arquivo precisa ter as colunas:
 
 **Se já existe um cronograma rodando:**
 Ao subir uma planilha nova nessa situação, o sistema pergunta o que fazer:
-- **Adicionar** — acrescenta só o(s) prédio(s) **novo(s)** dessa planilha ao cronograma atual (pergunta quantas equipes atendem o prédio novo e quantos aparelhos por dia cada uma faz). Os prédios que já existiam continuam exatamente como estavam — mesma equipe, mesmas datas, nada muda. Um prédio que já está cadastrado é sempre ignorado nesse caminho (avisa na tela).
+- **Adicionar** — leva pra mesma tela de "Cronograma" (Parâmetros Iniciais + Capacidade por Prédio) que a primeira configuração usa, só que mostrando apenas o(s) prédio(s) **novo(s)** dessa planilha. Ajuste dias úteis, data de início e a capacidade (inclusive "Fazer rodízio", se quiser) e clique em **"Adicionar ao Cronograma"**. Os prédios que já existiam continuam exatamente como estavam — mesma equipe, mesmas datas, nada muda. Um prédio que já está cadastrado é sempre ignorado nesse caminho (avisa na tela).
 - **Substituir tudo** — apaga o cronograma inteiro (todos os prédios) e recomeça do zero só com o que está nessa planilha. Use só quando quiser reiniciar tudo, não pra atualizar um prédio isolado.
 
 **Exemplo:**
