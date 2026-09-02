@@ -1143,6 +1143,11 @@ async function adicionarPrediosAoCicloAtual(itensDaPlanilha) {
   const idsExistentes = new Set(ESTADO.equipamentos.map((e) => e.id));
   const todosNovosItens = [];
   const resumo = [];
+  // Só entra aqui um prédio que passou pelas duas perguntas sem cancelar
+  // -- se ela cancelar um prédio específico, ele fica de fora até da
+  // lista mestre de prédios (ver registro abaixo, depois do laço), pra
+  // não sobrar um prédio "fantasma" sem nenhum equipamento cadastrado.
+  const prediosRealmenteAdicionados = new Set();
 
   for (const local of prediosNovos) {
     const itensDoPredio = porPredio.get(local);
@@ -1163,6 +1168,7 @@ async function adicionarPrediosAoCicloAtual(itensDaPlanilha) {
     );
     if (aparelhosDiaResp === null) { resumo.push(`${local}: cancelado, não foi adicionado.`); continue; }
     const aparelhosDia = Math.max(1, parseInt(aparelhosDiaResp, 10) || 1);
+    prediosRealmenteAdicionados.add(local);
 
     // Cria (ou reaproveita) as equipes desse prédio no Firestore -- sem
     // isso elas não apareceriam na aba Equipes depois, só o nome ficaria
@@ -1234,6 +1240,21 @@ async function adicionarPrediosAoCicloAtual(itensDaPlanilha) {
     return;
   }
 
+  // Registra o(s) prédio(s) que realmente foram adicionados na lista
+  // mestre de prédios (Configurações -> "Prédio"/"Anexo") -- sem isso, o
+  // cadastro/cronograma desse prédio até funcionava, mas ele não
+  // aparecia nos seletores de "Prédio" espalhados pelo sistema (cadastrar
+  // equipamento manual, subir planta de CAD, tela de Equipes), porque
+  // todos eles listam a partir dessa lista, não a partir de quem já tem
+  // equipamento cadastrado.
+  const prediosNaListaMestre = new Set((ESTADO.configSite && ESTADO.configSite.predios) || []);
+  const prediosParaRegistrar = [...prediosRealmenteAdicionados].filter((l) => !prediosNaListaMestre.has(l));
+  if (prediosParaRegistrar.length) {
+    const novaConfigSite = { ...(ESTADO.configSite || {}), predios: [...prediosNaListaMestre, ...prediosParaRegistrar] };
+    await setDoc(doc(db, "config", "site"), novaConfigSite);
+    ESTADO.configSite = novaConfigSite;
+  }
+
   const TAMANHO_LOTE = 400;
   for (let inicio = 0; inicio < todosNovosItens.length; inicio += TAMANHO_LOTE) {
     const pedaco = todosNovosItens.slice(inicio, inicio + TAMANHO_LOTE);
@@ -1242,7 +1263,7 @@ async function adicionarPrediosAoCicloAtual(itensDaPlanilha) {
     await batch.commit();
   }
 
-  await registrarAuditoria("Adicionar prédio ao cronograma", `${prediosNovos.join(", ")} -- ${todosNovosItens.length} equipamento(s) acrescentado(s), sem mexer nos outros prédios`);
+  await registrarAuditoria("Adicionar prédio ao cronograma", `${[...prediosRealmenteAdicionados].join(", ")} -- ${todosNovosItens.length} equipamento(s) acrescentado(s), sem mexer nos outros prédios`);
 
   let msg = `Adicionado! ${resumo.join(" ")}`;
   if (prediosIgnorados.length) msg += ` (ignorado: ${prediosIgnorados.join(", ")} -- já existe no cadastro; pra atualizar, use "Substituir tudo")`;
