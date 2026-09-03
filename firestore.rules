@@ -59,6 +59,13 @@ service cloud.firestore {
     match /ciclos/{cicloId}/equipamentos/{itemId} {
       allow create, update: if souTrabalhador();
     }
+    match /ciclos/{cicloId}/backupPlanilha/{docId} {
+      // Guarda o "antes" de uma atualização de cadastro via planilha, pra
+      // dar pra desfazer -- mesmo nível de permissão de quem pode fazer a
+      // própria atualização (senão a atualização quebra pra quem não é
+      // admin, porque salvar o backup é parte da mesma operação).
+      allow read, create, update, delete: if souTrabalhador();
+    }
     match /ciclos/{cicloId}/historico/{id} {
       // Só cria -- editar/apagar um registro já existente fica só com admin
       // (é um log de manutenção, não devia dar pra reescrever depois).

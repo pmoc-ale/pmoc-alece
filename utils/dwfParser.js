@@ -119,11 +119,17 @@ function dwfAnalisarW2X(texto) {
     layerOf.set(n, camadaAtual);
 
     if (el.tagName === "Outline_Ellipse" || el.tagName === "Filled_Ellipse") {
-      if (clusterAtual && clusterAtual.layer === camadaAtual && clusterAtual.lastNum === n) {
+      // Mesmo fallback usado pra camada das entities (linha ~289) -- sem
+      // isso, um cluster formado antes de qualquer Layer aparecer no fluxo
+      // ficava com layer=null, uma chave diferente de "SEM_CAMADA" (a que
+      // aparece de verdade no dropdown de camadas), e os candidatos
+      // desse cluster nunca apareciam pra seleção nenhuma.
+      const layerNormalizado = camadaAtual || "SEM_CAMADA";
+      if (clusterAtual && clusterAtual.layer === layerNormalizado && clusterAtual.lastNum === n) {
         clusterAtual.nums.push(n);
       } else {
         if (clusterAtual) clusters.push(clusterAtual);
-        clusterAtual = { layer: camadaAtual, nums: [n], lastNum: n };
+        clusterAtual = { layer: layerNormalizado, nums: [n], lastNum: n };
       }
       clusterAtual.lastNum = n;
     }

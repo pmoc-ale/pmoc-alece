@@ -227,6 +227,7 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   // zero) -- ver processarArquivo/confirmarAdicaoPredioNovo.
   modoAdicionarPredio: false,
   itensParaAdicionarPredio: null,
+  backupPlanilha: null,
   selecaoEquipamentos: new Set(),
   selecaoHistorico: new Set(),
   equipes: [],
@@ -1450,9 +1451,16 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
   const atualizacoes = [];
   const itensNovos = [];
   const resumo = [];
+  // Snapshot de TODOS os equipamentos dos prédios tocados por essa planilha
+  // (não só os que batem por Patrimônio) -- serve pro "Desfazer": cobre tanto
+  // os campos de cadastro alterados quanto qualquer reagendamento que o
+  // reagendarTudo() faça de tabela vindo depois (que mexe em todo mundo
+  // "Pendente" do(s) mesmo(s) prédio(s), não só nos itens novos).
+  const itensAntesSnapshot = [];
 
   for (const [local, itensDoPredio] of porPredio.entries()) {
     const existentesDoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
+    existentesDoLocal.forEach((e) => itensAntesSnapshot.push({ ...e }));
     const porPatrimonio = new Map();
     existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonio.set(e.patrimonio, e); });
 
@@ -1519,6 +1527,8 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
   }
 
   try {
+    await salvarBackupPlanilha([...porPredio.keys()], itensAntesSnapshot, itensNovos.map((i) => i.id), resumo.join(" "));
+
     const TAMANHO_LOTE = 400;
     for (let inicio = 0; inicio < atualizacoes.length; inicio += TAMANHO_LOTE) {
       const pedaco = atualizacoes.slice(inicio, inicio + TAMANHO_LOTE);
@@ -1558,6 +1568,122 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
   }
 }
 
+// --- Backup/undo da "Atualizar cadastro de prédio existente via planilha" ---
+// Guarda só o backup da ÚLTIMA atualização (documento de id fixo) -- é
+// apagado assim que usado, então não dá pra desfazer duas vezes seguidas.
+const BACKUP_PLANILHA_TAMANHO_LOTE = 300;
+
+async function salvarBackupPlanilha(predios, itensAntes, idsNovosCriados, resumoTexto) {
+  const numPartes = Math.max(1, Math.ceil(itensAntes.length / BACKUP_PLANILHA_TAMANHO_LOTE));
+  for (let i = 0; i < numPartes; i++) {
+    const pedaco = itensAntes.slice(i * BACKUP_PLANILHA_TAMANHO_LOTE, (i + 1) * BACKUP_PLANILHA_TAMANHO_LOTE);
+    await setDoc(doc(db, "ciclos", ESTADO.cicloAtual, "backupPlanilha", `parte_${i}`), { itens: pedaco });
+  }
+  const manifesto = {
+    criadoEm: new Date().toISOString(),
+    resumo: resumoTexto,
+    predios,
+    idsNovosCriados,
+    numPartes,
+  };
+  await setDoc(doc(db, "ciclos", ESTADO.cicloAtual, "backupPlanilha", "manifesto"), manifesto);
+  ESTADO.backupPlanilha = manifesto;
+  renderBotaoDesfazerPlanilha();
+}
+
+async function carregarBackupPlanilha() {
+  if (!ESTADO.cicloAtual) return;
+  try {
+    const snap = await getDoc(doc(db, "ciclos", ESTADO.cicloAtual, "backupPlanilha", "manifesto"));
+    ESTADO.backupPlanilha = snap.exists() ? snap.data() : null;
+  } catch (err) {
+    console.error("Erro ao verificar backup de planilha:", err);
+    ESTADO.backupPlanilha = null;
+  }
+  renderBotaoDesfazerPlanilha();
+}
+
+function renderBotaoDesfazerPlanilha() {
+  const card = $("#cardDesfazerPlanilha");
+  if (!card) return;
+  const manifesto = ESTADO.backupPlanilha;
+  if (!manifesto) { card.hidden = true; return; }
+  card.hidden = false;
+  const quando = new Date(manifesto.criadoEm).toLocaleString("pt-BR");
+  $("#desfazerPlanilhaTexto").textContent = `Última atualização por planilha (${quando}): ${manifesto.resumo}`;
+}
+
+async function apagarBackupPlanilha() {
+  const manifesto = ESTADO.backupPlanilha;
+  if (!manifesto) return;
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "ciclos", ESTADO.cicloAtual, "backupPlanilha", "manifesto"));
+  for (let i = 0; i < (manifesto.numPartes || 1); i++) {
+    batch.delete(doc(db, "ciclos", ESTADO.cicloAtual, "backupPlanilha", `parte_${i}`));
+  }
+  await batch.commit();
+  ESTADO.backupPlanilha = null;
+  renderBotaoDesfazerPlanilha();
+}
+
+async function desfazerUltimaAtualizacaoPlanilha() {
+  const manifesto = ESTADO.backupPlanilha;
+  if (!manifesto) { toast("Não há nenhuma atualização por planilha pra desfazer."); return; }
+
+  const quando = new Date(manifesto.criadoEm).toLocaleString("pt-BR");
+  const ok = window.confirm(
+    `Desfazer a atualização por planilha feita em ${quando}?\n\n${manifesto.resumo}\n\n` +
+    `Isso restaura o cadastro desses prédios (setor, ambiente, marca, modelo, capacidade, tipo de gás, status, ` +
+    `e qualquer data/agenda recalculada nessa atualização) pro jeito que estava antes, e remove os equipamentos ` +
+    `que foram criados por ela. Não afeta outros prédios.`
+  );
+  if (!ok) return;
+
+  try {
+    const itensRestaurados = [];
+    for (let i = 0; i < (manifesto.numPartes || 1); i++) {
+      const snap = await getDoc(doc(db, "ciclos", ESTADO.cicloAtual, "backupPlanilha", `parte_${i}`));
+      if (snap.exists()) itensRestaurados.push(...(snap.data().itens || []));
+    }
+
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < itensRestaurados.length; inicio += TAMANHO_LOTE) {
+      const pedaco = itensRestaurados.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((item) => batch.set(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), item));
+      await batch.commit();
+    }
+
+    const idsNovos = manifesto.idsNovosCriados || [];
+    for (let inicio = 0; inicio < idsNovos.length; inicio += TAMANHO_LOTE) {
+      const pedaco = idsNovos.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((id) => batch.delete(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id)));
+      await batch.commit();
+    }
+
+    // Atualiza o estado local na hora (mesmo truque usado no resto do app),
+    // sem esperar o listener do Firebase avisar.
+    const restauradoPorId = new Map(itensRestaurados.map((item) => [item.id, item]));
+    const idsNovosSet = new Set(idsNovos);
+    ESTADO.equipamentos = ESTADO.equipamentos
+      .filter((e) => !idsNovosSet.has(e.id))
+      .map((e) => restauradoPorId.get(e.id) || e);
+
+    await registrarAuditoria("Desfazer atualização por planilha", manifesto.resumo);
+    await apagarBackupPlanilha();
+
+    renderCalendar();
+    renderDashboard();
+    renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
+
+    toast("Atualização por planilha desfeita.");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao desfazer: " + err.message);
+  }
+}
+
 function renderPreview(itens) {
   const card = $("#previewCard");
   card.hidden = false;
@@ -1579,6 +1705,8 @@ $("#btnGerar").addEventListener("click", () => {
   if (ESTADO.modoAdicionarPredio) confirmarAdicaoPredioNovo();
   else gerarCronograma();
 });
+
+$("#btnDesfazerPlanilha")?.addEventListener("click", desfazerUltimaAtualizacaoPlanilha);
 
 function estaEmFeriado(date) {
   if (!date || !ESTADO.feriados || ESTADO.feriados.length === 0) return false;
@@ -2087,6 +2215,7 @@ async function inicializarApp() {
     iniciarSincronizacaoOrdens();
     iniciarSincronizacaoCiclos();
     iniciarSincronizacaoPlantas();
+    carregarBackupPlanilha();
 }
 
 let modoCadastro = false;
