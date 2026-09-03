@@ -5183,10 +5183,18 @@ async function renderMarcadoresPlanta() {
         arrastando = false;
         if (moveu > 5) {
           elemento.dataset.arrastou = "1";
-          const planta = plantaPorId(ESTADO.plantaSelecionada);
+          // Sem encaixe no candidato mais próximo aqui -- diferente de
+          // marcar um aparelho pela primeira vez (onde faz sentido
+          // "colar" no símbolo detectado), isso aqui é REPOSICIONAR um
+          // aparelho que já está marcado: a pessoa está corrigindo de
+          // propósito, e o raio de encaixe (~1/30 da largura da planta)
+          // é maior que a distância real entre aparelhos vizinhos em
+          // várias plantas -- Jovanna reportou que a máquina "voltava
+          // pro lugar anterior" sozinha, porque o encaixe puxava de
+          // volta pro candidato de onde ela tinha acabado de tirar. Vai
+          // exatamente onde ela soltou.
           const { x: nx, y: ny } = svgPontoDeClique(svg, ev);
-          const cand = candidatoMaisProximo(planta, nx, ny);
-          aoMoverPara(cand ? cand.x : Math.round(nx * 100) / 100, cand ? cand.y : Math.round(ny * 100) / 100);
+          aoMoverPara(Math.round(nx * 100) / 100, Math.round(ny * 100) / 100);
         }
       });
       elemento.addEventListener("pointercancel", () => { arrastando = false; });
