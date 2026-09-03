@@ -662,6 +662,43 @@ function toast(msg) {
   toast._t = setTimeout(() => el.classList.remove("show"), 2600);
 }
 
+// Substitui window.confirm() por uma janela com a cara do sistema --
+// usada no fluxo de subir planilha (Jovanna achou as caixinhas do
+// navegador feias). Devolve uma Promise<boolean>, então quem chama usa
+// "await" no lugar do valor direto que confirm() devolvia.
+function confirmarModal({ titulo = "Confirmar", corpoHtml = "", textoConfirmar = "OK", textoCancelar = "Cancelar", perigo = false }) {
+  return new Promise((resolve) => {
+    const overlay = $("#modalConfirmOverlay");
+    const card = overlay.querySelector(".modal-confirm-card");
+    card.classList.toggle("perigo", perigo);
+    $("#modalConfirmTitulo").textContent = titulo;
+    $("#modalConfirmCorpo").innerHTML = corpoHtml;
+    const btnConfirmar = $("#modalConfirmConfirmar");
+    const btnCancelar = $("#modalConfirmCancelar");
+    btnConfirmar.textContent = textoConfirmar;
+    btnConfirmar.className = "btn " + (perigo ? "danger-inverted" : "primary");
+    btnCancelar.textContent = textoCancelar;
+    overlay.hidden = false;
+
+    function limpar() {
+      overlay.hidden = true;
+      btnConfirmar.removeEventListener("click", aoConfirmar);
+      btnCancelar.removeEventListener("click", aoCancelar);
+      overlay.removeEventListener("click", aoClicarFora);
+      document.removeEventListener("keydown", aoTeclar);
+    }
+    function aoConfirmar() { limpar(); resolve(true); }
+    function aoCancelar() { limpar(); resolve(false); }
+    function aoClicarFora(ev) { if (ev.target === overlay) aoCancelar(); }
+    function aoTeclar(ev) { if (ev.key === "Escape") aoCancelar(); }
+
+    btnConfirmar.addEventListener("click", aoConfirmar);
+    btnCancelar.addEventListener("click", aoCancelar);
+    overlay.addEventListener("click", aoClicarFora);
+    document.addEventListener("keydown", aoTeclar);
+  });
+}
+
 $all(".subtab").forEach((btn) => {
   btn.addEventListener("click", () => {
     $all(".subtab").forEach((b) => b.classList.remove("active"));
@@ -982,15 +1019,17 @@ function processarArquivo(file) {
           // vez de atualizar o certo -- o número de "novos" ficaria
           // maior do que ela esperava).
           const diff = compararComPlanilha(resultado.itens);
-          const detalhePorPredio = diff.porPredioResumo
-            .map((p) => `${p.local}: ${p.atualizar} atualiza${p.atualizar === 1 ? "" : "m"}, ${p.novos} novo(s), ${p.sumidos} sumido(s) da planilha`)
-            .join("\n");
-          const querAtualizar = window.confirm(
-            `Prévia da atualização:\n\n${detalhePorPredio}\n\n` +
-            `"Sumido" = já está cadastrado mas o Patrimônio não apareceu nessa planilha -- NÃO será apagado.\n\n` +
-            `Se os números de "novo(s)" parecem altos demais, pode ser um erro de digitação no Patrimônio da planilha (em vez de casar com quem já existe, criaria um cadastro duplicado) -- confira antes de confirmar.\n\n` +
-            `OK = confirmar a atualização.\nCancelar = não atualizar agora.`
-          );
+          const querAtualizar = await confirmarModal({
+            titulo: "Prévia da atualização",
+            corpoHtml:
+              `<ul>${diff.porPredioResumo.map((p) =>
+                `<li><strong>${escapeHtml(p.local)}</strong>: ${p.atualizar} atualiza${p.atualizar === 1 ? "" : "m"}, ${p.novos} novo(s), ${p.sumidos} sumido(s) da planilha</li>`
+              ).join("")}</ul>` +
+              `<p><strong>"Sumido"</strong> = já está cadastrado mas o Patrimônio não apareceu nessa planilha -- não será apagado.</p>` +
+              `<div class="modal-confirm-aviso">Se os números de "novo(s)" parecerem altos demais, pode ser um erro de digitação no Patrimônio da planilha (em vez de casar com quem já existe, criaria um cadastro duplicado) -- confira antes de confirmar.</div>`,
+            textoConfirmar: "Confirmar atualização",
+            textoCancelar: "Não atualizar agora",
+          });
           if (querAtualizar) {
             await atualizarCadastroPredioExistente(resultado.itens);
             renderSumidosPlanilha(diff.sumidos);
@@ -999,12 +1038,15 @@ function processarArquivo(file) {
         }
 
         if (prediosNovosNaPlanilha.length) {
-          const querAdicionar = window.confirm(
-            (prediosJaExistemNaPlanilha.length ? `Essa planilha também tem prédio(s) NOVO(S): ` : `Essa planilha tem prédio(s) NOVO(S): `) +
-            `${prediosNovosNaPlanilha.join(", ")}.\n\n` +
-            `OK = ADICIONAR esse(s) prédio(s) ao cronograma atual (abre a tela de Cronograma pra você ajustar a capacidade) -- os outros prédios continuam exatamente como estão.\n` +
-            `Cancelar = não adicionar agora.`
-          );
+          const querAdicionar = await confirmarModal({
+            titulo: "Prédio(s) novo(s) na planilha",
+            corpoHtml:
+              `<p>${prediosJaExistemNaPlanilha.length ? "Essa planilha também tem" : "Essa planilha tem"} prédio(s) novo(s): ` +
+              `<strong>${escapeHtml(prediosNovosNaPlanilha.join(", "))}</strong>.</p>` +
+              `<p>Confirmando, você vai pra tela de Cronograma pra ajustar a capacidade desse(s) prédio(s) -- os outros prédios continuam exatamente como estão.</p>`,
+            textoConfirmar: "Adicionar ao cronograma",
+            textoCancelar: "Não adicionar agora",
+          });
           if (querAdicionar) {
             const linhasDesses = todasAsLinhas.filter((l) => prediosNovosNaPlanilha.includes((l.__local || "SEDE").trim()));
             const resultado = linhasParaItens(linhasDesses);
@@ -1020,9 +1062,15 @@ function processarArquivo(file) {
 
         if (algumaAcaoTomada) return;
 
-        const querSubstituir = window.confirm(
-          `Substituir o cronograma INTEIRO por essa planilha?\n\nIsso apaga TODOS os prédios atuais (equipamento, datas, status de cada um) e recomeça do zero só com o que está nessa planilha. Essa ação não pode ser desfeita.`
-        );
+        const querSubstituir = await confirmarModal({
+          titulo: "Substituir o cronograma inteiro?",
+          corpoHtml:
+            `<p>Isso apaga <strong>todos os prédios atuais</strong> (equipamento, datas, status de cada um) e recomeça do zero só com o que está nessa planilha.</p>` +
+            `<div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+          textoConfirmar: "Substituir tudo",
+          textoCancelar: "Cancelar",
+          perigo: true,
+        });
         if (!querSubstituir) return;
       }
 
@@ -1631,12 +1679,17 @@ async function desfazerUltimaAtualizacaoPlanilha() {
   if (!manifesto) { toast("Não há nenhuma atualização por planilha pra desfazer."); return; }
 
   const quando = new Date(manifesto.criadoEm).toLocaleString("pt-BR");
-  const ok = window.confirm(
-    `Desfazer a atualização por planilha feita em ${quando}?\n\n${manifesto.resumo}\n\n` +
-    `Isso restaura o cadastro desses prédios (setor, ambiente, marca, modelo, capacidade, tipo de gás, status, ` +
-    `e qualquer data/agenda recalculada nessa atualização) pro jeito que estava antes, e remove os equipamentos ` +
-    `que foram criados por ela. Não afeta outros prédios.`
-  );
+  const ok = await confirmarModal({
+    titulo: "Desfazer atualização por planilha?",
+    corpoHtml:
+      `<p>Feita em <strong>${quando}</strong>: ${escapeHtml(manifesto.resumo)}</p>` +
+      `<p>Isso restaura o cadastro desses prédios (setor, ambiente, marca, modelo, capacidade, tipo de gás, status, ` +
+      `e qualquer data/agenda recalculada nessa atualização) pro jeito que estava antes, e remove os equipamentos ` +
+      `que foram criados por ela.</p>` +
+      `<div class="modal-confirm-aviso">Não afeta outros prédios.</div>`,
+    textoConfirmar: "Desfazer",
+    textoCancelar: "Manter como está",
+  });
   if (!ok) return;
 
   try {

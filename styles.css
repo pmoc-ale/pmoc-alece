@@ -158,6 +158,70 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 }
 .auth-card input:focus { border-color: var(--azul-700); background: var(--superficie); }
 
+/* Modal de confirmação -- substitui o window.confirm() feio do navegador
+   no fluxo de subir planilha (a Jovanna pediu pra ter a cara do sistema). */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 38, 61, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: var(--sp-4);
+}
+.modal-overlay[hidden] { display: none; }
+
+.modal-confirm-card {
+  background: var(--superficie);
+  width: 100%;
+  max-width: 460px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--sp-5);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-elevada);
+  border-top: 3px solid var(--dourado);
+}
+.modal-confirm-card.perigo { border-top-color: var(--vermelho); }
+
+.modal-confirm-card h2 {
+  font-size: 18px;
+  margin-bottom: var(--sp-3);
+  color: var(--texto);
+}
+
+.modal-confirm-corpo {
+  font-size: 14px;
+  color: var(--texto-suave);
+  line-height: 1.5;
+}
+.modal-confirm-corpo p { margin: 0 0 var(--sp-3); }
+.modal-confirm-corpo p:last-child { margin-bottom: 0; }
+.modal-confirm-corpo ul { margin: 0 0 var(--sp-3); padding-left: var(--sp-4); }
+.modal-confirm-corpo li { margin-bottom: 4px; }
+.modal-confirm-corpo strong { color: var(--texto); }
+.modal-confirm-aviso {
+  background: var(--dourado-tint);
+  border-left: 3px solid var(--dourado);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--raio-pequeno);
+  font-size: 13px;
+  margin: var(--sp-3) 0 0;
+}
+.modal-confirm-card.perigo .modal-confirm-aviso {
+  background: var(--vermelho-fundo);
+  border-left-color: var(--vermelho);
+  color: var(--vermelho-texto);
+}
+
+.modal-confirm-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
 /* Topbar */
 .topbar {
   background: var(--azul-900);

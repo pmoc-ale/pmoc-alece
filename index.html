@@ -696,9 +696,19 @@
   <div class="drawer-body" id="modalConclusaoCorpo"></div>
 </aside>
 <div class="toast" id="toast"></div>
+<div class="modal-overlay" id="modalConfirmOverlay" hidden>
+  <div class="modal-confirm-card">
+    <h2 id="modalConfirmTitulo">Confirmar</h2>
+    <div id="modalConfirmCorpo" class="modal-confirm-corpo"></div>
+    <div class="modal-confirm-acoes">
+      <button class="btn ghost" id="modalConfirmCancelar">Cancelar</button>
+      <button class="btn primary" id="modalConfirmConfirmar">OK</button>
+    </div>
+  </div>
+</div>
 <script src="utils/pdfGenerator.js"></script>
-<script src="utils/dwfParser.js?v=5"></script>
+<script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=36"></script>
+<script type="module" src="app.js?v=37"></script>
 </body>
 </html>
