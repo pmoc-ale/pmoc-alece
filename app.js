@@ -931,8 +931,10 @@ fileInput.addEventListener("change", () => {
 
 function processarArquivo(file) {
   $("#dropzoneLabel").textContent = `Lendo "${file.name}"...`;
+  const cardSumidosAntigo = $("#cardSumidosPlanilha");
+  if (cardSumidosAntigo) cardSumidosAntigo.hidden = true;
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, { type: "array" });
@@ -968,16 +970,29 @@ function processarArquivo(file) {
         let algumaAcaoTomada = false;
 
         if (prediosJaExistemNaPlanilha.length) {
+          const linhasDesses = todasAsLinhas.filter((l) => prediosJaExistemNaPlanilha.includes((l.__local || "SEDE").trim()));
+          const resultado = linhasParaItens(linhasDesses);
+          if (resultado.erro) { toast(resultado.erro); return; }
+          // Calcula os números de verdade ANTES de perguntar -- assim a
+          // pergunta já mostra uma prévia real (quantos vão atualizar,
+          // quantos são novos, quantos sumiram), em vez de um texto
+          // genérico. Isso ajuda a pegar de cara um erro de digitação no
+          // Patrimônio da planilha (que criaria um cadastro duplicado em
+          // vez de atualizar o certo -- o número de "novos" ficaria
+          // maior do que ela esperava).
+          const diff = compararComPlanilha(resultado.itens);
+          const detalhePorPredio = diff.porPredioResumo
+            .map((p) => `${p.local}: ${p.atualizar} atualiza${p.atualizar === 1 ? "" : "m"}, ${p.novos} novo(s), ${p.sumidos} sumido(s) da planilha`)
+            .join("\n");
           const querAtualizar = window.confirm(
-            `Essa planilha tem dado(s) de ${prediosJaExistemNaPlanilha.join(", ")}, que já está(ão) cadastrado(s).\n\n` +
-            `OK = ATUALIZAR o cadastro deles com essa planilha (casa pelo Patrimônio) -- corrige/completa quem já existe e adiciona quem for novo, SEM apagar nada e sem mexer em status/data/equipe de ninguém.\n` +
-            `Cancelar = não atualizar esses prédios agora.`
+            `Prévia da atualização:\n\n${detalhePorPredio}\n\n` +
+            `"Sumido" = já está cadastrado mas o Patrimônio não apareceu nessa planilha -- NÃO será apagado.\n\n` +
+            `Se os números de "novo(s)" parecem altos demais, pode ser um erro de digitação no Patrimônio da planilha (em vez de casar com quem já existe, criaria um cadastro duplicado) -- confira antes de confirmar.\n\n` +
+            `OK = confirmar a atualização.\nCancelar = não atualizar agora.`
           );
           if (querAtualizar) {
-            const linhasDesses = todasAsLinhas.filter((l) => prediosJaExistemNaPlanilha.includes((l.__local || "SEDE").trim()));
-            const resultado = linhasParaItens(linhasDesses);
-            if (resultado.erro) { toast(resultado.erro); return; }
-            atualizarCadastroPredioExistente(resultado.itens);
+            await atualizarCadastroPredioExistente(resultado.itens);
+            renderSumidosPlanilha(diff.sumidos);
             algumaAcaoTomada = true;
           }
         }
@@ -1352,6 +1367,75 @@ async function confirmarAdicaoPredioNovo() {
 //   - quem sumiu da planilha (existia, não está mais nela) NÃO é
 //     apagado -- fica como está. Decisão de propósito: apagar sozinho é
 //     arriscado demais se a planilha tiver algum erro.
+// Calcula (sem escrever nada no Firebase) o que vai acontecer se essa
+// planilha for aplicada num prédio que já existe: quem vai ser
+// ATUALIZADO (casou pelo Patrimônio com um equipamento já cadastrado),
+// quem é NOVO (não casou com nada) e quem SUMIU (estava cadastrado
+// nesse prédio, mas o Patrimônio dele não apareceu nessa planilha).
+// Usada em dois lugares: pra montar a prévia com números de verdade
+// ANTES de perguntar se ela quer confirmar (evita, por exemplo, um erro
+// de digitação no Patrimônio da planilha virar um cadastro duplicado em
+// vez de atualizar o certo) e pra montar o relatório de "sumiu da
+// planilha" depois que a atualização roda.
+function compararComPlanilha(itensDaPlanilha) {
+  const porPredio = new Map();
+  itensDaPlanilha.forEach((item) => {
+    const local = item.local || "SEDE";
+    if (!porPredio.has(local)) porPredio.set(local, []);
+    porPredio.get(local).push(item);
+  });
+
+  let totalAtualizar = 0, totalNovos = 0;
+  const sumidos = [];
+  const porPredioResumo = [];
+
+  for (const [local, itensDoPredio] of porPredio.entries()) {
+    const existentesDoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
+    const patrimoniosNaPlanilha = new Set(itensDoPredio.filter((i) => i.patrimonio).map((i) => i.patrimonio));
+    const porPatrimonioExistente = new Map();
+    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonioExistente.set(e.patrimonio, e); });
+
+    let atualizarPredio = 0, novosPredio = 0;
+    itensDoPredio.forEach((item) => {
+      if (item.patrimonio && porPatrimonioExistente.has(item.patrimonio)) atualizarPredio++;
+      else novosPredio++;
+    });
+
+    const sumidosDoPredio = existentesDoLocal.filter((e) => e.patrimonio && !patrimoniosNaPlanilha.has(e.patrimonio));
+
+    totalAtualizar += atualizarPredio;
+    totalNovos += novosPredio;
+    sumidos.push(...sumidosDoPredio);
+    porPredioResumo.push({ local, atualizar: atualizarPredio, novos: novosPredio, sumidos: sumidosDoPredio.length });
+  }
+
+  return { porPredioResumo, totalAtualizar, totalNovos, sumidos };
+}
+
+function renderSumidosPlanilha(sumidos) {
+  const card = $("#cardSumidosPlanilha");
+  if (!card) return;
+  if (!sumidos.length) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  $("#sumidosCount").textContent = `${sumidos.length} item(ns)`;
+  $("#sumidosExplicacao").textContent =
+    `Esses equipamentos estão cadastrados no sistema, mas o Patrimônio deles não apareceu na última planilha que você subiu. ` +
+    `Ninguém foi apagado -- se algum realmente saiu de uso, remova manualmente na aba Equipamentos.`;
+  const cols = [
+    ["Patrimônio", (i) => i.patrimonio],
+    ["Prédio", (i) => i.local || "SEDE"],
+    ["Setor", (i) => i.setor],
+    ["Ambiente", (i) => i.ambiente],
+    ["Status", (i) => i.statusPreventiva],
+  ];
+  const table = $("#sumidosTable");
+  table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead>
+    <tbody>${sumidos.map((i) => `<tr>${cols.map((c) => `<td>${escapeHtml(String(c[1](i) ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+}
+
 async function atualizarCadastroPredioExistente(itensDaPlanilha) {
   const CAMPOS_CADASTRO = ["setor", "ambiente", "marca", "modelo", "capacidade", "tipoGas", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
 
