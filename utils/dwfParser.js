@@ -285,10 +285,22 @@ function dwfAgruparPorProximidade(itens, limiar) {
 // e parecidas são "pedaços do mesmo aparelho"; o salto grande seguinte é
 // onde começaria a juntar aparelhos DIFERENTES. Sem um salto claro (ou
 // menos de 2 candidatos pequenos), não mexe em nada.
-function dwfFundirFragmentosPequenos(candidatos, limiarMinimo) {
-  const grandes = candidatos.filter((c) => c.qtdPontos >= limiarMinimo);
-  const pequenos = candidatos.filter((c) => c.qtdPontos < limiarMinimo);
-  if (pequenos.length < 2) return candidatos;
+//
+// Já filtra o resultado pelo limiar de pontos aqui dentro (quem chama não
+// filtra de novo) -- porque o limiar usado pode ser ADAPTATIVO, não
+// sempre o mesmo número fixo: confirmado num arquivo real (ANEXO_II 2º
+// piso, 23 aparelhos reais confirmados) que às vezes cada aparelho é
+// desenhado com só 3 objetos, bem abaixo do "mínimo de 9" calibrado no
+// 1º piso. Quando os grupos fundidos convergem fortemente pra um mesmo
+// tamanho (moda com maioria clara, >=50% dos grupos), esse tamanho
+// provavelmente É o símbolo completo de verdade NESSA planta, e passa a
+// valer como limiar -- senão, mantém o limiar fixo de sempre (mais
+// seguro quando os tamanhos vêm espalhados, sinal de ruído misturado
+// junto, não um símbolo desenhado diferente).
+function dwfFundirFragmentosPequenos(candidatos, limiarPadrao) {
+  const grandes = candidatos.filter((c) => c.qtdPontos >= limiarPadrao);
+  const pequenos = candidatos.filter((c) => c.qtdPontos < limiarPadrao);
+  if (pequenos.length < 2) return grandes;
 
   const n = pequenos.length;
   const pares = [];
@@ -322,7 +334,7 @@ function dwfFundirFragmentosPequenos(candidatos, limiarMinimo) {
     const salto = distanciasDeFusao[k] - distanciasDeFusao[k - 1];
     if (salto > melhorSalto) { melhorSalto = salto; melhorIdx = k; }
   }
-  if (melhorIdx < 0) return candidatos;
+  if (melhorIdx < 0) return grandes;
 
   const raioDeCorte = (distanciasDeFusao[melhorIdx - 1] + distanciasDeFusao[melhorIdx]) / 2;
   const itensParaAgrupar = pequenos.map((c) => ({ ponto: [c.x, c.y], origem: c }));
@@ -344,7 +356,25 @@ function dwfFundirFragmentosPequenos(candidatos, limiarMinimo) {
     };
   });
 
-  return [...grandes, ...fundidos];
+  // Moda dos tamanhos fundidos: se uma maioria clara (>=50%, com pelo
+  // menos 3 grupos fundidos no total) convergiu pro MESMO tamanho, é
+  // porque esse é o símbolo completo de verdade nessa planta -- vale como
+  // limiar em vez do fixo (nunca maior que o fixo: só serve pra ACEITAR
+  // símbolo menor legítimo, nunca pra afrouxar o limiar de ruído).
+  let limiarEfetivo = limiarPadrao;
+  if (fundidos.length >= 3) {
+    const contagemPorTamanho = new Map();
+    fundidos.forEach((f) => contagemPorTamanho.set(f.qtdPontos, (contagemPorTamanho.get(f.qtdPontos) || 0) + 1));
+    let modaTamanho = null, modaContagem = 0;
+    for (const [tamanho, contagem] of contagemPorTamanho.entries()) {
+      if (contagem > modaContagem) { modaContagem = contagem; modaTamanho = tamanho; }
+    }
+    if (modaContagem / fundidos.length >= 0.5) {
+      limiarEfetivo = Math.min(limiarPadrao, modaTamanho);
+    }
+  }
+
+  return [...grandes, ...fundidos.filter((f) => f.qtdPontos >= limiarEfetivo)];
 }
 
 // Função principal: recebe o ArrayBuffer do arquivo .dwf/.dwfx enviado
@@ -532,11 +562,12 @@ async function parseDwf(arrayBuffer) {
   }
   const marcadoresPorCamada = {};
   for (const [layer, pontosBrutos] of candidatosPorCamada.entries()) {
+    // dwfFundirFragmentosPequenos já filtra pelo limiar (fixo ou
+    // adaptativo) -- não filtra de novo aqui, só deduplica posição.
     const pontos = dwfFundirFragmentosPequenos(pontosBrutos, QTD_PONTOS_MINIMA);
     const vistos = new Set();
     const unicos = [];
     for (const p of pontos) {
-      if (p.qtdPontos < QTD_PONTOS_MINIMA) continue;
       const chave = Math.round(p.x * 10) + "," + Math.round(p.y * 10);
       if (vistos.has(chave)) continue;
       vistos.add(chave);
