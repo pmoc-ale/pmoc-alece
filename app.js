@@ -5489,6 +5489,35 @@ async function renderMarcadoresPlanta() {
           aoClicarCandidatoNaoIdentificado(planta, cand, retangulo);
         });
         gDestaques.appendChild(retangulo);
+      } else if (cand.bboxLocal) {
+        // Mesmo caso do marcador já confirmado (ver marcarAparelho): um
+        // candidato fundido por proximidade ou vindo de um bloco dividido
+        // não tem "nums" (não existe um desenho original só dele pra
+        // destacar), mas tem a ÁREA calculada -- desenha o contorno dessa
+        // área em vez de cair num círculo genérico sem relação nenhuma
+        // com o tamanho/posição real do que foi detectado.
+        const { x: bx, y: by, largura, altura } = cand.bboxLocal;
+        const pad = Math.max(largura, altura, 1) * 0.2;
+        const retangulo = document.createElementNS(nsSvg, "rect");
+        retangulo.setAttribute("x", bx - pad);
+        retangulo.setAttribute("y", by - pad);
+        retangulo.setAttribute("width", largura + pad * 2);
+        retangulo.setAttribute("height", altura + pad * 2);
+        retangulo.setAttribute("rx", pad * 0.6);
+        retangulo.setAttribute("fill", "transparent");
+        retangulo.setAttribute("stroke", "#8B98A6");
+        retangulo.setAttribute("stroke-dasharray", `${pad * 0.6},${pad * 0.6}`);
+        retangulo.setAttribute("stroke-width", pad * 0.3);
+        retangulo.dataset.destaque = "1";
+        retangulo.style.cursor = marcacaoEstaAtiva() ? "pointer" : "default";
+        if (candidatoSelecionadoParaConfirmar?.chave === chaveCandidato(cand)) retangulo.classList.add("planta-candidato-selecionado");
+        retangulo.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          aoClicarCandidatoNaoIdentificado(planta, cand, retangulo);
+        });
+        // bboxLocal já vem em espaço TRANSFORMADO -- por isso gMarcadores
+        // (fora do gRaiz), não gDestaques (mesmo motivo do marcarAparelho).
+        gMarcadores.appendChild(retangulo);
       } else {
         const c = document.createElementNS(nsSvg, "circle");
         c.setAttribute("cx", cand.x);

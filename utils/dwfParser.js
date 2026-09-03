@@ -242,6 +242,16 @@ function dwfSubpathsDoD(d) {
   return inicios;
 }
 
+// União-busca (union-find) básica com compressão de caminho -- usada tanto
+// pelo agrupamento por proximidade quanto pela fusão de fragmentos
+// pequenos abaixo, pra não manter duas cópias da mesma lógica.
+function dwfCriarUniaoBusca(n) {
+  const pai = Array.from({ length: n }, (_, i) => i);
+  const acha = (i) => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+  const une = (i, j) => { const ri = acha(i), rj = acha(j); if (ri !== rj) pai[ri] = rj; return ri !== rj; };
+  return { acha, une };
+}
+
 // Agrupa itens (cada um com um campo .ponto = [x,y]) por proximidade
 // espacial usando union-find ("single linkage": basta UM par próximo o
 // suficiente pra unir dois grupos) -- não dá pra andar em sequência
@@ -249,9 +259,7 @@ function dwfSubpathsDoD(d) {
 // de um mesmo aparelho fora de ordem.
 function dwfAgruparPorProximidade(itens, limiar) {
   const n = itens.length;
-  const pai = Array.from({ length: n }, (_, i) => i);
-  const acha = (i) => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
-  const une = (i, j) => { const ri = acha(i), rj = acha(j); if (ri !== rj) pai[ri] = rj; };
+  const { acha, une } = dwfCriarUniaoBusca(n);
   const limiar2 = limiar * limiar;
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
@@ -312,13 +320,11 @@ function dwfFundirFragmentosPequenos(candidatos, limiarPadrao) {
   }
   pares.sort((a, b) => a.d - b.d);
 
-  const pai = Array.from({ length: n }, (_, i) => i);
-  const acha = (i) => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+  const { une } = dwfCriarUniaoBusca(n);
   const distanciasDeFusao = [];
   let componentes = n;
   for (const { i, j, d } of pares) {
-    const ri = acha(i), rj = acha(j);
-    if (ri !== rj) { pai[ri] = rj; componentes--; distanciasDeFusao.push(d); }
+    if (une(i, j)) { componentes--; distanciasDeFusao.push(d); }
     if (componentes === 1) break;
   }
 
@@ -340,21 +346,36 @@ function dwfFundirFragmentosPequenos(candidatos, limiarPadrao) {
   const itensParaAgrupar = pequenos.map((c) => ({ ponto: [c.x, c.y], origem: c }));
   const grupos = dwfAgruparPorProximidade(itensParaAgrupar, raioDeCorte);
 
+  // Só vira "fundido" quem realmente se juntou com pelo menos outro
+  // fragmento (g.length >= 2) -- um fragmento que ficou sozinho (não
+  // achou ninguém perto o suficiente) não tem nenhuma evidência nova de
+  // que faz parte de um símbolo maior, então é descartado aqui, do
+  // mesmo jeito que já era antes dessa função existir. Sem essa
+  // exigência, um fragmento isolado (possivelmente ruído, ex.: parafuso,
+  // cota) entraria na votação da moda abaixo com o mesmo peso de um
+  // grupo de verdade, podendo até vencer a votação se por coincidência
+  // vários ruídos isolados tiverem o mesmo tamanho -- e, pior, um
+  // fragmento sozinho gera um bboxLocal de área ZERO (min==max num único
+  // ponto), o que viraria uma marcação praticamente invisível se
+  // confirmada.
+  //
   // Mesmo motivo do split de outlier acima: um grupo fundido de vários
   // objetos diferentes não tem um "desenho original" único pra destacar
   // (nums fica vazio), então guarda a ÁREA (bbox) coberta pelos pedaços
   // fundidos pra desenhar o contorno da marcação.
-  const fundidos = grupos.map((g) => {
-    const xs = g.map((it) => it.ponto[0]), ys = g.map((it) => it.ponto[1]);
-    const qtdPontos = g.reduce((s, it) => s + it.origem.qtdPontos, 0);
-    return {
-      x: xs.reduce((s, v) => s + v, 0) / xs.length,
-      y: ys.reduce((s, v) => s + v, 0) / ys.length,
-      qtdPontos,
-      nums: [],
-      bboxLocal: { x: Math.min(...xs), y: Math.min(...ys), largura: Math.max(...xs) - Math.min(...xs), altura: Math.max(...ys) - Math.min(...ys) },
-    };
-  });
+  const fundidos = grupos
+    .filter((g) => g.length >= 2)
+    .map((g) => {
+      const xs = g.map((it) => it.ponto[0]), ys = g.map((it) => it.ponto[1]);
+      const qtdPontos = g.reduce((s, it) => s + it.origem.qtdPontos, 0);
+      return {
+        x: xs.reduce((s, v) => s + v, 0) / xs.length,
+        y: ys.reduce((s, v) => s + v, 0) / ys.length,
+        qtdPontos,
+        nums: [],
+        bboxLocal: { x: Math.min(...xs), y: Math.min(...ys), largura: Math.max(...xs) - Math.min(...xs), altura: Math.max(...ys) - Math.min(...ys) },
+      };
+    });
 
   // Moda dos tamanhos fundidos: se uma maioria clara (>=50%, com pelo
   // menos 3 grupos fundidos no total) convergiu pro MESMO tamanho, é
