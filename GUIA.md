@@ -78,8 +78,14 @@ Seu arquivo precisa ter as colunas:
 
 **Se já existe um cronograma rodando:**
 Ao subir uma planilha nova nessa situação, o sistema pergunta o que fazer:
-- **Adicionar** — leva pra mesma tela de "Cronograma" (Parâmetros Iniciais + Capacidade por Prédio) que a primeira configuração usa, só que mostrando apenas o(s) prédio(s) **novo(s)** dessa planilha. Ajuste dias úteis, data de início e a capacidade (inclusive "Fazer rodízio", se quiser) e clique em **"Adicionar ao Cronograma"**. Os prédios que já existiam continuam exatamente como estavam — mesma equipe, mesmas datas, nada muda. Um prédio que já está cadastrado é sempre ignorado nesse caminho (avisa na tela).
-- **Substituir tudo** — apaga o cronograma inteiro (todos os prédios) e recomeça do zero só com o que está nessa planilha. Use só quando quiser reiniciar tudo, não pra atualizar um prédio isolado.
+O sistema separa a planilha em duas categorias (pelo nome do prédio de cada aba) e pergunta uma coisa pra cada:
+
+- **Prédio(s) que já existe(m) no cadastro** — pergunta se quer **ATUALIZAR** o cadastro deles com essa planilha. Casa cada linha pelo número de **Patrimônio**: quem já existe tem os dados de cadastro corrigidos/completados (setor, ambiente, marca, modelo, capacidade, tipo de gás, status), e quem for realmente novo na planilha é adicionado e entra automaticamente no cronograma. **Nada é apagado** — um equipamento que já estava cadastrado mas sumiu da planilha continua existindo do jeito que estava (você decide remover na mão, se quiser); e o status/data/equipe já agendados de quem já existia nunca são tocados.
+- **Prédio(s) NOVO(S)** — pergunta se quer **ADICIONAR**. Leva pra mesma tela de "Cronograma" (Parâmetros Iniciais + Capacidade por Prédio) que a primeira configuração usa, só que mostrando apenas o(s) prédio(s) novo(s). Ajuste dias úteis, data de início e a capacidade (inclusive "Fazer rodízio", se quiser) e clique em **"Adicionar ao Cronograma"**.
+
+Em ambos os casos, os outros prédios já cadastrados continuam exatamente como estavam — mesma equipe, mesmas datas, nada muda.
+
+- **Substituir tudo** — só aparece se você recusar as opções acima. Apaga o cronograma inteiro (todos os prédios) e recomeça do zero só com o que está nessa planilha. Use só quando quiser reiniciar tudo, não pra atualizar ou acrescentar um prédio isolado.
 
 **Exemplo:**
 

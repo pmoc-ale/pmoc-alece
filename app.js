@@ -947,47 +947,63 @@ function processarArquivo(file) {
       if (!todasAsLinhas.length) throw new Error("Planilha vazia.");
 
       // Já existe um cronograma rodando -- subir uma planilha nova
-      // sempre apagava TUDO e recomeçava do zero, então um prédio que
-      // não estivesse nessa planilha nova (ex: subir só o Anexo 2 numa
-      // semana, tendo já subido o Anexo 3 antes) simplesmente sumia do
-      // cronograma. Agora pergunta: acrescentar só o(s) prédio(s) novo(s)
-      // dessa planilha ao que já está rodando (sem tocar em nada dos
-      // outros -- outra equipe, próprio ritmo, como já funciona hoje),
-      // ou substituir tudo mesmo (fluxo antigo, intacto abaixo).
+      // sempre apagava TUDO e recomeçava do zero. Agora separa a
+      // planilha em duas categorias e pergunta uma coisa pra cada:
+      //   - prédio NOVO (não existia): pergunta se quer ADICIONAR (leva
+      //     pra tela de Cronograma, só com ele, pra ajustar capacidade).
+      //   - prédio que JÁ EXISTE: pergunta se quer ATUALIZAR o cadastro
+      //     dele com essa planilha (casa por patrimônio, corrige/
+      //     completa quem já existe, adiciona quem for novo -- nunca
+      //     apaga nem mexe em status/data/equipe de ninguém).
+      // Só cai no "Substituir tudo" (fluxo antigo, apaga tudo e
+      // recomeça) se ela recusar as duas opções acima -- ou se nenhuma
+      // delas nem chegou a ser oferecida (planilha vazia de algum jeito).
       if (ESTADO.cicloAtual && ESTADO.equipamentos.length) {
-        const prediosDaPlanilha = [...new Set(todasAsLinhas.map((l) => (l.__local || "SEDE").trim()))];
-        const querAdicionar = window.confirm(
-          `Já existe um cronograma rodando.\n\nEssa planilha tem: ${prediosDaPlanilha.join(", ")}.\n\n` +
-          `OK = ADICIONAR só o(s) prédio(s) NOVO(S) dela ao cronograma atual -- os outros prédios continuam exatamente como estão (mesma equipe, mesmas datas, nada muda).\n` +
-          `Cancelar = ver a opção de substituir o cronograma inteiro por essa planilha.`
-        );
         $("#dropzoneLabel").textContent = "Clique ou arraste o arquivo aqui";
-        if (querAdicionar) {
-          const resultado = linhasParaItens(todasAsLinhas);
-          if (resultado.erro) { toast(resultado.erro); return; }
-          const prediosExistentes = new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"));
-          const itensNovos = resultado.itens.filter((i) => !prediosExistentes.has(i.local || "SEDE"));
-          const prediosIgnorados = [...new Set(
-            resultado.itens.filter((i) => prediosExistentes.has(i.local || "SEDE")).map((i) => i.local || "SEDE")
-          )];
-          if (!itensNovos.length) {
-            toast(`Nenhum prédio novo nessa planilha -- ${prediosIgnorados.join(", ")} já existe no cadastro atual. Pra atualizar um prédio existente, use "Substituir tudo".`);
+        const prediosExistentesSet = new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"));
+        const prediosDaPlanilha = [...new Set(todasAsLinhas.map((l) => (l.__local || "SEDE").trim()))];
+        const prediosNovosNaPlanilha = prediosDaPlanilha.filter((p) => !prediosExistentesSet.has(p));
+        const prediosJaExistemNaPlanilha = prediosDaPlanilha.filter((p) => prediosExistentesSet.has(p));
+
+        let algumaAcaoTomada = false;
+
+        if (prediosJaExistemNaPlanilha.length) {
+          const querAtualizar = window.confirm(
+            `Essa planilha tem dado(s) de ${prediosJaExistemNaPlanilha.join(", ")}, que já está(ão) cadastrado(s).\n\n` +
+            `OK = ATUALIZAR o cadastro deles com essa planilha (casa pelo Patrimônio) -- corrige/completa quem já existe e adiciona quem for novo, SEM apagar nada e sem mexer em status/data/equipe de ninguém.\n` +
+            `Cancelar = não atualizar esses prédios agora.`
+          );
+          if (querAtualizar) {
+            const linhasDesses = todasAsLinhas.filter((l) => prediosJaExistemNaPlanilha.includes((l.__local || "SEDE").trim()));
+            const resultado = linhasParaItens(linhasDesses);
+            if (resultado.erro) { toast(resultado.erro); return; }
+            atualizarCadastroPredioExistente(resultado.itens);
+            algumaAcaoTomada = true;
+          }
+        }
+
+        if (prediosNovosNaPlanilha.length) {
+          const querAdicionar = window.confirm(
+            (prediosJaExistemNaPlanilha.length ? `Essa planilha também tem prédio(s) NOVO(S): ` : `Essa planilha tem prédio(s) NOVO(S): `) +
+            `${prediosNovosNaPlanilha.join(", ")}.\n\n` +
+            `OK = ADICIONAR esse(s) prédio(s) ao cronograma atual (abre a tela de Cronograma pra você ajustar a capacidade) -- os outros prédios continuam exatamente como estão.\n` +
+            `Cancelar = não adicionar agora.`
+          );
+          if (querAdicionar) {
+            const linhasDesses = todasAsLinhas.filter((l) => prediosNovosNaPlanilha.includes((l.__local || "SEDE").trim()));
+            const resultado = linhasParaItens(linhasDesses);
+            if (resultado.erro) { toast(resultado.erro); return; }
+            ESTADO.modoAdicionarPredio = true;
+            ESTADO.itensParaAdicionarPredio = resultado.itens;
+            irParaAba("config");
+            const hojeUtil = $("#dataInicio");
+            if (hojeUtil && !hojeUtil.value) hojeUtil.value = formatISO(new Date());
             return;
           }
-          if (prediosIgnorados.length) {
-            toast(`Vou preparar só o(s) prédio(s) novo(s) -- ${prediosIgnorados.join(", ")} já existe no cadastro e foi ignorado dessa planilha.`);
-          }
-          // Mostra na tela de Cronograma (mesma tela usada pra gerar tudo
-          // pela primeira vez) só o(s) prédio(s) novo(s), pra ela ajustar
-          // capacidade/rodízio com a mesma interface de sempre, em vez de
-          // perguntar isso em caixinhas soltas.
-          ESTADO.modoAdicionarPredio = true;
-          ESTADO.itensParaAdicionarPredio = itensNovos;
-          irParaAba("config");
-          const hojeUtil = $("#dataInicio");
-          if (hojeUtil && !hojeUtil.value) hojeUtil.value = formatISO(new Date());
-          return;
         }
+
+        if (algumaAcaoTomada) return;
+
         const querSubstituir = window.confirm(
           `Substituir o cronograma INTEIRO por essa planilha?\n\nIsso apaga TODOS os prédios atuais (equipamento, datas, status de cada um) e recomeça do zero só com o que está nessa planilha. Essa ação não pode ser desfeita.`
         );
@@ -1313,6 +1329,148 @@ async function confirmarAdicaoPredioNovo() {
     toast("Erro ao adicionar: " + err.message);
   } finally {
     $("#btnGerar").disabled = false;
+  }
+}
+
+// Atualiza o cadastro de um prédio que JÁ existe, a partir de uma
+// planilha exportada de novo (ela editou por fora e quer subir de
+// novo) -- sem apagar nem reagendar quem já estava, do jeito que
+// "Substituir tudo" faz. Casa cada linha pelo PATRIMÔNIO (a chave real
+// do equipamento) dentro do mesmo prédio:
+//   - quem já existe tem só os campos "de cadastro" atualizados (setor,
+//     ambiente, marca, modelo, capacidade, tipo de gás, status da
+//     planilha) -- NUNCA o que é operacional (status da preventiva,
+//     data agendada, equipe, observação, marcação na planta). É
+//     exatamente isso que "não perder os dados" significa aqui, por
+//     isso usa updateDoc só com esses campos, nunca um set() que
+//     substituiria o documento inteiro.
+//   - quem é novo na planilha (patrimônio que não existia nesse prédio)
+//     entra como um cadastro novo, com a mesma equipe/ordem que
+//     "Adicionar equipamento manual" já calcularia, e depois
+//     reagendarTudo() encaixa a data dele sem mexer em quem já estava
+//     agendado.
+//   - quem sumiu da planilha (existia, não está mais nela) NÃO é
+//     apagado -- fica como está. Decisão de propósito: apagar sozinho é
+//     arriscado demais se a planilha tiver algum erro.
+async function atualizarCadastroPredioExistente(itensDaPlanilha) {
+  const CAMPOS_CADASTRO = ["setor", "ambiente", "marca", "modelo", "capacidade", "tipoGas", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
+
+  const porPredio = new Map();
+  itensDaPlanilha.forEach((item) => {
+    const local = item.local || "SEDE";
+    if (!porPredio.has(local)) porPredio.set(local, []);
+    porPredio.get(local).push(item);
+  });
+
+  const idsExistentes = new Set(ESTADO.equipamentos.map((e) => e.id));
+  const atualizacoes = [];
+  const itensNovos = [];
+  const resumo = [];
+
+  for (const [local, itensDoPredio] of porPredio.entries()) {
+    const existentesDoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
+    const porPatrimonio = new Map();
+    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonio.set(e.patrimonio, e); });
+
+    let contadorLocal = existentesDoLocal.length;
+    let maiorOrdem = existentesDoLocal.reduce((max, e) => Math.max(max, e.ordemExecucao || 0), 0);
+    const capLocal = (ESTADO.config && ESTADO.config.capacidades && ESTADO.config.capacidades[local]) || { nEquipes: 2, aparelhosDia: 2 };
+
+    let atualizadosPredio = 0, adicionadosPredio = 0;
+
+    itensDoPredio.forEach((itemPlanilha) => {
+      const existente = itemPlanilha.patrimonio ? porPatrimonio.get(itemPlanilha.patrimonio) : null;
+      if (existente) {
+        const campos = {};
+        CAMPOS_CADASTRO.forEach((campo) => { campos[campo] = itemPlanilha[campo]; });
+        atualizacoes.push({ id: existente.id, campos });
+        atualizadosPredio++;
+        return;
+      }
+
+      // Novo de verdade -- mesma "roleta" de equipe usada em "Adicionar
+      // equipamento manual" (nomeEquipePorVaga cobre o modo clássico; o
+      // rodízio precisa da conta de "qual dia" à parte, porque depende
+      // de quantos itens desse prédio já existem, não só da vaga).
+      maiorOrdem++;
+      const ordemExecucao = maiorOrdem;
+      let equipeResponsavel;
+      if (capLocal.modoRodizio && capLocal.equipesAtivas && capLocal.equipesAtivas.length > 0) {
+        const nVagas = Math.max(1, capLocal.nEquipes || 1);
+        const capacidadeDia = nVagas * Math.max(1, capLocal.aparelhosDia || 1);
+        const diasUteisJaUsados = Math.floor(contadorLocal / capacidadeDia);
+        const slotDaSala = (ordemExecucao - 1) % nVagas;
+        const pool = capLocal.equipesAtivas;
+        equipeResponsavel = pool[(diasUteisJaUsados * nVagas + slotDaSala) % pool.length];
+      } else {
+        equipeResponsavel = nomeEquipePorVaga(local, ordemExecucao - 1, capLocal.nEquipes);
+      }
+
+      let id = itemPlanilha.patrimonio
+        ? itemPlanilha.patrimonio.replace(/[\s/\\"']/g, "_")
+        : `item_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      while (idsExistentes.has(id)) id += "_" + Math.random().toString(36).slice(2, 4);
+      idsExistentes.add(id);
+
+      const novoItem = {
+        id, local,
+        patrimonio: itemPlanilha.patrimonio, setor: itemPlanilha.setor, ambiente: itemPlanilha.ambiente,
+        marca: itemPlanilha.marca, modelo: itemPlanilha.modelo, capacidade: itemPlanilha.capacidade,
+        tipoGas: itemPlanilha.tipoGas, statusCondicao: itemPlanilha.statusCondicao,
+        setorPCM: itemPlanilha.setorPCM, prioridadeSetor: itemPlanilha.prioridadeSetor, pisoPCM: itemPlanilha.pisoPCM,
+        statusPreventiva: "Pendente", observacao: "", origem: "manual",
+        ordemExecucao, equipeResponsavel, dataAgendada: "", diaPlanejado: "", semanaPlanejada: "",
+      };
+      itensNovos.push(novoItem);
+      contadorLocal++;
+      adicionadosPredio++;
+    });
+
+    resumo.push(`${local}: ${atualizadosPredio} atualizado(s), ${adicionadosPredio} novo(s).`);
+  }
+
+  if (!atualizacoes.length && !itensNovos.length) {
+    toast("Nada pra atualizar -- nenhuma linha com patrimônio reconhecível nessa planilha.");
+    return;
+  }
+
+  try {
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < atualizacoes.length; inicio += TAMANHO_LOTE) {
+      const pedaco = atualizacoes.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((u) => batch.update(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", u.id), u.campos));
+      await batch.commit();
+    }
+    for (let inicio = 0; inicio < itensNovos.length; inicio += TAMANHO_LOTE) {
+      const pedaco = itensNovos.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((item) => batch.set(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), item));
+      await batch.commit();
+    }
+    // Mesmo truque do cadastro manual: soma os itens novos direto em
+    // ESTADO.equipamentos (em vez de esperar o listener do Firebase
+    // avisar) -- reagendarTudo() usa esse array na hora, e sem isso não
+    // ia enxergar os itens recém-criados a tempo de agendar a data deles.
+    ESTADO.equipamentos.push(...itensNovos);
+    for (const item of itensNovos) {
+      await registrarHistorico(item, "-", "Cadastrado", "Cadastro (atualização de planilha)");
+    }
+
+    await registrarAuditoria(
+      "Atualizar cadastro por planilha",
+      `${resumo.join(" ")} -- ninguém foi apagado (quem sumiu da planilha continua como estava)`
+    );
+
+    if (itensNovos.length) {
+      toast(`Atualizado! ${resumo.join(" ")} Agendando os novos automaticamente...`);
+      await reagendarTudo();
+    } else {
+      toast(`Atualizado! ${resumo.join(" ")}`);
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao atualizar: " + err.message);
   }
 }
 
