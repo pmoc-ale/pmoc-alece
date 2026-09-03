@@ -268,6 +268,85 @@ function dwfAgruparPorProximidade(itens, limiar) {
   return [...porRaiz.values()];
 }
 
+// Funde candidatos que já ficaram pequenos demais (abaixo do mínimo de
+// pontos) mas estão fisicamente colados uns aos outros. Confirmado em
+// arquivos reais (ANEXO_II 3º/4º/5º piso): nesses, cada aparelho foi
+// desenhado com VÁRIOS objetos diferentes bem próximos, em vez de repetir
+// o mesmo objeto muitas vezes (o caso comum, que já funciona sozinho) --
+// então cada pedaço nunca bate o mínimo sozinho e o aparelho inteiro
+// ficava invisível. Só mexe em quem já não bateu o mínimo sozinho: um
+// candidato que já é um símbolo completo passa direto, sem risco de ser
+// fundido com o vizinho (validado no 1º piso, onde isso não é necessário
+// e a função não muda nada).
+//
+// O raio de fusão não é um número fixo (mudaria de arquivo pra arquivo) --
+// é achado pelo maior SALTO ABSOLUTO na sequência de distâncias de uma
+// fusão single-linkage (uma árvore geradora mínima): distâncias pequenas
+// e parecidas são "pedaços do mesmo aparelho"; o salto grande seguinte é
+// onde começaria a juntar aparelhos DIFERENTES. Sem um salto claro (ou
+// menos de 2 candidatos pequenos), não mexe em nada.
+function dwfFundirFragmentosPequenos(candidatos, limiarMinimo) {
+  const grandes = candidatos.filter((c) => c.qtdPontos >= limiarMinimo);
+  const pequenos = candidatos.filter((c) => c.qtdPontos < limiarMinimo);
+  if (pequenos.length < 2) return candidatos;
+
+  const n = pequenos.length;
+  const pares = [];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = pequenos[i].x - pequenos[j].x, dy = pequenos[i].y - pequenos[j].y;
+      pares.push({ i, j, d: Math.sqrt(dx * dx + dy * dy) });
+    }
+  }
+  pares.sort((a, b) => a.d - b.d);
+
+  const pai = Array.from({ length: n }, (_, i) => i);
+  const acha = (i) => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+  const distanciasDeFusao = [];
+  let componentes = n;
+  for (const { i, j, d } of pares) {
+    const ri = acha(i), rj = acha(j);
+    if (ri !== rj) { pai[ri] = rj; componentes--; distanciasDeFusao.push(d); }
+    if (componentes === 1) break;
+  }
+
+  // Só considera o salto enquanto sobra pelo menos 5% dos fragmentos como
+  // grupo -- fundir tudo num grupo só nunca é a resposta certa.
+  let melhorSalto = -1, melhorIdx = -1;
+  const limiteComponentes = Math.max(1, Math.floor(n * 0.05));
+  let compAoLongo = n;
+  for (let k = 0; k < distanciasDeFusao.length; k++) {
+    compAoLongo--;
+    if (compAoLongo < limiteComponentes) break;
+    if (k === 0) continue;
+    const salto = distanciasDeFusao[k] - distanciasDeFusao[k - 1];
+    if (salto > melhorSalto) { melhorSalto = salto; melhorIdx = k; }
+  }
+  if (melhorIdx < 0) return candidatos;
+
+  const raioDeCorte = (distanciasDeFusao[melhorIdx - 1] + distanciasDeFusao[melhorIdx]) / 2;
+  const itensParaAgrupar = pequenos.map((c) => ({ ponto: [c.x, c.y], origem: c }));
+  const grupos = dwfAgruparPorProximidade(itensParaAgrupar, raioDeCorte);
+
+  // Mesmo motivo do split de outlier acima: um grupo fundido de vários
+  // objetos diferentes não tem um "desenho original" único pra destacar
+  // (nums fica vazio), então guarda a ÁREA (bbox) coberta pelos pedaços
+  // fundidos pra desenhar o contorno da marcação.
+  const fundidos = grupos.map((g) => {
+    const xs = g.map((it) => it.ponto[0]), ys = g.map((it) => it.ponto[1]);
+    const qtdPontos = g.reduce((s, it) => s + it.origem.qtdPontos, 0);
+    return {
+      x: xs.reduce((s, v) => s + v, 0) / xs.length,
+      y: ys.reduce((s, v) => s + v, 0) / ys.length,
+      qtdPontos,
+      nums: [],
+      bboxLocal: { x: Math.min(...xs), y: Math.min(...ys), largura: Math.max(...xs) - Math.min(...xs), altura: Math.max(...ys) - Math.min(...ys) },
+    };
+  });
+
+  return [...grandes, ...fundidos];
+}
+
 // Função principal: recebe o ArrayBuffer do arquivo .dwf/.dwfx enviado
 // (window.JSZip precisa estar carregado). Devolve:
 //   { matriz, bbox, layers, entities, marcadoresPorCamada, camadaEquipamentoSugerida }
@@ -330,6 +409,20 @@ async function parseDwf(arrayBuffer) {
   // W2X (nums.length) é bem maior que a mediana da própria camada --
   // pros símbolos comuns (tamanho uniforme, caso раro de verdade) nada
   // muda; só dispara pro bloco realmente fora do padrão.
+
+  // Descarta candidatos pequenos demais pra serem um símbolo de
+  // equipamento de verdade. Em todos os arquivos reais já testados, um
+  // símbolo de equipamento de verdade sempre tem 10 "pontos" ou mais (10,
+  // 15, 16, 18, 20, 24, 28, 30, 108); ruído (parafuso, conexão, ponto de
+  // hachura, cota) nunca passou de 8 -- confirmado inclusive num arquivo
+  // real (ANEXO_II 4º piso) onde a própria camada de equipamento
+  // misturava 4 detalhes de 5 pontos com 2 aparelhos de verdade (18 e
+  // 30). O limiar fica no teto seguro (mesmo valor já usado como teto do
+  // aprendizado por descarte em app.js -- LIMIAR_QTD_PONTOS_TETO) em vez
+  // de bem no meio da folga, pra pegar esse tipo de ruído já na primeira
+  // vez que a planta é aberta, sem precisar descartar manualmente antes.
+  const QTD_PONTOS_MINIMA = 9;
+
   const FATOR_OUTLIER = 2.5;
   const tamanhosPorCamada = new Map(); // layer -> [nums.length de cada cluster]
   clusters.forEach((cl) => {
@@ -345,7 +438,17 @@ async function parseDwf(arrayBuffer) {
   const candidatosPorCamada = new Map();
   for (const cl of clusters) {
     const mediana = medianaPorCamada.get(cl.layer) || 0;
-    const ehOutlier = mediana > 0 && cl.nums.length >= mediana * FATOR_OUTLIER && cl.nums.length - mediana >= 5;
+    // O piso de QTD_PONTOS_MINIMA aqui evita um efeito colateral visto em
+    // arquivo real: quando a mediana da camada já é bem pequena (1-3,
+    // caso de camadas onde o aparelho é desenhado em vários objetos
+    // diferentes -- ver dwfFundirFragmentosPequenos), um cluster comum de
+    // só 6-8 referências passava a "parecer" um outlier (6-8 é várias
+    // vezes maior que uma mediana de 1-3) e era fatiado à toa -- pra
+    // quem nunca chegou nem perto do tamanho de um bloco de verdade
+    // (dezenas de referências), fatiar só piora a fusão por proximidade
+    // feita depois.
+    const ehOutlier = mediana > 0 && cl.nums.length >= QTD_PONTOS_MINIMA &&
+      cl.nums.length >= mediana * FATOR_OUTLIER && cl.nums.length - mediana >= 5;
 
     if (!ehOutlier) {
       // Caminho original, sem mudança nenhuma: um ponto por cluster,
@@ -427,21 +530,9 @@ async function parseDwf(arrayBuffer) {
       candidatosPorCamada.get(cl.layer).push({ x: cx, y: cy, qtdPontos: g.length, nums, bboxLocal });
     });
   }
-  // Descarta candidatos pequenos demais pra serem um símbolo de
-  // equipamento de verdade. Em todos os arquivos reais já testados, um
-  // símbolo de equipamento de verdade sempre tem 10 "pontos" ou mais (10,
-  // 15, 16, 18, 20, 24, 28, 30, 108); ruído (parafuso, conexão, ponto de
-  // hachura, cota) nunca passou de 8 -- confirmado inclusive num arquivo
-  // real (ANEXO_II 4º piso) onde a própria camada de equipamento
-  // misturava 4 detalhes de 5 pontos com 2 aparelhos de verdade (18 e
-  // 30). O limiar fica no teto seguro (mesmo valor já usado como teto do
-  // aprendizado por descarte em app.js -- LIMIAR_QTD_PONTOS_TETO) em vez
-  // de bem no meio da folga, pra pegar esse tipo de ruído já na primeira
-  // vez que a planta é aberta, sem precisar descartar manualmente antes.
-  const QTD_PONTOS_MINIMA = 9;
-
   const marcadoresPorCamada = {};
-  for (const [layer, pontos] of candidatosPorCamada.entries()) {
+  for (const [layer, pontosBrutos] of candidatosPorCamada.entries()) {
+    const pontos = dwfFundirFragmentosPequenos(pontosBrutos, QTD_PONTOS_MINIMA);
     const vistos = new Set();
     const unicos = [];
     for (const p of pontos) {
