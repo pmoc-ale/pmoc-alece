@@ -28,7 +28,10 @@ service cloud.firestore {
     }
 
     match /usuarios/{uid} {
-      allow read: if request.auth != null;
+      // Sempre pode ler o próprio documento (necessário pra tela de login
+      // detectar "conta bloqueada" antes de negar acesso); ler o cadastro
+      // de outros usuários exige não estar bloqueado.
+      allow read: if request.auth != null && (request.auth.uid == uid || !estouBloqueado());
 
       // Auto-cadastro (tela de login pública): só cria como "padrão" e não
       // bloqueado, não importa o que a pessoa tente mandar no resto do
