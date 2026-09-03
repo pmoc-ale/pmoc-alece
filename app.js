@@ -5200,80 +5200,46 @@ async function renderMarcadoresPlanta() {
       elemento.addEventListener("pointercancel", () => { arrastando = false; });
     }
 
-    // Quando o candidato veio de um Path que precisou ser dividido em
-    // vários aparelhos (bloco do CAD desenhando várias unidades juntas
-    // -- ver dwfParser.js), não tem como recolorir só a unidade certa
-    // (o desenho é compartilhado por todas). Em vez de empilhar um
-    // ícone genérico por cima do desenho original (o que a Jovanna
-    // reportou como uma "figurinha" grudada em cima do símbolo de
-    // verdade), desenha só um contorno ao redor da área daquela unidade
-    // específica -- sem recolorir nada, sem duplicar nenhum ícone.
-    if (cand?.bboxLocal) {
-      // cand.bboxLocal já vem em espaço TRANSFORMADO (dwfParser.js aplica
-      // a matriz nos pontos antes de calcular esse bbox) -- por isso
-      // desenha em gMarcadores (fora do gRaiz), não gDestaques (que fica
-      // dentro do gRaiz e reaplicaria a matriz de novo, jogando o
-      // retângulo pra um lugar errado -- bug real, confirmado com um
-      // teste isolado comparando a posição de tela do retângulo com a
-      // do símbolo de verdade).
-      const { x: bx, y: by, largura, altura } = cand.bboxLocal;
-      const pad = Math.max(largura, altura, 1) * 0.2;
-      const retanguloArea = document.createElementNS(nsSvg, "rect");
-      retanguloArea.setAttribute("x", bx - pad);
-      retanguloArea.setAttribute("y", by - pad);
-      retanguloArea.setAttribute("width", largura + pad * 2);
-      retanguloArea.setAttribute("height", altura + pad * 2);
-      retanguloArea.setAttribute("rx", pad * 0.6);
-      retanguloArea.setAttribute("fill", "transparent");
-      retanguloArea.setAttribute("stroke", cor);
-      retanguloArea.setAttribute("stroke-width", pad * 0.35);
-      retanguloArea.dataset.destaque = "1";
-      retanguloArea.style.cursor = "pointer";
-      const tituloArea = document.createElementNS(nsSvg, "title");
-      tituloArea.textContent = rotulo;
-      retanguloArea.appendChild(tituloArea);
-      // O retângulo (diferente do ícone) usa x/y absolutos, não uma
-      // transformação a partir da origem -- recentraliza mantendo o
-      // mesmo tamanho, em vez de aplicar um translate (que somaria com
-      // a posição já absoluta e jogaria ele pro lugar errado).
-      const larguraTotal = largura + pad * 2, alturaTotal = altura + pad * 2;
-      tornarInterativo(retanguloArea, (el, nx, ny) => {
-        el.setAttribute("x", nx - larguraTotal / 2);
-        el.setAttribute("y", ny - alturaTotal / 2);
-      });
-      gMarcadores.appendChild(retanguloArea);
-      return;
-    }
-
-    // Marcado à mão (arrastando o chip, sem símbolo detectado ali) --
-    // tanto evaporadora quanto condensadora: retângulo com contorno igual
-    // ao das detectadas automaticamente, em vez do ícone genérico
-    // ("figurinha" -- a Jovanna não gostava disso). Tamanho começa no
-    // padrão (proporcional à escala da planta) mas dá pra ajustar
-    // arrastando a alcinha do canto, guardando o tamanho escolhido.
+    // Marcador único pra tudo que não recolore o desenho original (tanto
+    // "marcado à mão" -- arrastando o chip, sem símbolo detectado ali --
+    // quanto candidato vindo de um Path dividido em vários aparelhos, ver
+    // dwfParser.js): mesmo contorno, mesmo jeito de arrastar/redimensionar/
+    // girar. Antes eram dois desenhos diferentes (a Jovanna pediu pra
+    // ficarem iguais) e só o "marcado à mão" tinha as alcinhas de ajustar
+    // tamanho -- o dividido vinha travado do tamanho calculado (a área dos
+    // fragmentos detectados), sem jeito de encolher se esticasse além do
+    // aparelho de verdade. Quando existe cand.bboxLocal, ele só define o
+    // tamanho INICIAL (antes de qualquer ajuste); depois que ela mexe na
+    // alcinha, tamanhoCustom (plantaLargura/Altura/Angulo) vira a fonte da
+    // verdade, igual já acontecia pro marcado à mão.
     // x/y (e o que svgPontoDeClique devolve) já são espaço TRANSFORMADO
     // (mesmo espaço do viewBox) -- por isso vai em gMarcadores (fora do
     // gRaiz), não gDestaques (senão a matriz seria aplicada de novo e o
     // retângulo apareceria bem longe de onde a pessoa realmente marcou --
     // era esse o bug real por trás de "sempre vai pro canto").
     {
-      const tamanhoPadrao = { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3, angulo: 0 };
+      const tamanhoPadrao = cand?.bboxLocal
+        ? (() => {
+            const pad = Math.max(cand.bboxLocal.largura, cand.bboxLocal.altura, 1) * 0.2;
+            return { largura: cand.bboxLocal.largura + pad * 2, altura: cand.bboxLocal.altura + pad * 2, angulo: 0 };
+          })()
+        : { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3, angulo: 0 };
       let { largura, altura, angulo } = { ...tamanhoPadrao, ...(tamanhoCustom || {}) };
       let centroX = x, centroY = y;
-      const retanguloManual = document.createElementNS(nsSvg, "rect");
-      function atualizarRetanguloManual() {
-        retanguloManual.setAttribute("x", centroX - largura / 2);
-        retanguloManual.setAttribute("y", centroY - altura / 2);
-        retanguloManual.setAttribute("width", largura);
-        retanguloManual.setAttribute("height", altura);
-        retanguloManual.setAttribute("rx", Math.min(largura, altura) * 0.15);
-        retanguloManual.setAttribute("stroke-width", Math.min(largura, altura) * 0.12);
+      const retanguloMarcador = document.createElementNS(nsSvg, "rect");
+      function atualizarRetanguloMarcador() {
+        retanguloMarcador.setAttribute("x", centroX - largura / 2);
+        retanguloMarcador.setAttribute("y", centroY - altura / 2);
+        retanguloMarcador.setAttribute("width", largura);
+        retanguloMarcador.setAttribute("height", altura);
+        retanguloMarcador.setAttribute("rx", Math.min(largura, altura) * 0.15);
+        retanguloMarcador.setAttribute("stroke-width", Math.min(largura, altura) * 0.12);
       }
       // Girar não muda x/y/width/height de cada peça -- só o transform
       // "rotate" delas em volta do mesmo centro (pra ficar reto pra
       // paredes/salas desenhadas inclinadas na planta). As 3 peças
       // (retângulo + as duas alcinhas) precisam girar juntas.
-      const elementosRotacionados = [retanguloManual];
+      const elementosRotacionados = [retanguloMarcador];
       function atualizarRotacaoTodos() {
         if (angulo) {
           const t = `rotate(${angulo},${centroX},${centroY})`;
@@ -5282,28 +5248,28 @@ async function renderMarcadoresPlanta() {
           elementosRotacionados.forEach((el) => el.removeAttribute("transform"));
         }
       }
-      retanguloManual.setAttribute("fill", "transparent");
-      retanguloManual.setAttribute("stroke", cor);
-      retanguloManual.dataset.destaque = "1";
-      retanguloManual.style.cursor = "pointer";
-      atualizarRetanguloManual();
+      retanguloMarcador.setAttribute("fill", "transparent");
+      retanguloMarcador.setAttribute("stroke", cor);
+      retanguloMarcador.dataset.destaque = "1";
+      retanguloMarcador.style.cursor = "pointer";
+      atualizarRetanguloMarcador();
       atualizarRotacaoTodos();
-      const tituloManual = document.createElementNS(nsSvg, "title");
-      tituloManual.textContent = rotulo;
-      retanguloManual.appendChild(tituloManual);
+      const tituloMarcador = document.createElementNS(nsSvg, "title");
+      tituloMarcador.textContent = rotulo;
+      retanguloMarcador.appendChild(tituloMarcador);
       // As alcinhas (definidas mais abaixo) precisam acompanhar o
       // retângulo enquanto ele é arrastado pra reposicionar -- senão
       // ficam pra trás, soltas no lugar antigo, até o próximo re-render.
       // Essa referência muda de "não faz nada" pra "reposiciona de
       // verdade" assim que elas existem (só existem no modo de edição).
       let posicionarAlcasSeExistir = () => {};
-      tornarInterativo(retanguloManual, (el, nx, ny) => {
+      tornarInterativo(retanguloMarcador, (el, nx, ny) => {
         centroX = nx; centroY = ny;
-        atualizarRetanguloManual();
+        atualizarRetanguloMarcador();
         atualizarRotacaoTodos();
         posicionarAlcasSeExistir();
       });
-      gMarcadores.appendChild(retanguloManual);
+      gMarcadores.appendChild(retanguloMarcador);
 
       // Alcinhas de ajustar, só no modo de edição -- uma pra redimensionar
       // (canto inferior direito) e outra pra girar (círculo acima do
@@ -5361,7 +5327,7 @@ async function renderMarcadoresPlanta() {
             const dyLocal = dx * Math.sin(rad) + dy * Math.cos(rad);
             largura = Math.max(inicioLargura + dxLocal * 2, raioMarcador * 0.5);
             altura = Math.max(inicioAltura + dyLocal * 2, raioMarcador * 0.5);
-            atualizarRetanguloManual();
+            atualizarRetanguloMarcador();
             posicionarAlca();
             posicionarAlcaGirar();
           }
