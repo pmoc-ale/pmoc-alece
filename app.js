@@ -1118,6 +1118,7 @@ function linhasParaItens(rows) {
   const colModelo = localizarColuna(["Modelo"], headers);
   const colPotencia = localizarColuna(["Potência", "BTU", "Capacidade"], headers);
   const colTipoGas = localizarColuna(["Tipo de Gás", "Tipo de Gas", "Gás", "Gas"], headers);
+  const colTag = localizarColuna(["TAG", "Tag"], headers);
 
   if (!colSetor || !colAmbiente) {
     return { erro: "Não encontrei as colunas 'Setor' e 'Ambiente'. Confira o cabeçalho." };
@@ -1170,6 +1171,7 @@ function linhasParaItens(rows) {
     if (capacidade && !capacidade.toLowerCase().includes("btu")) capacidade += " BTU/h";
 
     const tipoGas = colTipoGas ? limparValor(row[colTipoGas]) : "";
+    const tag = colTag ? limparValor(row[colTag]) : "";
 
     const setorPCM = identificarSetor(setor, ambiente);
 
@@ -1185,6 +1187,7 @@ function linhasParaItens(rows) {
     return {
       id,
       patrimonio,
+      tag,
       marca,          // <--- Salva no Firebase
       modelo,         // <--- Salva no Firebase
       capacidade,     // <--- Salva no Firebase
@@ -1487,7 +1490,7 @@ function renderSumidosPlanilha(sumidos) {
 }
 
 async function atualizarCadastroPredioExistente(itensDaPlanilha) {
-  const CAMPOS_CADASTRO = ["setor", "ambiente", "marca", "modelo", "capacidade", "tipoGas", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
+  const CAMPOS_CADASTRO = ["setor", "ambiente", "tag", "marca", "modelo", "capacidade", "tipoGas", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
 
   const porPredio = new Map();
   itensDaPlanilha.forEach((item) => {
@@ -1556,6 +1559,7 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
       const novoItem = {
         id, local,
         patrimonio: itemPlanilha.patrimonio, setor: itemPlanilha.setor, ambiente: itemPlanilha.ambiente,
+        tag: itemPlanilha.tag,
         marca: itemPlanilha.marca, modelo: itemPlanilha.modelo, capacidade: itemPlanilha.capacidade,
         tipoGas: itemPlanilha.tipoGas, statusCondicao: itemPlanilha.statusCondicao,
         setorPCM: itemPlanilha.setorPCM, prioridadeSetor: itemPlanilha.prioridadeSetor, pisoPCM: itemPlanilha.pisoPCM,
@@ -3747,6 +3751,9 @@ async function abrirModalConclusao(item, selectEl, statusAnterior, aoAtualizar) 
     // verdade (e registrava, sem querer, um dado errado pra ela).
     if (item.patrimonio) {
       dadosExistentes.evaporadora.tombo = dadosExistentes.evaporadora.tombo || item.patrimonio;
+    }
+    if (item.tag) {
+      dadosExistentes.evaporadora.tag = dadosExistentes.evaporadora.tag || item.tag;
     }
     if (item.marca) {
       dadosExistentes.evaporadora.marca = dadosExistentes.evaporadora.marca || item.marca;
@@ -6633,7 +6640,7 @@ function renderEquipamentosCadastro() {
   const origemFiltro = $("#filtroOrigem")?.value || "";
   const filtrados = aplicarFiltroLocal(ESTADO.equipamentos).filter((item) => {
     if (termo) {
-      const alvo = `${item.patrimonio || ""} ${item.setor || ""} ${item.ambiente || ""} ${item.setorPCM || ""} ${item.equipeResponsavel || ""}`.toLowerCase();
+      const alvo = `${item.patrimonio || ""} ${item.tag || ""} ${item.setor || ""} ${item.ambiente || ""} ${item.setorPCM || ""} ${item.equipeResponsavel || ""}`.toLowerCase();
       if (!alvo.includes(termo)) return false;
     }
     if (statusFiltro) {
@@ -6671,7 +6678,7 @@ function renderEquipamentosCadastro() {
   const tbody = table.querySelector("tbody");
 
   itensComCorretivas.forEach(({ item, totalCorretivas }) => {
-    const dadosTecnicos = escapeHtml([item.marca, item.modelo, item.capacidade, item.tipoGas && `Gás: ${item.tipoGas}`].filter(Boolean).join(" • ") || "-");
+    const dadosTecnicos = escapeHtml([item.tag && `Tag: ${item.tag}`, item.marca, item.modelo, item.capacidade, item.tipoGas && `Gás: ${item.tipoGas}`].filter(Boolean).join(" • ") || "-");
     const tr = document.createElement("tr");
     tr.innerHTML = `<td></td><td data-label="Patrimônio">${escapeHtml(item.patrimonio || "-")}</td><td data-label="Setor">${escapeHtml(item.setor)}</td><td data-label="Ambiente">${escapeHtml(item.ambiente)}</td>
       <td data-label="Prédio">${escapeHtml(item.local || "SEDE")}</td>
@@ -6898,6 +6905,7 @@ async function abrirDrawerEquipamento(id) {
       <div class="drawer-campo"><span class="rotulo">Prédio</span><span class="valor">${escapeHtml(item.local || "SEDE")}</span></div>
       <div class="drawer-campo"><span class="rotulo">Setor</span><span class="valor">${escapeHtml(item.setor || "-")}</span></div>
       <div class="drawer-campo"><span class="rotulo">Ambiente</span><span class="valor">${escapeHtml(item.ambiente || "-")}</span></div>
+      <div class="drawer-campo"><span class="rotulo">Tag</span><span class="valor">${escapeHtml(item.tag || "-")}</span></div>
       <div class="drawer-campo"><span class="rotulo">Setor PCM</span><span class="valor">${item.setorPCM || "-"}</span></div>
       <div class="drawer-campo"><span class="rotulo">Piso</span><span class="valor">${item.pisoPCM === 99 ? "Não identificado" : item.pisoPCM}</span></div>
       <div class="drawer-campo"><span class="rotulo">Condição (levantamento)</span><span class="valor">${escapeHtml(item.statusCondicao || "-")}</span></div>
@@ -6934,6 +6942,7 @@ async function abrirDrawerEquipamento(id) {
     <details class="drawer-secao drawer-form">
       <summary>Editar cadastro</summary>
       <label>Patrimônio<input type="text" id="drawerPatrimonio" value="${escapeHtml(item.patrimonio || "")}"></label>
+      <label>Tag<input type="text" id="drawerTag" value="${escapeHtml(item.tag || "")}" placeholder="Vem da planilha, se tiver"></label>
       <label>Setor<input type="text" id="drawerSetor" value="${escapeHtml(item.setor || "")}"></label>
       <label>Ambiente<input type="text" id="drawerAmbiente" value="${escapeHtml(item.ambiente || "")}"></label>
       <label>Prédio
@@ -6981,6 +6990,7 @@ async function abrirDrawerEquipamento(id) {
 
   $("#drawerSalvarCadastro").addEventListener("click", async () => {
     const patrimonio = $("#drawerPatrimonio").value.trim();
+    const tag = $("#drawerTag")?.value.trim() || "";
     const setor = $("#drawerSetor").value.trim();
     const ambiente = $("#drawerAmbiente").value.trim();
     const local = $("#drawerLocal").value;
@@ -6997,7 +7007,7 @@ async function abrirDrawerEquipamento(id) {
     const setorPCM = identificarSetor(setor, ambiente);
     try {
       await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
-        patrimonio, setor, ambiente, local, setorPCM, marca, modelo, capacidade, tipoGas, observacao, codigoPlanta,
+        patrimonio, tag, setor, ambiente, local, setorPCM, marca, modelo, capacidade, tipoGas, observacao, codigoPlanta,
         prioridadeSetor: PRIORIDADE[setorPCM] || 7,
         pisoPCM: descobrirPiso(setor),
       });
