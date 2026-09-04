@@ -5180,6 +5180,28 @@ async function renderMarcadoresPlanta() {
       });
       const bbox = bboxUniao(elementos);
       const pad = Math.max(bbox.width, bbox.height, 1) * 0.2;
+      const centroBboxX = bbox.x + bbox.width / 2, centroBboxY = bbox.y + bbox.height / 2;
+
+      // Símbolo de verdade desenhado no CAD pode ser bem pequeno (alguns
+      // equipamentos são só um retângulo miúdo) -- o contorno colado nele
+      // vira um alvo de clique/toque minúsculo e difícil de acertar
+      // ("a peça está pouco sensível"). Em vez de aumentar o contorno
+      // visível (mudaria o desenho, e ela já pediu pra não mexer nisso),
+      // um retângulo invisível por baixo, com uma área mínima confortável,
+      // recebe o clique sem alterar a aparência do destaque.
+      const ladoMinimo = raioMarcador * 1.6;
+      const larguraClique = Math.max(bbox.width + pad * 2, ladoMinimo);
+      const alturaClique = Math.max(bbox.height + pad * 2, ladoMinimo);
+      const areaClique = document.createElementNS(nsSvg, "rect");
+      areaClique.setAttribute("x", centroBboxX - larguraClique / 2);
+      areaClique.setAttribute("y", centroBboxY - alturaClique / 2);
+      areaClique.setAttribute("width", larguraClique);
+      areaClique.setAttribute("height", alturaClique);
+      areaClique.setAttribute("fill", "transparent");
+      areaClique.style.cursor = "pointer";
+      areaClique.addEventListener("click", (ev) => { ev.stopPropagation(); aoClicar(); });
+      gDestaques.appendChild(areaClique);
+
       const retangulo = document.createElementNS(nsSvg, "rect");
       retangulo.setAttribute("x", bbox.x - pad);
       retangulo.setAttribute("y", bbox.y - pad);
@@ -5273,7 +5295,17 @@ async function renderMarcadoresPlanta() {
       const tamanhoPadrao = cand?.bboxLocal
         ? (() => {
             const pad = Math.max(cand.bboxLocal.largura, cand.bboxLocal.altura, 1) * 0.2;
-            return { largura: cand.bboxLocal.largura + pad * 2, altura: cand.bboxLocal.altura + pad * 2, angulo: 0 };
+            // Área fundida/detectada pode sair bem pequena -- sem um piso
+            // mínimo, o marcador nascia com um alvo de clique/arrasto
+            // minúsculo ("peça pouco sensível"). É só o tamanho INICIAL
+            // (ver comentário acima); ela ainda pode encolher pela alcinha
+            // se quiser um contorno mais justo.
+            const ladoMinimo = raioMarcador * 1.6;
+            return {
+              largura: Math.max(cand.bboxLocal.largura + pad * 2, ladoMinimo),
+              altura: Math.max(cand.bboxLocal.altura + pad * 2, ladoMinimo),
+              angulo: 0,
+            };
           })()
         : { largura: raioMarcador * 2.6, altura: raioMarcador * 1.3, angulo: 0 };
       let { largura, altura, angulo } = { ...tamanhoPadrao, ...(tamanhoCustom || {}) };
