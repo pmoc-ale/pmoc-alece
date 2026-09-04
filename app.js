@@ -6331,10 +6331,10 @@ function ativarZoomPan(svg) {
       // e um movimento pequeno de dedo já dispara um zoom enorme, ficando
       // difícil de controlar. Elevar a razão a um expoente < 1 pede mais
       // percurso físico dos dedos pro mesmo tanto de zoom -- 0.5 tava
-      // sensível demais, 0.3 ficou sensível de menos, 0.4 ainda ficou
-      // pouco sensível (relato real); 0.45 sobe um pouco sem chegar nos
-      // 0.5 que já tinham dado problema.
-      const fator = Math.pow(razaoBruta, 0.45);
+      // sensível demais, 0.3 ficou sensível de menos, 0.4 e 0.45 ainda
+      // ficaram pouco sensíveis (relatos reais); 0.48 sobe mais um pouco,
+      // bem perto do 0.5 que já tinha dado problema mas sem chegar nele.
+      const fator = Math.pow(razaoBruta, 0.48);
       const meioX = (p1.x + p2.x) / 2, meioY = (p1.y + p2.y) / 2;
       const original = svg.__viewOriginal || viewInicialPinca;
       let novaLargura = viewInicialPinca.w * fator;
