@@ -2268,6 +2268,7 @@ async function inicializarApp() {
     iniciarSincronizacaoOrdens();
     iniciarSincronizacaoCiclos();
     iniciarSincronizacaoPlantas();
+    iniciarSincronizacaoFeriados();
     carregarBackupPlanilha();
 }
 
@@ -4018,8 +4019,6 @@ function iniciarSincronizacaoOrdens() {
     toast("Erro ao ler ordens de serviço: " + err.message);
   });
 }
-// APAGUEI A CHAMADA SOLTA QUE FICAVA AQUI EMBAIXO
-iniciarSincronizacaoOrdens();
 
 function iniciarSincronizacaoHistorico(){
   if (ESTADO.unsubscribeHistorico) ESTADO.unsubscribeHistorico();
@@ -7089,7 +7088,6 @@ function iniciarSincronizacaoFeriados() {
     toast("Erro ao ler feriados: " + err.message);
   });
 }
-iniciarSincronizacaoFeriados();
 
 function renderFeriados() {
   const table = $("#feriadosTable");

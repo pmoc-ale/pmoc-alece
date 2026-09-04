@@ -1678,6 +1678,12 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .filtros-equipamentos select { width: 100%; min-width: 100%; }
   .capacidade-linha { grid-template-columns: 1fr; gap: 8px; }
   .kpi-row { grid-template-columns: 1fr 1fr; }
+  /* Cards mais baixos no celular: com 5 cards em 2 colunas, o 5º fica
+     sozinho na última linha, e a versão "esticada" (padding 24px + número
+     de 42px) empurrava esse card pra trás da barra inferior fixa (fica
+     cortado assim que o Dashboard abre, antes de rolar a tela). */
+  .kpi-card { padding: var(--sp-3) var(--sp-4); }
+  .kpi-card .num { font-size: 30px; margin-bottom: 4px; }
   .toolbar-pesquisa { flex-direction: column; align-items: stretch; }
   .toolbar-pesquisa .search-input { min-width: 100%; width: 100%; }
 
