@@ -106,13 +106,6 @@
           <table id="previewTable"></table>
         </div>
       </div>
-      <div class="alert-banner" id="cardDesfazerPlanilha" hidden style="margin-bottom:12px">
-        <span class="alert-banner-icon"></span>
-        <span class="alert-banner-text" id="desfazerPlanilhaTexto"></span>
-        <button id="btnDesfazerPlanilha" class="btn ghost" style="margin-left: 15px; font-size: 12px; padding: 4px 12px;">
-          Desfazer
-        </button>
-      </div>
       <div class="card" id="cardSumidosPlanilha" hidden>
         <div class="card-head">
           <h2>Sumiram da última planilha</h2>
@@ -663,6 +656,16 @@
       </div>
 
       <div class="subview" id="subview-cfg-avancado">
+        <div class="card" id="cardDesfazerPlanilha" hidden>
+          <h2>Desfazer atualização por planilha</h2>
+          <div class="alert-banner" style="margin-top:10px;">
+            <span class="alert-banner-icon"></span>
+            <span class="alert-banner-text" id="desfazerPlanilhaTexto"></span>
+            <button id="btnDesfazerPlanilha" class="btn ghost" style="margin-left: 15px; font-size: 12px; padding: 4px 12px;">
+              Desfazer
+            </button>
+          </div>
+        </div>
         <div class="card">
           <h2>Manutenção</h2>
           <p class="muted" style="margin-bottom: 16px;">
@@ -722,6 +725,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=42"></script>
+<script type="module" src="app.js?v=43"></script>
 </body>
 </html>

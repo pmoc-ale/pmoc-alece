@@ -5636,6 +5636,11 @@ function mostrarPainelPlanta(item) {
   const isAdmin = ESTADO.permissao === "admin";
   painel.innerHTML = `
     <h3 style="margin-top:0">${escapeHtml(item.codigoPlanta || item.patrimonio || item.ambiente || "Aparelho")}</h3>
+    ${item.fotoUrl
+      ? `<a href="${escapeHtml(item.fotoUrl)}" target="_blank" rel="noopener">
+          <img src="${escapeHtml(item.fotoUrl)}" alt="Foto do equipamento" title="Foto do equipamento -- ajuda a confirmar que é o aparelho certo" style="width:100%; max-height:130px; object-fit:cover; border-radius:var(--raio-pequeno); border:1px solid var(--borda); margin-bottom:10px;">
+        </a>`
+      : ""}
     <div class="drawer-campo"><span class="rotulo">Patrimônio</span><span class="valor">${escapeHtml(item.patrimonio || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Setor</span><span class="valor">${escapeHtml(item.setor || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Ambiente</span><span class="valor">${escapeHtml(item.ambiente || "-")}</span></div>
