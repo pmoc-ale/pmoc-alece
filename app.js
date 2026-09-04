@@ -254,6 +254,7 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   plantaSelecionada: null,
   plantas: [],
   unsubscribePlantas: null,
+  plantaFiltroStatus: "",
 };
 
 // Cada planta cadastrada (coleção "plantas" no Firestore) é amarrada a um
@@ -5104,6 +5105,16 @@ function bboxUniao(elementos) {
   return { x: box.x, y: box.y, width: box.x2 - box.x, height: box.y2 - box.y };
 }
 
+// Mesmo critério do filtroStatus da tela de Equipamentos: "Atrasado" é
+// calculado (estaAtrasado), não é um valor que fica salvo em
+// statusPreventiva, então precisa de uma checagem à parte.
+function itemBateFiltroStatusPlanta(item) {
+  const filtro = ESTADO.plantaFiltroStatus;
+  if (!filtro) return true;
+  if (filtro === "Atrasado") return estaAtrasado(item);
+  return item.statusPreventiva === filtro;
+}
+
 async function renderMarcadoresPlanta() {
   const svg = $("#plantaSvg");
   const gMarcadores = $("#plantaMarcadoresSvg");
@@ -5471,9 +5482,12 @@ async function renderMarcadoresPlanta() {
   }
 
   // Evaporadoras já identificadas nesta planta -- coloridas pelo status,
-  // igual ao resto do sistema.
+  // igual ao resto do sistema. O filtro de status (mesmo critério do
+  // filtroStatus da tela de Equipamentos: "Atrasado" é calculado, não é
+  // um valor salvo em statusPreventiva) só esconde marcador da planta,
+  // não mexe em nada do cadastro.
   const itens = ESTADO.equipamentos.filter(
-    (e) => e.plantaId === planta.id && e.plantaX != null && e.plantaY != null
+    (e) => e.plantaId === planta.id && e.plantaX != null && e.plantaY != null && itemBateFiltroStatusPlanta(e)
   );
   itens.forEach((e) => {
     const classe = estaAtrasado(e) ? "atrasado" : classeStatus(e.statusPreventiva);
@@ -5498,6 +5512,10 @@ async function renderMarcadoresPlanta() {
     // chamava doc(db, "plantas", undefined) e quebrava.
     const cond = { ...condBruta, plantaId: planta.id };
     const vinculadas = cond.codigo ? evaporadorasQueApontamPara(cond.codigo) : (cond.__legado ? [cond.__legado] : []);
+    // Com filtro de status ativo, só mostra a condensadora se pelo menos
+    // uma evaporadora vinculada bater com o filtro -- senão ela ficaria
+    // sozinha na tela sem nenhum aparelho que interessa ligado a ela.
+    if (ESTADO.plantaFiltroStatus && !vinculadas.some(itemBateFiltroStatusPlanta)) return;
     let classe = null;
     ORDEM_URGENCIA.forEach((c) => {
       if (classe) return;
@@ -5719,6 +5737,57 @@ async function irParaMarcador(plantaId, x, y, aoChegar) {
   piscarDestaque(svg, x, y);
   aoChegar();
 }
+
+// Busca por patrimônio (em TODOS os prédios/plantas, não só a aberta na
+// hora) e pula direto pro marcador, do mesmo jeito que "Ver evaporadora"
+// já fazia -- útil quando já se sabe o número do aparelho mas não onde
+// ele está desenhado, principalmente em andares com muita coisa parecida.
+async function buscarEquipamentoNaPlanta() {
+  const termoBusca = $("#buscaEquipamentoPlanta")?.value.trim().toLowerCase();
+  if (!termoBusca) return;
+  const candidatos = ESTADO.equipamentos.filter((e) => (e.patrimonio || "").toLowerCase().includes(termoBusca));
+  if (!candidatos.length) {
+    toast("Nenhum equipamento encontrado com esse patrimônio.");
+    return;
+  }
+  const item = candidatos.find((e) => (e.patrimonio || "").toLowerCase() === termoBusca) || candidatos[0];
+
+  const temEvaporadora = item.plantaId && item.plantaX != null && item.plantaY != null;
+  const temCondensadora = !temEvaporadora && item.condensadoraPlantaId && item.condensadoraX != null && item.condensadoraY != null;
+  if (!temEvaporadora && !temCondensadora) {
+    toast(`Aparelho "${item.patrimonio || item.ambiente}" encontrado, mas ainda não foi marcado em nenhuma planta.`);
+    return;
+  }
+
+  // A busca sempre mostra o aparelho, mesmo que o filtro de status ativo
+  // escondesse o marcador dele -- senão a pessoa buscava um patrimônio
+  // certo e via a planta "vazia", sem entender por quê.
+  const plantaAlvo = temEvaporadora ? item.plantaId : item.condensadoraPlantaId;
+  if (ESTADO.plantaFiltroStatus) {
+    ESTADO.plantaFiltroStatus = "";
+    const sel = $("#filtroStatusPlanta");
+    if (sel) sel.value = "";
+    if (ESTADO.plantaSelecionada === plantaAlvo) await renderMarcadoresPlanta();
+  }
+
+  if (temEvaporadora) {
+    await irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
+  } else {
+    const cond = { codigo: null, x: item.condensadoraX, y: item.condensadoraY, plantaId: item.condensadoraPlantaId, __legado: item };
+    await irParaMarcador(item.condensadoraPlantaId, item.condensadoraX, item.condensadoraY, () => mostrarPainelCondensadora(cond));
+  }
+  if (candidatos.length > 1) toast(`${candidatos.length} equipamentos com "${termoBusca}" -- mostrando Pat. ${item.patrimonio || item.id}.`);
+}
+
+$("#btnBuscarEquipamentoPlanta")?.addEventListener("click", buscarEquipamentoNaPlanta);
+$("#buscaEquipamentoPlanta")?.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") buscarEquipamentoNaPlanta();
+});
+
+$("#filtroStatusPlanta")?.addEventListener("change", (ev) => {
+  ESTADO.plantaFiltroStatus = ev.target.value;
+  renderMarcadoresPlanta();
+});
 
 // Anel dourado pulsando por alguns segundos na posição pedida -- só pra
 // chamar atenção visual de "é esse aqui", sem mexer em nada dos dados.

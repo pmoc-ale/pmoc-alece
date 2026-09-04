@@ -452,6 +452,19 @@
             <button class="btn ghost" id="btnExcluirPlanta" hidden style="font-size:12.5px;padding:6px 14px;color:var(--vermelho);border-color:var(--vermelho);">Excluir esta planta</button>
           </div>
         </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+          <div style="display:flex; gap:6px; flex:1; min-width:220px;">
+            <input type="text" class="search-input" id="buscaEquipamentoPlanta" placeholder="Buscar por patrimônio..." style="flex:1; margin-bottom:0;">
+            <button type="button" class="btn ghost" id="btnBuscarEquipamentoPlanta" title="Buscar e ir até o equipamento" style="flex-shrink:0; padding:0 14px;">🔍</button>
+          </div>
+          <select id="filtroStatusPlanta" style="flex-shrink:0;">
+            <option value="">Status: todos</option>
+            <option value="Pendente">Pendente</option>
+            <option value="Em andamento">Em andamento</option>
+            <option value="Concluída">Concluída</option>
+            <option value="Atrasado">Atrasado</option>
+          </select>
+        </div>
         <p class="muted" id="plantaResumoDeteccao" hidden style="font-size:12.5px; margin:8px 2px 0;"></p>
         <div class="planta-area">
           <div class="planta-imagem-wrap">
@@ -709,6 +722,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=41"></script>
+<script type="module" src="app.js?v=42"></script>
 </body>
 </html>
