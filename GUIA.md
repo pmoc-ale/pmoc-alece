@@ -228,12 +228,13 @@ Automaticamente o sistema:
 1. Clique no ⚙️ no canto superior direito
 2. Acesse **"Configurações"** → **"Usuários"**
 3. Veja todos os usuários cadastrados
-4. (Futuramente) Defina permissões por usuário
+4. Ao criar uma conta nova por aqui, escolha a permissão dela (Padrão, Trabalhador ou Administrador)
 
 ### Tipos de Permissão
 
-- **Admin**: Acesso total ao sistema
-- **Leitor**: Apenas visualiza (read-only)
+- **Administrador**: acesso total ao sistema -- único que vê e mexe em Levantamento, Cronograma e Configurações, além de tudo o mais.
+- **Padrão**: enxerga as mesmas abas que o Administrador (exceto Levantamento, Cronograma e Configurações), mas **só pra olhar** -- nenhum campo, botão ou status pode ser alterado.
+- **Trabalhador**: enxerga só **Calendário**, **Dashboard** e **Localização** (essa última também só pra olhar, sem mover/editar marcações na planta). A única coisa que pode alterar é o **status de uma preventiva** pelo Calendário (ex: marcar como concluída) -- o resto fica travado, igual ao Padrão.
 
 ---
 
