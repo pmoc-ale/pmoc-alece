@@ -82,6 +82,9 @@
     <button class="tab sidenav-item" data-view="equipamentos">
       <span class="sidenav-icon"></span> Equipamentos
     </button>
+    <button class="tab sidenav-item" data-view="condensadoras">
+      <span class="sidenav-icon"></span> Condensadoras
+    </button>
     <button class="tab sidenav-item" data-view="localizacao">
       <span class="sidenav-icon"></span> Localização
     </button>
@@ -419,6 +422,38 @@
       <button class="fab" id="fabAdicionarEquipamento" aria-label="Adicionar equipamento" title="Adicionar equipamento">+</button>
     </section>
 
+    <!-- VIEW: CONDENSADORAS -->
+    <section class="view" id="view-condensadoras">
+      <div class="card">
+        <div class="card-head" style="align-items: center;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <h2>Condensadoras cadastradas</h2>
+            <span class="pill" id="condensadorasCount">0 itens</span>
+          </div>
+        </div>
+        <p class="muted">Condensadoras marcadas nas plantas (aba Localização) e o código que as liga às evaporadoras. Pra cadastrar uma nova, marque na planta.</p>
+
+        <div class="local-filtro" id="localFiltroCondensadoras" style="margin-bottom: 12px;"></div>
+
+        <div class="toolbar-pesquisa">
+          <input type="text" class="search-input" id="buscaCondensadoras" placeholder="Buscar por código...">
+        </div>
+
+        <div id="selecaoCondensadoras" class="action-bar-flutuante">
+          <div class="action-bar-esquerda">
+            <button id="btnLimparSelecaoCondensadoras" class="btn-icon" title="Limpar seleção">✕</button>
+            <span id="selecaoCondensadorasTexto">0 selecionado(s)</span>
+          </div>
+          <div class="action-bar-direita">
+            <button id="btnImprimirQrCondensadorasSelecionadas" class="btn ghost">Imprimir QR code</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="condensadorasTable" class="tabela-cards-mobile"></table>
+        </div>
+      </div>
+    </section>
+
     <!-- VIEW: LOCALIZAÇÃO NA PLANTA -->
     <section class="view" id="view-localizacao">
       <div class="card" id="plantaSemPlantas" hidden>
@@ -745,7 +780,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=48"></script>
+<script type="module" src="app.js?v=49"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

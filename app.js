@@ -426,6 +426,7 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   itensParaAdicionarPredio: null,
   backupPlanilha: null,
   selecaoEquipamentos: new Set(),
+  selecaoCondensadoras: new Set(),
   selecaoHistorico: new Set(),
   equipes: [],
   selecaoOrdens: new Set(),
@@ -438,7 +439,7 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   unsubscribeCiclos: null,
   fechandoCiclo: false,
   config: null,
-  filtros: { equipamentos: "", feriados: "", ordens: "", historico: "" },
+  filtros: { equipamentos: "", feriados: "", ordens: "", historico: "", condensadoras: "" },
   unsubscribe: null,
   unsubscribeFeriados: null,
   unsubscribeOrdens: null,
@@ -477,6 +478,9 @@ function iniciarSincronizacaoPlantas() {
     // podem rodar renderLocalizacao()/abrirEquipamentoViaLink() em
     // paralelo com o outro.
     sincronizarLocalizacao();
+    // As condensadoras vivem DENTRO do documento da planta -- só esse
+    // snapshot sabe quando uma foi adicionada/removida/renomeada.
+    renderComProtecaoDeMenu("#condensadorasTable", renderCondensadorasCadastro);
   }, (err) => {
     console.error("Erro ao ler plantas:", err);
   });
@@ -942,6 +946,7 @@ $all(".tab").forEach((btn) => {
     if (btn.dataset.view === "ciclos") renderCiclos();
     if (btn.dataset.view === "dashboard") renderDashboard();
     if (btn.dataset.view === "equipamentos") renderEquipamentosCadastro();
+    if (btn.dataset.view === "condensadoras") renderCondensadorasCadastro();
     if (btn.dataset.view === "localizacao") renderLocalizacao();
     if (btn.dataset.view === "feriados") renderFeriados();
     if (btn.dataset.view === "ordens") renderOrdens();
@@ -1018,6 +1023,7 @@ function renderTodosSeletoresLocal() {
   renderSeletorLocal("localFiltroOrdens");
   renderSeletorLocal("localFiltroHistorico");
   renderSeletorLocal("localFiltroEquipamentos");
+  renderSeletorLocal("localFiltroCondensadoras");
 }
 
 // ------------------------------------------------------------------
@@ -2472,6 +2478,7 @@ let _localizacaoPendente = false;
 async function processarLocalizacao() {
   await renderLocalizacao();
   await abrirEquipamentoViaLink();
+  await abrirCondensadoraViaLink();
 }
 
 async function sincronizarLocalizacao() {
@@ -2505,6 +2512,7 @@ async function processarSincronizacao() {
   renderCalendar();
   renderDashboard();
   renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
+  renderComProtecaoDeMenu("#condensadorasTable", renderCondensadorasCadastro);
   await sincronizarLocalizacao();
   atualizarBannerAtrasados();
   atualizarAlertaDiasVazios();
@@ -2696,7 +2704,7 @@ function atualizarVisibilidadeAdmin() {
   });
 
   // Trabalhador só vê Calendário e Dashboard — some com o resto do menu
-  ["ordens", "historico", "equipamentos", "feriados"].forEach((view) => {
+  ["ordens", "historico", "equipamentos", "condensadoras", "feriados"].forEach((view) => {
     const tab = $(`.tab[data-view="${view}"]`);
     if (tab) tab.hidden = isTrabalhador;
   });
@@ -2705,7 +2713,7 @@ function atualizarVisibilidadeAdmin() {
 function abaPermitida(nome, permissao) {
   if (permissao === "admin") return true;
   if (["upload", "config"].includes(nome)) return false;
-  if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "feriados"].includes(nome)) return false;
+  if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "condensadoras", "feriados"].includes(nome)) return false;
   return true;
 }
 
@@ -3411,6 +3419,7 @@ function ligarBusca(inputId, chaveFiltro, renderFn) {
   });
 }
 ligarBusca("buscaEquipamentos", "equipamentos", renderEquipamentosCadastro);
+ligarBusca("buscaCondensadoras", "condensadoras", renderCondensadorasCadastro);
 ligarBusca("buscaFeriados", "feriados", renderFeriados);
 ligarBusca("buscaOrdens", "ordens", renderOrdens);
 ligarBusca("buscaHistorico", "historico", renderHistorico);
@@ -4974,6 +4983,14 @@ $("#btnLimparSelecaoEquipamentos")?.addEventListener("click", () => {
   renderEquipamentosCadastro(); // Re-renderiza a tabela para desmarcar as linhas
 });
 
+$("#btnLimparSelecaoCondensadoras")?.addEventListener("click", () => {
+  ESTADO.selecaoCondensadoras.clear();
+  const checkTodos = $("#checkTodosCondensadoras");
+  if (checkTodos) checkTodos.checked = false;
+  atualizarBarraSelecao("selecaoCondensadoras", "selecaoCondensadoras", "selecaoCondensadorasTexto");
+  renderCondensadorasCadastro();
+});
+
 // ------------------------------------------------------------------
 // Localização na planta — mostra os aparelhos marcados sobre a imagem da
 // planta baixa do prédio; admin pode clicar na imagem pra marcar/mover a
@@ -6041,7 +6058,8 @@ function mostrarPainelCondensadora(cond) {
         <span class="valor"><a href="#" data-ver-evap="${escapeHtml(e.id)}">${escapeHtml(e.ambiente || "-")}</a></span>
       </div>
     `).join("")}
-    ${isAdmin ? `<button class="btn ghost" id="btnRemoverMarcacaoCond" style="margin-top:10px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação "${escapeHtml(cond.codigo || "")}"</button>` : ""}
+    ${cond.codigo ? `<button class="btn ghost" id="btnImprimirQrCond" style="margin-top:10px;width:100%">Imprimir QR code</button>` : ""}
+    ${isAdmin ? `<button class="btn ghost" id="btnRemoverMarcacaoCond" style="margin-top:6px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação "${escapeHtml(cond.codigo || "")}"</button>` : ""}
   `;
   painel.querySelectorAll("[data-ver-evap]").forEach((link) => {
     link.addEventListener("click", (ev) => {
@@ -6050,6 +6068,7 @@ function mostrarPainelCondensadora(cond) {
       if (item) irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
     });
   });
+  $("#btnImprimirQrCond")?.addEventListener("click", () => imprimirQrCondensadoras([cond]));
   $("#btnRemoverMarcacaoCond")?.addEventListener("click", async () => {
     if (!confirm(`Remover a condensadora "${cond.codigo}" desta planta?`)) return;
     const plantaRef = doc(db, "plantas", cond.plantaId);
@@ -7031,28 +7050,11 @@ function gerarQrSvg(texto) {
   return qr.createSvgTag({ cellSize: 5, margin: 2 });
 }
 
-// Abre uma aba nova só com as etiquetas (QR + patrimônio/tag/ambiente),
-// prontas pra imprimir em papel adesivo -- serve tanto pra 1 equipamento
-// (botão "▦" na linha) quanto pra vários de uma vez (selecionar + botão
-// "Imprimir QR code" na barra de seleção).
-function imprimirQrEquipamentos(itens) {
-  if (!itens.length) { toast("Selecione ao menos um equipamento."); return; }
+// Abre a aba nova de impressão -- reaproveitado tanto pras etiquetas de
+// equipamento quanto de condensadora (só muda o HTML de cada etiqueta).
+function abrirJanelaDeEtiquetas(etiquetasHtml) {
   const janela = window.open("", "_blank", "width=900,height=700");
   if (!janela) { toast("O navegador bloqueou a janela de impressão -- permita pop-ups pra esse site."); return; }
-  const etiquetas = itens.map((item) => {
-    const svg = gerarQrSvg(urlDoEquipamento(item));
-    const titulo = escapeHtml(item.codigoPlanta || item.patrimonio || item.tag || item.ambiente || "Aparelho");
-    const linha2 = [item.patrimonio && `Pat. ${item.patrimonio}`, item.tag && `Tag ${item.tag}`].filter(Boolean).join(" · ");
-    return `
-      <div class="etiqueta">
-        <div class="qr">${svg}</div>
-        <div class="texto">
-          <strong>${titulo}</strong>
-          ${linha2 ? `<span>${escapeHtml(linha2)}</span>` : ""}
-          <span class="ambiente">${escapeHtml(item.ambiente || "-")}</span>
-        </div>
-      </div>`;
-  }).join("");
   janela.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas QR</title>
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
@@ -7067,15 +7069,169 @@ function imprimirQrEquipamentos(itens) {
     </style>
   </head><body>
     <div class="barra"><button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;">Imprimir</button></div>
-    <div class="grade">${etiquetas}</div>
+    <div class="grade">${etiquetasHtml}</div>
   </body></html>`);
   janela.document.close();
+}
+
+// Abre uma aba nova só com as etiquetas (QR + patrimônio/tag/ambiente),
+// prontas pra imprimir em papel adesivo -- serve tanto pra 1 equipamento
+// (botão "▦" na linha) quanto pra vários de uma vez (selecionar + botão
+// "Imprimir QR code" na barra de seleção).
+function imprimirQrEquipamentos(itens) {
+  if (!itens.length) { toast("Selecione ao menos um equipamento."); return; }
+  const etiquetas = itens.map((item) => {
+    const svg = gerarQrSvg(urlDoEquipamento(item));
+    const titulo = escapeHtml(item.codigoPlanta || item.patrimonio || item.tag || item.ambiente || "Aparelho");
+    const linha2 = [item.patrimonio && `Pat. ${item.patrimonio}`, item.tag && `Tag ${item.tag}`].filter(Boolean).join(" · ");
+    return `
+      <div class="etiqueta">
+        <div class="qr">${svg}</div>
+        <div class="texto">
+          <strong>${titulo}</strong>
+          ${linha2 ? `<span>${escapeHtml(linha2)}</span>` : ""}
+          <span class="ambiente">${escapeHtml(item.ambiente || "-")}</span>
+        </div>
+      </div>`;
+  }).join("");
+  abrirJanelaDeEtiquetas(etiquetas);
 }
 
 $("#btnImprimirQrSelecionados")?.addEventListener("click", () => {
   const itens = ESTADO.equipamentos.filter((e) => ESTADO.selecaoEquipamentos.has(e.id));
   imprimirQrEquipamentos(itens);
 });
+
+// ------------------------------------------------------------------
+// Condensadoras -- não têm um documento próprio no Firestore (vivem
+// dentro de planta.condensadoras, ver mostrarPainelCondensadora), mas
+// têm um "codigo" que já é único no sistema todo (buscarCondensadoraPorCodigo
+// procura em TODAS as plantas por ele) -- é o suficiente pra servir de
+// identificador estável no link do QR, igual o id faz pro equipamento.
+// ------------------------------------------------------------------
+function todasCondensadoras() {
+  const lista = [];
+  ESTADO.plantas.forEach((planta) => {
+    (planta.condensadoras || []).forEach((cond) => {
+      if (!cond.codigo) return; // sem código não dá pra linkar (nem selecionar) de forma confiável
+      lista.push({ ...cond, plantaId: planta.id, plantaNome: planta.nome || "", local: planta.local || "SEDE" });
+    });
+  });
+  return lista;
+}
+
+function urlDaCondensadora(cond) {
+  const base = location.origin + location.pathname;
+  return `${base}?condensadora=${encodeURIComponent(cond.codigo)}`;
+}
+
+function imprimirQrCondensadoras(itens) {
+  if (!itens.length) { toast("Selecione ao menos uma condensadora."); return; }
+  const etiquetas = itens.map((cond) => `
+      <div class="etiqueta">
+        <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
+        <div class="texto">
+          <strong>${escapeHtml("Condensadora " + cond.codigo)}</strong>
+          <span class="ambiente">${escapeHtml(cond.plantaNome || cond.local)}</span>
+        </div>
+      </div>`).join("");
+  abrirJanelaDeEtiquetas(etiquetas);
+}
+
+$("#btnImprimirQrCondensadorasSelecionadas")?.addEventListener("click", () => {
+  const itens = todasCondensadoras().filter((c) => ESTADO.selecaoCondensadoras.has(normalizarCodigo(c.codigo)));
+  imprimirQrCondensadoras(itens);
+});
+
+function renderCondensadorasCadastro() {
+  const table = $("#condensadorasTable");
+  if (!table) return;
+  const termo = ESTADO.filtros.condensadoras;
+  const filtradas = aplicarFiltroLocal(todasCondensadoras()).filter((cond) => {
+    if (!termo) return true;
+    return normalizarCodigo(cond.codigo).toLowerCase().includes(termo);
+  });
+  filtradas.sort((a, b) => normalizarCodigo(a.codigo).localeCompare(normalizarCodigo(b.codigo)));
+
+  $("#condensadorasCount").textContent = `${filtradas.length} itens`;
+  table.innerHTML = `<thead><tr>
+      <th style="width:30px"><input type="checkbox" id="checkTodosCondensadoras"></th>
+      <th>Código</th><th>Prédio</th><th>Planta</th><th>Evaporadoras vinculadas</th><th></th>
+    </tr></thead><tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+
+  filtradas.forEach((cond) => {
+    const chave = normalizarCodigo(cond.codigo);
+    const vinculadas = evaporadorasQueApontamPara(cond.codigo);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td></td>
+      <td data-label="Código"><strong>${escapeHtml(cond.codigo)}</strong></td>
+      <td data-label="Prédio">${escapeHtml(cond.local)}</td>
+      <td data-label="Planta">${escapeHtml(cond.plantaNome || "-")}</td>
+      <td data-label="Evaporadoras vinculadas">${vinculadas.length ? vinculadas.length : "Nenhuma ainda"}</td>`;
+
+    const tdCheck = tr.children[0];
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = ESTADO.selecaoCondensadoras.has(chave);
+    chk.addEventListener("click", (e) => e.stopPropagation());
+    chk.addEventListener("change", () => {
+      if (chk.checked) ESTADO.selecaoCondensadoras.add(chave);
+      else ESTADO.selecaoCondensadoras.delete(chave);
+      atualizarBarraSelecao("selecaoCondensadoras", "selecaoCondensadoras", "selecaoCondensadorasTexto");
+    });
+    tdCheck.appendChild(chk);
+
+    const tdAcoes = document.createElement("td");
+    tdAcoes.style.whiteSpace = "nowrap";
+    const btnQr = document.createElement("button");
+    btnQr.className = "btn-menu";
+    btnQr.textContent = "▦";
+    btnQr.title = "Imprimir QR code desta condensadora";
+    btnQr.addEventListener("click", (e) => {
+      e.stopPropagation();
+      imprimirQrCondensadoras([cond]);
+    });
+    tdAcoes.appendChild(btnQr);
+    tr.appendChild(tdAcoes);
+
+    tr.addEventListener("click", () => {
+      irParaAba("localizacao");
+      irParaMarcador(cond.plantaId, cond.x, cond.y, () => mostrarPainelCondensadora(cond));
+    });
+    tr.style.cursor = "pointer";
+    tbody.appendChild(tr);
+  });
+
+  $("#checkTodosCondensadoras")?.addEventListener("change", (e) => {
+    filtradas.forEach((cond) => {
+      const chave = normalizarCodigo(cond.codigo);
+      if (e.target.checked) ESTADO.selecaoCondensadoras.add(chave);
+      else ESTADO.selecaoCondensadoras.delete(chave);
+    });
+    atualizarBarraSelecao("selecaoCondensadoras", "selecaoCondensadoras", "selecaoCondensadorasTexto");
+    renderCondensadorasCadastro();
+  });
+}
+
+// Abre direto a condensadora que o QR aponta -- mesmo caminho de "Ver
+// condensadora" (troca de planta se preciso, centraliza e mostra o
+// painel). Mesmo cuidado do abrirEquipamentoViaLink: espera ESTADO.plantas
+// carregar antes de decidir "não encontrada" (onSnapshot separado do de
+// equipamentos, ver comentário lá).
+let _linkCondensadoraProcessada = false;
+async function abrirCondensadoraViaLink() {
+  if (_linkCondensadoraProcessada) return;
+  const codigo = new URLSearchParams(location.search).get("condensadora");
+  if (!codigo) { _linkCondensadoraProcessada = true; return; }
+  if (!ESTADO.plantas.length) return;
+  const cond = buscarCondensadoraPorCodigo(codigo);
+  if (!cond) { _linkCondensadoraProcessada = true; toast(`Condensadora "${codigo}" não encontrada.`); return; }
+  _linkCondensadoraProcessada = true;
+  history.replaceState(null, "", location.pathname);
+  irParaAba("localizacao");
+  await irParaMarcador(cond.plantaId, cond.x, cond.y, () => mostrarPainelCondensadora(cond));
+}
 
 // Abre direto o equipamento que o QR aponta -- se ele já tem posição
 // marcada numa planta, vai pra lá (mesmo caminho de "Ver evaporadora");
