@@ -215,12 +215,13 @@ async function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
   });
 }
 
-// Pede uma assinatura autorizada ao Worker e envia a foto (já comprimida)
+// Pede uma assinatura autorizada ao Worker e envia o blob (já comprimido)
 // direto pro Cloudinary. `destino` é { folder } para o histórico de
 // preventivas, ou { publicId, overwrite: true } pra sobrescrever a foto
-// fixa do equipamento.
-async function enviarFoto(file, destino) {
-  const blobComprimido = await comprimirImagem(file);
+// fixa do equipamento. Separado de enviarFoto/enviarFotoOuEnfileirar
+// (abaixo) porque é a parte que precisa mesmo de internet -- a fila
+// offline reusa exatamente essa função pra reenviar mais tarde.
+async function enviarBlobParaCloudinary(blobComprimido, destino) {
   const idToken = await auth.currentUser.getIdToken();
 
   const respAssinatura = await fetch(URL_UPLOAD_FOTO, {
@@ -251,6 +252,160 @@ async function enviarFoto(file, destino) {
   const dados = await respUpload.json();
   return dados.secure_url;
 }
+
+async function enviarFoto(file, destino) {
+  const blobComprimido = await comprimirImagem(file);
+  return enviarBlobParaCloudinary(blobComprimido, destino);
+}
+
+// ------------------------------------------------------------------
+// Fila de fotos pendentes -- pra quem está numa sala/subsolo sem sinal
+// não ficar travado no meio de uma preventiva. Guarda o blob (já
+// comprimido e carimbado) num IndexedDB local -- sobrevive a recarregar
+// a página, diferente de guardar só em memória -- e tenta reenviar
+// sozinho assim que a internet voltar (evento "online", app voltando
+// pro primeiro plano, ou a próxima vez que o sistema abrir).
+// ------------------------------------------------------------------
+const DB_FILA_FOTOS = "pmocFilaFotosPendentes";
+
+function abrirDbFilaFotos() {
+  return new Promise((resolve, reject) => {
+    const pedido = indexedDB.open(DB_FILA_FOTOS, 1);
+    pedido.onupgradeneeded = () => {
+      pedido.result.createObjectStore("fotos", { keyPath: "id", autoIncrement: true });
+    };
+    pedido.onsuccess = () => resolve(pedido.result);
+    pedido.onerror = () => reject(pedido.error);
+  });
+}
+
+async function enfileirarFotoPendente(blob, destino, patch) {
+  const db = await abrirDbFilaFotos();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("fotos", "readwrite");
+    tx.objectStore("fotos").add({ blob, destino, patch, criadoEm: new Date().toISOString() });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function listarFotosPendentes() {
+  const db = await abrirDbFilaFotos();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction("fotos", "readonly").objectStore("fotos").getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function removerFotoPendente(id) {
+  const db = await abrirDbFilaFotos();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("fotos", "readwrite");
+    tx.objectStore("fotos").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function atualizarBadgeFotosPendentes(qtd) {
+  const banner = $("#alertaFotosPendentes");
+  if (!banner) return;
+  if (!qtd) { banner.hidden = true; return; }
+  banner.hidden = false;
+  $("#alertaFotosPendentesTexto").textContent = qtd === 1
+    ? "1 foto aguardando conexão para enviar."
+    : `${qtd} fotos aguardando conexão para enviar.`;
+}
+
+// Chama de novo o contador sem precisar reabrir o banco toda hora --
+// usado depois de enfileirar ou de reenviar com sucesso.
+async function atualizarContadorFotosPendentes() {
+  try {
+    atualizarBadgeFotosPendentes((await listarFotosPendentes()).length);
+  } catch (err) {
+    console.error("Não consegui checar a fila de fotos pendentes:", err);
+  }
+}
+
+// Comprime (sempre funciona offline) e tenta mandar a foto NA HORA; se a
+// rede falhar (sem sinal, ou caiu no meio do envio), devolve o blob em
+// vez de estourar erro -- quem chamou decide o que fazer com ele
+// (guardar na fila já com destino certo, ver enviarFotoOuEnfileirar
+// abaixo; ou, como em finalizarConclusao, só enfileirar depois de criar
+// o documento que a foto vai apontar).
+async function tentarEnviarOuGuardarBlob(file, destino) {
+  const blobComprimido = await comprimirImagem(file);
+  try {
+    const url = await enviarBlobParaCloudinary(blobComprimido, destino);
+    return { url, blobPendente: null };
+  } catch (err) {
+    console.warn("Sem sinal (ou falha de rede) pra enviar a foto agora -- guardando pra reenviar depois:", err);
+    return { url: "", blobPendente: blobComprimido };
+  }
+}
+
+// Versão "tudo em um" pra quando o destino final no Firebase já é
+// conhecido de antemão (ex: a própria foto do equipamento). `patch` diz
+// o que fazer com a URL quando o envio enfim der certo: { caminho:
+// "ciclos/x/equipamentos/y", campo: "fotoUrl" } (caminho no formato
+// aceito por doc(db, caminho) -- string com "/" alternando
+// coleção/documento). Devolve { url, pendente }: quando pendente=true,
+// url vem vazia (ainda não existe) -- quem chamou deve seguir em frente
+// sem ela, já que o resto não pode ficar refém do envio da foto.
+async function enviarFotoOuEnfileirar(file, destino, patch) {
+  const { url, blobPendente } = await tentarEnviarOuGuardarBlob(file, destino);
+  if (blobPendente) {
+    await enfileirarFotoPendente(blobPendente, destino, patch);
+    await atualizarContadorFotosPendentes();
+    toast("Sem sinal agora — a foto foi guardada e será enviada quando a internet voltar.");
+  }
+  return { url, pendente: !!blobPendente };
+}
+
+// Roda a fila inteira: pega cada foto pendente, tenta reenviar, e se
+// tinha um "patch" (lugar no Firebase que precisa saber a URL final),
+// atualiza esse campo. Para na PRIMEIRA falha (provavelmente ainda sem
+// sinal de verdade) -- tenta tudo de novo do zero na próxima chamada, em
+// vez de sair testando uma por uma e martelando a rede.
+let _processandoFilaFotos = false;
+async function processarFilaFotosPendentes() {
+  if (_processandoFilaFotos || !navigator.onLine) return;
+  _processandoFilaFotos = true;
+  try {
+    const pendentes = await listarFotosPendentes();
+    for (const registro of pendentes) {
+      try {
+        const url = await enviarBlobParaCloudinary(registro.blob, registro.destino);
+        if (registro.patch) {
+          // "navigator.onLine" só garante que existe alguma rede (podia
+          // ser um wifi sem internet de verdade) -- sem esse limite de
+          // tempo, um updateDoc preso aqui travaria _processandoFilaFotos
+          // pra sempre, e a fila NUNCA MAIS tentaria de novo, nem com
+          // sinal de volta (ver o teste isolado que provou que a
+          // promessa do Firestore não resolve sozinha quando não
+          // consegue confirmar com o servidor).
+          await Promise.race([
+            updateDoc(doc(db, registro.patch.caminho), { [registro.patch.campo]: url }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Demorou demais pra confirmar no Firebase.")), 10000)),
+          ]);
+        }
+        await removerFotoPendente(registro.id);
+      } catch (err) {
+        console.warn("Ainda não consegui reenviar uma foto pendente, tento de novo mais tarde:", err);
+        break;
+      }
+    }
+  } finally {
+    _processandoFilaFotos = false;
+    await atualizarContadorFotosPendentes();
+  }
+}
+
+window.addEventListener("online", processarFilaFotosPendentes);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) processarFilaFotosPendentes();
+});
 
 const ESTADO = {
   meta: null,
@@ -2403,6 +2558,11 @@ async function inicializarApp() {
     iniciarSincronizacaoPlantas();
     iniciarSincronizacaoFeriados();
     carregarBackupPlanilha();
+    // Mostra na hora se sobrou foto de uma sessão anterior sem sinal
+    // (ex: fechou o app ainda numa sala sem sinal), e já tenta reenviar
+    // caso a internet tenha voltado nesse meio tempo.
+    atualizarContadorFotosPendentes();
+    processarFilaFotosPendentes();
 }
 
 let modoCadastro = false;
@@ -3691,7 +3851,10 @@ function renderDashboard() {
 
 async function registrarHistorico(item, statusAnterior, statusNovo, tipo = "Preventiva", fotoUrl = "") {
   const agora = new Date();
-  await addDoc(collection(     db,     "ciclos",     ESTADO.cicloAtual,     "historico" ), {
+  // Devolve a referência do documento -- usado quando a foto ficou
+  // pendente (sem sinal, ver enviarFotoOuEnfileirar) pra saber ONDE
+  // gravar a URL assim que o envio enfim der certo.
+  return addDoc(collection(     db,     "ciclos",     ESTADO.cicloAtual,     "historico" ), {
     equipamentoId: item.id,
     patrimonio: item.patrimonio || "",
     setor: item.setor || "",
@@ -4103,31 +4266,70 @@ async function finalizarConclusao() {
     }
 
     let fotoUrl = "";
+    let fotoBlobPendente = null;
+    const destinoFoto = { folder: `equipamentos/${item.id}/preventivas` };
     if (fotoFile) {
       toast("Enviando foto...");
-      fotoUrl = await enviarFoto(fotoFile, { folder: `equipamentos/${item.id}/preventivas` });
+      const resultadoFoto = await tentarEnviarOuGuardarBlob(fotoFile, destinoFoto);
+      fotoUrl = resultadoFoto.url;
+      fotoBlobPendente = resultadoFoto.blobPendente;
     }
 
-    await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), camposStatus);
+    // NÃO espera essas escritas confirmarem no servidor daqui pra baixo --
+    // testado direto: mesmo com a persistência offline ligada, a
+    // PROMESSA de updateDoc/addDoc só resolve quando o Firestore consegue
+    // confirmar com o servidor (o cache local é só pra leitura/UI
+    // otimista, não muda esse comportamento da escrita em si). Sem sinal,
+    // isso deixava a tela de "Concluir preventiva" travada pra sempre
+    // (nunca dava erro, só ficava girando) -- o oposto do que se queria
+    // ao permitir concluir offline. Cada escrita roda em segundo plano
+    // (o Firestore já garante que ela fica guardada localmente e é
+    // reenviada sozinha quando o sinal voltar); erros nelas só são
+    // logados, não travam nem falham a conclusão pra quem está usando.
+    updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), camposStatus)
+      .catch((err) => console.error("Falha ao sincronizar status (deve reenviar sozinho com sinal de volta):", err));
     Object.assign(item, camposStatus);
 
-    const promessas = [
-      registrarHistorico(item, statusAnterior, "Concluída", "Preventiva", fotoUrl),
-      registrarOrdemServico(item, checklist, avaliacaoEstrelas, tecnico),
-    ];
+    // Gera a referência (e o "path") NA HORA, sem precisar esperar
+    // nenhuma escrita -- doc(collection(...)) só cria o id, não fala com
+    // o servidor. É o que permite saber onde enfileirar o patch da foto
+    // mesmo estando offline.
+    const refHistorico = doc(collection(db, "ciclos", ESTADO.cicloAtual, "historico"));
+    setDoc(refHistorico, {
+      equipamentoId: item.id,
+      patrimonio: item.patrimonio || "",
+      setor: item.setor || "",
+      ambiente: item.ambiente || "",
+      local: item.local || "SEDE",
+      equipe: item.equipeResponsavel || "",
+      usuario: ESTADO.usuarioNome || "",
+      tipo: "Preventiva",
+      statusAnterior: statusAnterior || "-",
+      statusNovo: "Concluída",
+      fotoUrl,
+      registradoEm: new Date().toISOString(),
+    }).catch((err) => console.error("Falha ao sincronizar histórico (deve reenviar sozinho com sinal de volta):", err));
+
+    if (fotoBlobPendente) {
+      await enfileirarFotoPendente(fotoBlobPendente, destinoFoto, { caminho: refHistorico.path, campo: "fotoUrl" });
+      await atualizarContadorFotosPendentes();
+    }
+
+    registrarOrdemServico(item, checklist, avaliacaoEstrelas, tecnico)
+      .catch((err) => console.error("Falha ao sincronizar ordem de serviço (deve reenviar sozinho com sinal de volta):", err));
 
     if (infoTecnica) {
-      promessas.push(setDoc(doc(db, "infoCondensadoras", item.id), {
+      setDoc(doc(db, "infoCondensadoras", item.id), {
         ...infoTecnica,
         equipamentoId: item.id,
         preenchidoPor: ESTADO.usuarioNome || "",
         preenchidoEm: new Date().toISOString(),
-      }, { merge: true }));
+      }, { merge: true }).catch((err) => console.error("Falha ao sincronizar info técnica (deve reenviar sozinho com sinal de volta):", err));
     }
 
-    await Promise.all(promessas);
-
-    toast("Preventiva concluída com sucesso.");
+    toast(fotoBlobPendente
+      ? "Preventiva concluída. Sem sinal agora — a foto será enviada quando a internet voltar."
+      : "Preventiva concluída com sucesso.");
     fecharModalConclusao(false);
     if (typeof aoAtualizar === "function") aoAtualizar();
   } catch (err) {
@@ -4621,6 +4823,11 @@ async function adicionarEquipamentoManual() {
       const camposAtualizados = { patrimonio, setor, ambiente, local, setorPCM, prioridadeSetor, pisoPCM, tipoGas, observacao };
       if (arquivoFoto) {
         toast("Enviando foto...");
+        // Aqui (edição de cadastro) ainda usa a versão que falha na hora
+        // sem sinal -- diferente de "Concluir preventiva", esse fluxo
+        // sempre segue com um updateDoc do resto dos campos logo depois,
+        // que travaria pra sempre offline (ver finalizarConclusao); sem
+        // sinal ainda, falhar rápido aqui é melhor que travar a tela.
         camposAtualizados.fotoUrl = await enviarFoto(arquivoFoto, { publicId: `equipamentos/${idEquipamentoEmEdicao}/foto`, overwrite: true });
       }
       if (podeReagendar) {
@@ -4698,6 +4905,10 @@ async function adicionarEquipamentoManual() {
     try {
       if (arquivoFoto) {
         toast("Enviando foto...");
+        // Igual à edição de cadastro (ver comentário lá): esse fluxo
+        // sempre segue com setDoc + reagendarTudo() logo depois, que
+        // travariam pra sempre offline -- falhar rápido aqui é melhor
+        // que travar a tela.
         item.fotoUrl = await enviarFoto(arquivoFoto, { publicId: `equipamentos/${id}/foto`, overwrite: true });
       }
       await setDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), item);
@@ -7320,10 +7531,19 @@ async function abrirDrawerEquipamento(id) {
     btn.disabled = true;
     btn.textContent = "Enviando...";
     try {
-      const fotoUrl = await enviarFoto(arquivo, { publicId: `equipamentos/${id}/foto`, overwrite: true });
-      await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), { fotoUrl });
-      item.fotoUrl = fotoUrl;
-      toast("Foto salva.");
+      const caminhoEquip = `ciclos/${ESTADO.cicloAtual}/equipamentos/${id}`;
+      const { url, pendente } = await enviarFotoOuEnfileirar(
+        arquivo,
+        { publicId: `equipamentos/${id}/foto`, overwrite: true },
+        { caminho: caminhoEquip, campo: "fotoUrl" }
+      );
+      if (!pendente) {
+        await updateDoc(doc(db, caminhoEquip), { fotoUrl: url });
+        item.fotoUrl = url;
+        toast("Foto salva.");
+      } else {
+        toast("Sem sinal agora — a foto será salva quando a internet voltar.");
+      }
       abrirDrawerEquipamento(id);
     } catch (err) {
       console.error(err);
