@@ -316,7 +316,12 @@ function iniciarSincronizacaoPlantas() {
   if (ESTADO.unsubscribePlantas) ESTADO.unsubscribePlantas();
   ESTADO.unsubscribePlantas = onSnapshot(collection(db, "plantas"), (snap) => {
     ESTADO.plantas = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    renderLocalizacao();
+    // Passa pela MESMA fila que o onSnapshot de equipamentos usa (ver
+    // sincronizarLocalizacao) -- as plantas chegam de um snapshot
+    // separado, mas mexem no mesmo #plantaSvg/#plantaPainel, então não
+    // podem rodar renderLocalizacao()/abrirEquipamentoViaLink() em
+    // paralelo com o outro.
+    sincronizarLocalizacao();
   }, (err) => {
     console.error("Erro ao ler plantas:", err);
   });
@@ -2295,34 +2300,91 @@ async function carregarCicloAtual() {
 
     ESTADO.cicloAtual = snap.docs[0].id;
 }
+// renderLocalizacao() + abrirEquipamentoViaLink() mexem no MESMO
+// #plantaSvg/#plantaPainel, mas são disparados por DOIS onSnapshot
+// independentes (equipamentos aqui embaixo, e plantas em
+// iniciarSincronizacaoPlantas) -- cada mudança em qualquer um dos dois
+// dispara os dois de novo. Sem essa fila, um snapshot de equipamentos e
+// um de plantas chegando perto um do outro rodavam os dois em paralelo
+// disputando a mesma planta: o que terminasse por último (geralmente o
+// que precisou carregar/baixar a planta de verdade) redesenhava tudo e
+// chamava limparPainelPlanta(), apagando o painel que o outro já tinha
+// acabado de mostrar. Bug real relatado: escanear o QR abria a planta
+// certa, mas o painel com as informações do aparelho não aparecia.
+let _localizacaoRodando = false;
+let _localizacaoPendente = false;
+
+async function processarLocalizacao() {
+  await renderLocalizacao();
+  await abrirEquipamentoViaLink();
+}
+
+async function sincronizarLocalizacao() {
+  if (_localizacaoRodando) {
+    // Já tem uma rodada acontecendo: não dispara outra em paralelo, só
+    // marca que precisa rodar mais uma vez (com o estado mais recente)
+    // assim que essa terminar.
+    _localizacaoPendente = true;
+    return;
+  }
+  _localizacaoRodando = true;
+  try {
+    do {
+      _localizacaoPendente = false;
+      await processarLocalizacao();
+    } while (_localizacaoPendente);
+  } finally {
+    _localizacaoRodando = false;
+  }
+}
+
+let _processandoSincronizacao = false;
+let _sincronizacaoPendente = false;
+
+async function processarSincronizacao() {
+  if (!ESTADO.calYear && ESTADO.equipamentos.length) {
+    const primeira = new Date(ESTADO.equipamentos[0].dataAgendada + "T12:00:00Z");
+    ESTADO.calYear = primeira.getFullYear();
+    ESTADO.calMonth = primeira.getMonth();
+  }
+  renderCalendar();
+  renderDashboard();
+  renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
+  await sincronizarLocalizacao();
+  atualizarBannerAtrasados();
+  atualizarAlertaDiasVazios();
+  renderCiclos();
+  verificarFechamentoCiclo();
+  renderTodosSeletoresLocal();
+}
+
+async function agendarProcessamentoSincronizacao() {
+  if (_processandoSincronizacao) {
+    // Já tem um ciclo rodando: não dispara outro em paralelo, só marca
+    // que precisa rodar mais uma vez (com os dados mais recentes, já
+    // atualizados em ESTADO.equipamentos) assim que esse terminar.
+    _sincronizacaoPendente = true;
+    return;
+  }
+  _processandoSincronizacao = true;
+  try {
+    do {
+      _sincronizacaoPendente = false;
+      await processarSincronizacao();
+    } while (_sincronizacaoPendente);
+  } finally {
+    _processandoSincronizacao = false;
+  }
+}
+
 function iniciarSincronizacao() {
   if (!ESTADO.cicloAtual) return;
   if (ESTADO.unsubscribe) ESTADO.unsubscribe();
   const q = query( collection(db, "ciclos", ESTADO.cicloAtual, "equipamentos"),orderBy("ordemExecucao")
 );
-  ESTADO.unsubscribe = onSnapshot(q, async (snap) => {
+  ESTADO.unsubscribe = onSnapshot(q, (snap) => {
     ESTADO.equipamentos = snap.docs.map((d) => d.data());
-    if (!ESTADO.calYear && ESTADO.equipamentos.length) {
-      const primeira = new Date(ESTADO.equipamentos[0].dataAgendada + "T12:00:00Z");
-      ESTADO.calYear = primeira.getFullYear();
-      ESTADO.calMonth = primeira.getMonth();
-    }
-    renderCalendar();
-    renderDashboard();
-    renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
-    // Precisa terminar ANTES de abrirEquipamentoViaLink (que pode chamar
-    // renderLocalizacao() de novo, pra trocar de planta): as duas chamadas
-    // rodando ao mesmo tempo disputavam a mesma planta -- quem terminasse
-    // por último redesenhava tudo e escondia o painel que a outra acabou
-    // de abrir. Resultado visto de verdade: escanear o QR abria a planta
-    // certa, mas o painel com as informações do aparelho não aparecia.
-    await renderLocalizacao();
-    atualizarBannerAtrasados();
-    atualizarAlertaDiasVazios();
-    renderCiclos();
-    verificarFechamentoCiclo();
-    renderTodosSeletoresLocal();
-    await abrirEquipamentoViaLink();
+    agendarProcessamentoSincronizacao();
   }, (err) => {
     console.error(err);
     toast("Erro ao ler dados do Firebase: " + err.message);
@@ -6773,9 +6835,21 @@ async function abrirEquipamentoViaLink() {
   if (!id) { _linkAparelhoProcessado = true; return; }
   const item = ESTADO.equipamentos.find((e) => e.id === id);
   if (!item) return; // ainda pode não ter chegado nessa 1ª leva do snapshot
+  const precisaDaPlanta = item.plantaId && item.plantaX != null && item.plantaY != null;
+  // ESTADO.plantas vem de um onSnapshot SEPARADO (iniciarSincronizacaoPlantas)
+  // do de equipamentos, e pode não ter chegado ainda nessa primeira leva.
+  // Sem essa espera, irParaMarcador() achava a planta como "não
+  // selecionada ainda" e mostrava o painel antes mesmo da planta existir
+  // em ESTADO.plantas -- daí quando a planta de fato chegava (nem que
+  // fosse só alguns instantes depois) o carregamento de verdade rodava
+  // pela primeira vez e o limparPainelPlanta() dele apagava, sem
+  // ninguém pra reabrir (o link só processa uma vez). Esse era o bug
+  // real: às vezes o QR só abria a localização, sem as informações do
+  // aparelho -- não bastava só serializar as chamadas concorrentes.
+  if (precisaDaPlanta && !ESTADO.plantas.some((p) => p.id === item.plantaId)) return;
   _linkAparelhoProcessado = true;
   history.replaceState(null, "", location.pathname);
-  if (item.plantaId && item.plantaX != null && item.plantaY != null) {
+  if (precisaDaPlanta) {
     irParaAba("localizacao");
     await irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
   } else {
