@@ -5751,12 +5751,15 @@ async function renderMarcadoresPlanta() {
       }
     });
   }
+
+  desenharDestaqueFixo(svg, gMarcadores, planta.id);
 }
 
 // Fica escondido por padrão -- só aparece quando um marcador de
 // verdade é clicado, não com uma mensagem fixa tipo "selecione um
 // marcador" (a Jovanna não queria nada aparecendo o tempo todo ali).
 function limparPainelPlanta() {
+  limparDestaqueFixo();
   const painel = $("#plantaPainel");
   if (!painel) return;
   painel.innerHTML = "";
@@ -5873,6 +5876,10 @@ async function irParaMarcador(plantaId, x, y, aoChegar) {
     await renderLocalizacao();
   }
   const svg = $("#plantaSvg");
+  // Pisca na hora (chama atenção) + fica marcado (destaque fixo, não
+  // some depois de alguns segundos -- ver desenharDestaqueFixo).
+  definirDestaqueFixo(plantaId, x, y);
+  renderMarcadoresPlanta();
   centralizarView(svg, x, y);
   piscarDestaque(svg, x, y);
   aoChegar();
@@ -5947,6 +5954,42 @@ function piscarDestaque(svg, x, y) {
   anel.classList.add("planta-pulso-destaque");
   gMarcadores.appendChild(anel);
   setTimeout(() => anel.remove(), 3900);
+}
+
+// Destaque FIXO (não passa uns segundos e some, como o pisca acima) do
+// marcador que a pessoa chegou vendo por último -- pedido depois do QR
+// code: numa planta com vários aparelhos parecidos, achar qual é "esse
+// aqui" só pelo pisca-pisca rápido não bastava. Fica desenhado enquanto
+// o painel de informações daquele aparelho estiver aberto;
+// renderMarcadoresPlanta() redesenha ele por cima dos outros marcadores
+// toda vez que a planta é redesenhada (senão sumiria a cada atualização
+// vinda do Firebase), e limparPainelPlanta() apaga o estado quando o
+// painel fecha.
+let _destaqueFixo = null; // { plantaId, x, y }
+
+function definirDestaqueFixo(plantaId, x, y) {
+  _destaqueFixo = { plantaId, x, y };
+}
+
+function limparDestaqueFixo() {
+  _destaqueFixo = null;
+  $("#plantaMarcadoresSvg")?.querySelectorAll(".planta-destaque-fixo").forEach((el) => el.remove());
+}
+
+function desenharDestaqueFixo(svg, gMarcadores, plantaId) {
+  if (!_destaqueFixo || _destaqueFixo.plantaId !== plantaId) return;
+  const [xmin, , xmax] = svg.__viewOriginal ? [svg.__viewOriginal.x, 0, svg.__viewOriginal.x + svg.__viewOriginal.w] : [0, 0, 100];
+  const raio = (xmax - xmin) / 26 || 1;
+  const nsSvg = "http://www.w3.org/2000/svg";
+  const anel = document.createElementNS(nsSvg, "circle");
+  anel.setAttribute("cx", _destaqueFixo.x);
+  anel.setAttribute("cy", _destaqueFixo.y);
+  anel.setAttribute("r", raio);
+  anel.setAttribute("fill", "none");
+  anel.setAttribute("stroke", "#FF2EA6");
+  anel.setAttribute("stroke-width", raio / 4);
+  anel.classList.add("planta-destaque-fixo");
+  gMarcadores.appendChild(anel);
 }
 
 // Acha o candidato (símbolo real detectado no CAD) mais próximo de um

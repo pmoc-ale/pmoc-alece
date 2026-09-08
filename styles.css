@@ -1417,6 +1417,19 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   0% { opacity: 1; transform: scale(0.6); }
   100% { opacity: 0; transform: scale(2.6); }
 }
+/* Diferente do pisca acima (chama atenção na hora e some), esse fica
+   desenhado enquanto o painel do aparelho estiver aberto -- pra achar
+   fácil qual é a máquina mesmo numa planta cheia de símbolos parecidos.
+   Cor bem diferente das usadas em status/seleção pra não confundir. */
+.planta-destaque-fixo {
+  pointer-events: none;
+  filter: drop-shadow(0 0 7px rgba(255, 46, 166, 0.9));
+  animation: pulsarDestaqueFixo 1.4s ease-in-out infinite;
+}
+@keyframes pulsarDestaqueFixo {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
 .planta-painel {
   position: absolute;
   left: 10px;
