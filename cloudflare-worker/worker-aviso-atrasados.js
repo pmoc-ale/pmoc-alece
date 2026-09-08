@@ -1,73 +1,41 @@
-// Worker Cloudflare — manda um e-mail resumo dos aparelhos atrasados,
-// uma vez por dia, pra quem estiver na lista de destinatários. Roda
-// sozinho (Cron Trigger, configurado no painel da Cloudflare, não aqui
-// no código) e usa o mesmo jeito de ler o Firestore que o
-// worker-backup.js já usa (conta de serviço do Google) -- se aquele
-// Worker já está configurado, os 3 primeiros segredos abaixo já existem
-// e podem ser reaproveitados aqui, sem precisar criar de novo.
+// Worker Cloudflare — manda um e-mail resumo dos aparelhos atrasados, uma
+// vez por dia, pra quem estiver na lista de destinatários.
+//
+// Pra ler o Firestore, esse Worker faz login como um usuário comum do
+// próprio PMOC ALECE (não precisa de "conta de serviço" do Google, nem de
+// nada novo no Google Cloud) -- só um e-mail/senha criado igual qualquer
+// outra conta, em Configurações > Usuários. Recomendo criar uma conta só
+// pra isso (ex: "robo.avisos@pcm-alece.local"), permissão "Trabalhador"
+// (só precisa poder LER os equipamentos, nada mais).
 //
 // Variáveis de ambiente que esse Worker precisa (Settings > Variables and
 // Secrets, todas como "Secret"):
-//   GOOGLE_SERVICE_ACCOUNT_EMAIL   (mesma do worker-backup.js)
-//   GOOGLE_PRIVATE_KEY             (mesma do worker-backup.js)
-//   FIREBASE_PROJECT_ID            (= "pcm-alece")
-//   RESEND_API_KEY                 (a chave criada em resend.com/api-keys)
-//   EMAIL_REMETENTE                (ex: "PMOC ALECE <avisos@seudominio.com.br>"
-//                                    -- precisa ser um domínio verificado no
-//                                    Resend; sem domínio verificado, use
-//                                    "onboarding@resend.dev" só pra testar)
-//   EMAIL_DESTINATARIOS            (e-mails separados por vírgula, ex:
-//                                    "jovanna@x.com,fulano@x.com")
+//   FIREBASE_WEB_API_KEY   (a mesma já usada no Worker das fotos)
+//   FIREBASE_PROJECT_ID    (idem, = "pcm-alece")
+//   ROBO_EMAIL             (o e-mail da conta criada só pra esse Worker)
+//   ROBO_SENHA             (a senha dessa conta)
+//   RESEND_API_KEY         (a chave criada em resend.com/api-keys)
+//   EMAIL_REMETENTE        (ex: "PMOC ALECE <avisos@seudominio.com.br>" --
+//                            precisa de domínio verificado no Resend; sem
+//                            isso, use "onboarding@resend.dev" pra testar,
+//                            que só entrega pro e-mail da conta Resend)
+//   EMAIL_DESTINATARIOS    (e-mails separados por vírgula)
 //
 // Pra testar sem esperar o horário programado: visite a URL desse Worker
 // no navegador (GET) -- ele roda na hora e mostra o resultado.
 
-const ESCOPO_GOOGLE = "https://www.googleapis.com/auth/datastore";
-
-function base64Url(bytes) {
-  let binario = "";
-  bytes.forEach((b) => (binario += String.fromCharCode(b)));
-  return btoa(binario).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function base64UrlTexto(texto) {
-  return base64Url(new TextEncoder().encode(texto));
-}
-
-async function importarChavePrivada(pem) {
-  const corpo = pem
-    .replace(/\\n/g, "\n")
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
-    .replace(/\s/g, "");
-  const bytes = Uint8Array.from(atob(corpo), (c) => c.charCodeAt(0));
-  return crypto.subtle.importKey(
-    "pkcs8", bytes, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]
+async function loginComoRobo(env) {
+  const resp = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${env.FIREBASE_WEB_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: env.ROBO_EMAIL, password: env.ROBO_SENHA, returnSecureToken: true }),
+    }
   );
-}
-
-async function obterAccessTokenGoogle(env) {
-  const agora = Math.floor(Date.now() / 1000);
-  const header = { alg: "RS256", typ: "JWT" };
-  const claimSet = {
-    iss: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    scope: ESCOPO_GOOGLE,
-    aud: "https://oauth2.googleapis.com/token",
-    iat: agora,
-    exp: agora + 3600,
-  };
-  const semAssinar = `${base64UrlTexto(JSON.stringify(header))}.${base64UrlTexto(JSON.stringify(claimSet))}`;
-  const chave = await importarChavePrivada(env.GOOGLE_PRIVATE_KEY);
-  const assinatura = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", chave, new TextEncoder().encode(semAssinar));
-  const jwt = `${semAssinar}.${base64Url(new Uint8Array(assinatura))}`;
-
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${jwt}`,
-  });
   const dados = await resp.json();
-  if (!resp.ok) throw new Error("Falha ao autenticar com o Google: " + (dados.error_description || dados.error));
-  return dados.access_token;
+  if (!resp.ok) throw new Error("Falha ao logar como robô: " + (dados.error?.message || resp.status));
+  return dados.idToken;
 }
 
 function lerValorFirestore(valor) {
@@ -84,12 +52,12 @@ function documentoParaObjeto(doc) {
   return obj;
 }
 
-async function listarColecao(caminho, token, env) {
+async function listarColecao(caminho, idToken, env) {
   const documentos = [];
   let pageToken = "";
   do {
     const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${caminho}?pageSize=300${pageToken ? `&pageToken=${pageToken}` : ""}`;
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
     const dados = await resp.json();
     if (!resp.ok) throw new Error(`Falha ao ler ${caminho}: ${dados.error?.message || resp.status}`);
     (dados.documents || []).forEach((doc) => documentos.push(documentoParaObjeto(doc)));
@@ -98,9 +66,9 @@ async function listarColecao(caminho, token, env) {
   return documentos;
 }
 
-async function cicloAtualId(token, env) {
+async function cicloAtualId(idToken, env) {
   const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/ciclos?orderBy=criadoEm desc&pageSize=1`;
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
   const dados = await resp.json();
   if (!resp.ok || !dados.documents?.length) return null;
   return dados.documents[0].name.split("/").pop();
@@ -168,11 +136,11 @@ async function enviarEmail(html, atrasadosCount, env) {
 }
 
 async function rodarAvisoAtrasados(env) {
-  const token = await obterAccessTokenGoogle(env);
-  const cicloId = await cicloAtualId(token, env);
+  const idToken = await loginComoRobo(env);
+  const cicloId = await cicloAtualId(idToken, env);
   if (!cicloId) return { enviado: false, motivo: "Nenhum ciclo ativo encontrado." };
 
-  const equipamentos = await listarColecao(`ciclos/${cicloId}/equipamentos`, token, env);
+  const equipamentos = await listarColecao(`ciclos/${cicloId}/equipamentos`, idToken, env);
   const hoje = new Date();
   const hojeISO = hoje.toISOString().slice(0, 10);
   const hojeFormatado = hoje.toLocaleDateString("pt-BR");
