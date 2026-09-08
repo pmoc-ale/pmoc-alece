@@ -325,6 +325,162 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
   return conteudoHTML;
 }
 
+// Relatório no formato que a fiscalização (ANVISA/vigilância sanitária)
+// espera ver -- diferente do relatório gerencial acima (que é pra
+// acompanhar KPI). Estrutura baseada no Anexo I da Portaria 3.523/GM/98,
+// hoje orientado pela ABNT NBR 17037:2023 e NBR 13971: identificação do
+// estabelecimento e do responsável técnico, lista dos ambientes
+// climatizados, e o registro de execução (data, técnico, atividades) de
+// cada preventiva já concluída.
+function gerarRelatorioAnexoI(equipamentos, ordens, configSite, numeroCiclo) {
+  const hoje = new Date();
+  const dataEmissao = hoje.toLocaleDateString('pt-BR');
+  const estabelecimento = (configSite && configSite.estabelecimento) || 'Assembleia Legislativa do Estado do Ceará';
+  const endereco = (configSite && configSite.endereco) || '';
+  const responsavelTecnico = (configSite && configSite.responsavelTecnico) || '';
+  const registroTecnico = (configSite && configSite.registroTecnico) || '';
+
+  const porPredio = {};
+  equipamentos.forEach((e) => {
+    const predio = e.local || 'SEDE';
+    if (!porPredio[predio]) porPredio[predio] = [];
+    porPredio[predio].push(e);
+  });
+
+  const ordensPorEquipamento = {};
+  (ordens || []).forEach((o) => {
+    if (!ordensPorEquipamento[o.equipamentoId]) ordensPorEquipamento[o.equipamentoId] = [];
+    ordensPorEquipamento[o.equipamentoId].push(o);
+  });
+
+  const rotuloAvaliacao = (n) => {
+    const map = { 1: 'Crítica', 2: 'Ruim', 3: 'Regular', 4: 'Boa', 5: 'Ótima' };
+    return map[n] || '-';
+  };
+
+  let identificacaoHTML = '';
+  let execucaoHTML = '';
+
+  Object.keys(porPredio).sort().forEach((predio) => {
+    const itensDoPredio = porPredio[predio];
+
+    identificacaoHTML += `
+      <h3 class="secao-predio">${escapeHtml(predio)}</h3>
+      <table class="tabela-anexo">
+        <thead><tr>
+          <th>Setor</th><th>Ambiente</th><th>Patrimônio</th><th>Tag</th><th>Marca/Modelo</th><th>Capacidade</th><th>Gás</th>
+        </tr></thead>
+        <tbody>
+          ${itensDoPredio.map((e) => `
+            <tr>
+              <td>${escapeHtml(e.setor || '-')}</td>
+              <td>${escapeHtml(e.ambiente || '-')}</td>
+              <td>${escapeHtml(e.patrimonio || '-')}</td>
+              <td>${escapeHtml(e.tag || '-')}</td>
+              <td>${escapeHtml([e.marca, e.modelo].filter(Boolean).join(' / ') || '-')}</td>
+              <td>${escapeHtml(e.capacidade || '-')}</td>
+              <td>${escapeHtml(e.tipoGas || '-')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    const linhasExecucao = itensDoPredio
+      .flatMap((e) => (ordensPorEquipamento[e.id] || []).map((o) => ({ item: e, ordem: o })))
+      .sort((a, b) => String(b.ordem.registradoEm).localeCompare(String(a.ordem.registradoEm)));
+
+    execucaoHTML += `<h3 class="secao-predio">${escapeHtml(predio)}</h3>`;
+    if (!linhasExecucao.length) {
+      execucaoHTML += `<p class="sem-registro">Nenhuma preventiva concluída registrada neste prédio ainda.</p>`;
+    } else {
+      execucaoHTML += `
+        <table class="tabela-anexo">
+          <thead><tr>
+            <th>Data</th><th>Patrimônio / Ambiente</th><th>Técnico</th><th>Atividades executadas</th><th>Avaliação</th>
+          </tr></thead>
+          <tbody>
+            ${linhasExecucao.map(({ item, ordem }) => `
+              <tr>
+                <td>${new Date(ordem.registradoEm).toLocaleDateString('pt-BR')}</td>
+                <td>${escapeHtml(item.patrimonio || '-')} — ${escapeHtml(item.ambiente || '-')}</td>
+                <td>${escapeHtml(ordem.tecnico || '-')}</td>
+                <td class="col-atividades">${(ordem.checklist || []).map(escapeHtml).join('; ') || '-'}</td>
+                <td>${escapeHtml(rotuloAvaliacao(ordem.avaliacaoEstrelas))}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+  });
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; margin: 30px; color: #1a1a1a; font-size: 10.5px; line-height: 1.4; }
+        .header { width: 100%; border-bottom: 2px solid #2c3e50; padding-bottom: 12px; margin-bottom: 18px; overflow: hidden; }
+        .header h1 { font-size: 16px; text-transform: uppercase; margin: 0 0 4px; color: #2c3e50; }
+        .header .base-legal { font-size: 9.5px; color: #555; }
+        .ficha { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        .ficha td { padding: 4px 6px; border: 1px solid #ccc; vertical-align: top; }
+        .ficha td.rotulo { background: #f4f4f4; font-weight: 600; width: 22%; }
+        .secao-titulo { font-size: 13px; text-transform: uppercase; color: #2c3e50; border-bottom: 1px solid #2c3e50; padding-bottom: 4px; margin: 22px 0 10px; }
+        .secao-predio { font-size: 11.5px; color: #2c3e50; margin: 14px 0 6px; }
+        .tabela-anexo { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .tabela-anexo th, .tabela-anexo td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; font-size: 9.5px; }
+        .tabela-anexo th { background: #2c3e50; color: #fff; text-transform: uppercase; font-size: 8.5px; }
+        .col-atividades { max-width: 160px; }
+        .sem-registro { font-style: italic; color: #777; font-size: 10px; }
+        .assinatura { margin-top: 50px; overflow: hidden; }
+        .assinatura .linha { width: 60%; border-top: 1px solid #1a1a1a; margin-top: 40px; padding-top: 4px; font-size: 10px; }
+        .footer { margin-top: 30px; font-size: 8.5px; color: #777; border-top: 1px solid #ccc; padding-top: 6px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Plano de Manutenção, Operação e Controle (PMOC)</h1>
+        <div class="base-legal">Lei Federal nº 13.589/2018 &middot; ABNT NBR 17037:2023 &middot; ABNT NBR 13971</div>
+      </div>
+
+      <table class="ficha">
+        <tr><td class="rotulo">Estabelecimento</td><td>${escapeHtml(estabelecimento)}</td></tr>
+        ${endereco ? `<tr><td class="rotulo">Endereço</td><td>${escapeHtml(endereco)}</td></tr>` : ''}
+        <tr><td class="rotulo">Responsável técnico</td><td>${escapeHtml(responsavelTecnico) || '<em>Não preenchido — ver Configurações &gt; Sistema</em>'}</td></tr>
+        <tr><td class="rotulo">Registro profissional</td><td>${escapeHtml(registroTecnico) || '-'}</td></tr>
+        <tr><td class="rotulo">Ciclo de referência</td><td>Ciclo ${numeroCiclo || '-'}</td></tr>
+        <tr><td class="rotulo">Data de emissão</td><td>${dataEmissao}</td></tr>
+      </table>
+
+      <div class="secao-titulo">1. Identificação dos ambientes climatizados</div>
+      ${identificacaoHTML}
+
+      <div class="secao-titulo">2. Registro de execução</div>
+      ${execucaoHTML}
+
+      <div class="assinatura">
+        <div class="linha">${escapeHtml(responsavelTecnico) || 'Responsável técnico'}${registroTecnico ? ' — ' + escapeHtml(registroTecnico) : ''}</div>
+      </div>
+
+      <div class="footer">PMOC ALECE — Relatório gerado automaticamente em ${dataEmissao}.</div>
+    </body>
+    </html>
+  `;
+}
+
+function baixarRelatorioAnexoI(equipamentos, ordens, configSite, numeroCiclo) {
+  const html = gerarRelatorioAnexoI(equipamentos, ordens, configSite, numeroCiclo);
+  const opt = {
+    margin: [10, 10, 10, 10],
+    filename: `PMOC_ALECE_Relatorio_Anexo_I_${new Date().toISOString().split('T')[0]}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
+    pagebreak: { mode: ['css', 'legacy'] },
+  };
+  html2pdf().set(opt).from(html).save();
+}
+
 function baixarRelatorioPDF(equipamentos, cicloInfo, historico) {
   // 1. Chama a sua função para gerar o HTML
   const html = gerarRelatorioPDF(equipamentos, cicloInfo, historico);

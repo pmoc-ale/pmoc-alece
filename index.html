@@ -246,9 +246,10 @@
       </details>
       <div class="card">
         <h2>Exportar</h2>
-        <p class="muted">Baixa uma planilha .xlsx com os dados atuais ou um relatório em PDF.</p>
+        <p class="muted">Baixa uma planilha .xlsx com os dados atuais, um relatório gerencial em PDF, ou o relatório no formato PMOC (Anexo I) pra fiscalização.</p>
         <button class="btn secondary" id="btnExport">Baixar planilha (.xlsx)</button>
         <button class="btn primary" id="btnExportarPDF" style="margin-left:10px">Baixar relatório (PDF)</button>
+        <button class="btn primary" id="btnExportarPMOC" style="margin-left:10px">Relatório PMOC (Anexo I)</button>
       </div>
     </section>
     
@@ -390,6 +391,7 @@
             <span id="selecaoEquipamentosTexto">0 selecionado(s)</span>
           </div>
           <div class="action-bar-direita">
+            <button id="btnImprimirQrSelecionados" class="btn ghost">Imprimir QR code</button>
             <button id="btnExcluirSelecionadosEquipamentos" class="btn danger-inverted">Excluir</button>
           </div>
         </div>
@@ -591,12 +593,21 @@
             <div class="drawer-campo" style="padding: 12px 0;"><span class="rotulo">Duração do Ciclo</span><span class="valor" id="txtCfgMeses">...</span></div>
             <div class="drawer-campo" style="padding: 12px 0;"><span class="rotulo">Prédios Ativos</span><span class="valor" id="txtCfgPredios">...</span></div>
             <div class="drawer-campo" style="padding: 12px 0;"><span class="rotulo">Planilha Corretivas (CSV)</span><span class="valor" id="txtCfgUrl" style="word-break: break-all; max-width: 60%; color: var(--azul-700);">...</span></div>
-            <div class="drawer-campo" style="padding: 12px 0; border-bottom: none;"><span class="rotulo">Foto na conclusão da preventiva</span><span class="valor" id="txtCfgFoto">...</span></div>
+            <div class="drawer-campo" style="padding: 12px 0;"><span class="rotulo">Foto na conclusão da preventiva</span><span class="valor" id="txtCfgFoto">...</span></div>
+            <div class="drawer-campo" style="padding: 12px 0;"><span class="rotulo">Estabelecimento (relatório PMOC)</span><span class="valor" id="txtCfgEstabelecimento">...</span></div>
+            <div class="drawer-campo" style="padding: 12px 0; border-bottom: none;"><span class="rotulo">Responsável técnico (relatório PMOC)</span><span class="valor" id="txtCfgResponsavelTecnico">...</span></div>
           </div>
           <div id="cfgModoEdicao" hidden style="margin-top: 16px; padding-top: 20px; border-top: 1px dashed var(--borda);">
             <div class="grid-form">
               <label>Duração do ciclo (meses)<input type="number" id="cfgMesesCiclo" min="1" max="24"></label>
               <label>Link da planilha de corretivas (CSV)<input type="text" id="cfgUrlCorretivas"></label>
+            </div>
+            <label style="display:block; font-size:12px; font-weight:600; color:var(--texto-suave); text-transform:uppercase; margin-top:20px;">Dados pro relatório PMOC (Anexo I)</label>
+            <div class="grid-form" style="margin-top:8px;">
+              <label>Nome do estabelecimento<input type="text" id="cfgEstabelecimento" placeholder="Ex: Assembleia Legislativa do Estado do Ceará"></label>
+              <label>Endereço (opcional)<input type="text" id="cfgEndereco" placeholder="Ex: Av. Desembargador Moreira, 2807"></label>
+              <label>Responsável técnico (nome)<input type="text" id="cfgResponsavelTecnico" placeholder="Ex: João da Silva"></label>
+              <label>Registro profissional (CREA/CFT)<input type="text" id="cfgRegistroTecnico" placeholder="Ex: CREA-CE 123456"></label>
             </div>
             <label style="display:flex; align-items:center; gap:8px; margin-top:16px; cursor:pointer;">
               <input type="checkbox" id="cfgFotoObrigatoria">
@@ -722,9 +733,10 @@
     </div>
   </div>
 </div>
-<script src="utils/pdfGenerator.js"></script>
+<script src="utils/pdfGenerator.js?v=2"></script>
+<script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=44"></script>
+<script type="module" src="app.js?v=45"></script>
 </body>
 </html>

@@ -149,9 +149,49 @@ function estaAtrasado(item) {
 // abaixo pela do seu Worker depois de publicá-lo.
 const URL_UPLOAD_FOTO = "https://fotos.pmoc-alece-sistemas.workers.dev";
 
+// Pede a localização com um prazo curto -- se o navegador/celular não tem
+// GPS, a pessoa nega a permissão, ou demora demais, segue sem coordenada
+// em vez de travar o envio da foto por causa disso (só a data/hora nunca
+// falha, essa vem do relógio do aparelho mesmo).
+function obterLocalizacaoAtual(timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    const cronometro = setTimeout(() => resolve(null), timeoutMs);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { clearTimeout(cronometro); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      () => { clearTimeout(cronometro); resolve(null); },
+      { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 60000 }
+    );
+  });
+}
+
+// Carimbo no canto inferior esquerdo com data/hora (sempre) e coordenada
+// (quando o navegador deixa) -- direto nos pixels da foto, não só num
+// campo separado no banco: assim a evidência continua valendo mesmo se a
+// foto for baixada/reenviada fora do sistema.
+function carimbarDataHoraLocal(ctx, largura, altura, localizacao) {
+  const linha1 = new Date().toLocaleString("pt-BR");
+  const linha2 = localizacao ? `${localizacao.lat.toFixed(5)}, ${localizacao.lng.toFixed(5)}` : "";
+  const linhas = [linha1, linha2].filter(Boolean);
+  const tamanhoFonte = Math.max(12, Math.round(largura * 0.032));
+  const alturaLinha = tamanhoFonte * 1.35;
+  const alturaFaixa = linhas.length * alturaLinha + 10;
+
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, altura - alturaFaixa, largura, alturaFaixa);
+  ctx.fillStyle = "#fff";
+  ctx.font = `${tamanhoFonte}px Arial, sans-serif`;
+  ctx.textBaseline = "middle";
+  linhas.forEach((linha, i) => {
+    ctx.fillText(linha, 10, altura - alturaFaixa + alturaLinha / 2 + 5 + i * alturaLinha);
+  });
+}
+
 // Redimensiona/comprime a foto no navegador ANTES de enviar — senão uma
-// foto de celular (4-8MB) come a cota gratuita rapidinho.
-function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
+// foto de celular (4-8MB) come a cota gratuita rapidinho. Também carimba
+// data/hora (e localização, se der) direto na imagem.
+async function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
+  const localizacao = await obterLocalizacaoAtual();
   return new Promise((resolve, reject) => {
     const imagem = new Image();
     const urlTemp = URL.createObjectURL(file);
@@ -160,8 +200,10 @@ function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(imagem.width * escala);
       canvas.height = Math.round(imagem.height * escala);
-      canvas.getContext("2d").drawImage(imagem, 0, 0, canvas.width, canvas.height);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(imagem, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(urlTemp);
+      carimbarDataHoraLocal(ctx, canvas.width, canvas.height, localizacao);
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error("Falha ao comprimir a imagem."))),
         "image/jpeg",
@@ -2061,6 +2103,10 @@ async function carregarConfigSite() {
         urlCorretivas: dados.urlCorretivas || URL_CHAMADOS_CORRETIVOS,
         predios: (dados.predios && dados.predios.length) ? dados.predios : ["SEDE", "ANEXO 1", "ANEXO 2", "ANEXO 3", "ANEXO 4"],
         fotoObrigatoria: dados.fotoObrigatoria === true,
+        estabelecimento: dados.estabelecimento || "",
+        endereco: dados.endereco || "",
+        responsavelTecnico: dados.responsavelTecnico || "",
+        registroTecnico: dados.registroTecnico || "",
       };
     }
     preencherFormularioConfigSite();
@@ -2075,12 +2121,21 @@ function preencherFormularioConfigSite() {
   if ($("#cfgUrlCorretivas")) $("#cfgUrlCorretivas").value = ESTADO.configSite.urlCorretivas;
   if ($("#cfgPredios")) $("#cfgPredios").value = ESTADO.configSite.predios.join("\n");
   if ($("#cfgFotoObrigatoria")) $("#cfgFotoObrigatoria").checked = ESTADO.configSite.fotoObrigatoria === true;
+  if ($("#cfgEstabelecimento")) $("#cfgEstabelecimento").value = ESTADO.configSite.estabelecimento || "";
+  if ($("#cfgEndereco")) $("#cfgEndereco").value = ESTADO.configSite.endereco || "";
+  if ($("#cfgResponsavelTecnico")) $("#cfgResponsavelTecnico").value = ESTADO.configSite.responsavelTecnico || "";
+  if ($("#cfgRegistroTecnico")) $("#cfgRegistroTecnico").value = ESTADO.configSite.registroTecnico || "";
 
   // Preenche os textos visuais (Modo Leitura)
   if ($("#txtCfgMeses")) $("#txtCfgMeses").textContent = ESTADO.configSite.mesesCiclo + " meses";
   if ($("#txtCfgUrl")) $("#txtCfgUrl").textContent = ESTADO.configSite.urlCorretivas || "Nenhum link configurado";
   if ($("#txtCfgPredios")) $("#txtCfgPredios").textContent = ESTADO.configSite.predios.join(" · ");
   if ($("#txtCfgFoto")) $("#txtCfgFoto").textContent = ESTADO.configSite.fotoObrigatoria ? "Obrigatória" : "Opcional";
+  if ($("#txtCfgEstabelecimento")) $("#txtCfgEstabelecimento").textContent = ESTADO.configSite.estabelecimento || "Não preenchido";
+  if ($("#txtCfgResponsavelTecnico")) {
+    const rt = [ESTADO.configSite.responsavelTecnico, ESTADO.configSite.registroTecnico].filter(Boolean).join(" — ");
+    $("#txtCfgResponsavelTecnico").textContent = rt || "Não preenchido";
+  }
 
   // CORREÇÃO: Preenche automaticamente as opções de Prédio no cadastro de equipamentos
   const selectEqLocal = $("#eqLocal");
@@ -2147,6 +2202,10 @@ $("#btnSalvarConfigSite")?.addEventListener("click", async () => {
   const urlCorretivas = $("#cfgUrlCorretivas").value.trim();
   const predios = $("#cfgPredios").value.split("\n").map((p) => p.trim()).filter(Boolean);
   const fotoObrigatoria = $("#cfgFotoObrigatoria")?.checked === true;
+  const estabelecimento = $("#cfgEstabelecimento")?.value.trim() || "";
+  const endereco = $("#cfgEndereco")?.value.trim() || "";
+  const responsavelTecnico = $("#cfgResponsavelTecnico")?.value.trim() || "";
+  const registroTecnico = $("#cfgRegistroTecnico")?.value.trim() || "";
 
   if (!predios.length) {
     toast("Coloca pelo menos um prédio na lista.");
@@ -2178,7 +2237,7 @@ $("#btnSalvarConfigSite")?.addEventListener("click", async () => {
     }
   }
 
-  const novaConfig = { mesesCiclo, urlCorretivas, predios, fotoObrigatoria };
+  const novaConfig = { mesesCiclo, urlCorretivas, predios, fotoObrigatoria, estabelecimento, endereco, responsavelTecnico, registroTecnico };
   try {
     await setDoc(doc(db, "config", "site"), novaConfig);
     ESTADO.configSite = novaConfig;
@@ -2257,6 +2316,7 @@ function iniciarSincronizacao() {
     renderCiclos();
     verificarFechamentoCiclo();
     renderTodosSeletoresLocal();
+    abrirEquipamentoViaLink();
   }, (err) => {
     console.error(err);
     toast("Erro ao ler dados do Firebase: " + err.message);
@@ -6631,6 +6691,92 @@ $("#btnSalvarPlanta")?.addEventListener("click", async () => {
   }
 });
 
+// ------------------------------------------------------------------
+// QR code por equipamento -- não guarda nada novo no Firebase: o QR só
+// codifica um link com o ID do equipamento (?aparelho=<id>), que já
+// existe desde a hora do cadastro. Por isso "gerar o QR" é sempre
+// reaproveitar o mesmo link, nunca ficar defasado.
+// ------------------------------------------------------------------
+function urlDoEquipamento(item) {
+  const base = location.origin + location.pathname;
+  return `${base}?aparelho=${encodeURIComponent(item.id)}`;
+}
+
+function gerarQrSvg(texto) {
+  const qr = qrcode(0, "M"); // tipo 0 = escolhe o tamanho automaticamente
+  qr.addData(texto);
+  qr.make();
+  return qr.createSvgTag({ cellSize: 5, margin: 2 });
+}
+
+// Abre uma aba nova só com as etiquetas (QR + patrimônio/tag/ambiente),
+// prontas pra imprimir em papel adesivo -- serve tanto pra 1 equipamento
+// (botão "▦" na linha) quanto pra vários de uma vez (selecionar + botão
+// "Imprimir QR code" na barra de seleção).
+function imprimirQrEquipamentos(itens) {
+  if (!itens.length) { toast("Selecione ao menos um equipamento."); return; }
+  const janela = window.open("", "_blank", "width=900,height=700");
+  if (!janela) { toast("O navegador bloqueou a janela de impressão -- permita pop-ups pra esse site."); return; }
+  const etiquetas = itens.map((item) => {
+    const svg = gerarQrSvg(urlDoEquipamento(item));
+    const titulo = escapeHtml(item.codigoPlanta || item.patrimonio || item.tag || item.ambiente || "Aparelho");
+    const linha2 = [item.patrimonio && `Pat. ${item.patrimonio}`, item.tag && `Tag ${item.tag}`].filter(Boolean).join(" · ");
+    return `
+      <div class="etiqueta">
+        <div class="qr">${svg}</div>
+        <div class="texto">
+          <strong>${titulo}</strong>
+          ${linha2 ? `<span>${escapeHtml(linha2)}</span>` : ""}
+          <span class="ambiente">${escapeHtml(item.ambiente || "-")}</span>
+        </div>
+      </div>`;
+  }).join("");
+  janela.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas QR</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
+      .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .etiqueta { border: 1px dashed #999; border-radius: 6px; padding: 10px; display: flex; gap: 10px; align-items: center; break-inside: avoid; }
+      .qr svg { width: 90px; height: 90px; display: block; flex-shrink: 0; }
+      .texto { display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.3; overflow: hidden; }
+      .texto strong { font-size: 13px; }
+      .texto .ambiente { color: #555; }
+      .barra { text-align: center; margin-bottom: 14px; }
+      @media print { .barra { display: none; } body { padding: 0; } }
+    </style>
+  </head><body>
+    <div class="barra"><button onclick="window.print()" style="padding:8px 20px;font-size:14px;cursor:pointer;">Imprimir</button></div>
+    <div class="grade">${etiquetas}</div>
+  </body></html>`);
+  janela.document.close();
+}
+
+$("#btnImprimirQrSelecionados")?.addEventListener("click", () => {
+  const itens = ESTADO.equipamentos.filter((e) => ESTADO.selecaoEquipamentos.has(e.id));
+  imprimirQrEquipamentos(itens);
+});
+
+// Abre direto o equipamento que o QR aponta -- se ele já tem posição
+// marcada numa planta, vai pra lá (mesmo caminho de "Ver evaporadora");
+// senão, abre a ficha completa. Só roda uma vez por carregamento de
+// página, e limpa o "?aparelho=" da URL logo depois (senão reabriria
+// sozinho a cada atualização da tela).
+let _linkAparelhoProcessado = false;
+function abrirEquipamentoViaLink() {
+  if (_linkAparelhoProcessado) return;
+  const id = new URLSearchParams(location.search).get("aparelho");
+  if (!id) { _linkAparelhoProcessado = true; return; }
+  const item = ESTADO.equipamentos.find((e) => e.id === id);
+  if (!item) return; // ainda pode não ter chegado nessa 1ª leva do snapshot
+  _linkAparelhoProcessado = true;
+  history.replaceState(null, "", location.pathname);
+  if (item.plantaId && item.plantaX != null && item.plantaY != null) {
+    irParaAba("localizacao");
+    irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
+  } else {
+    abrirDrawerEquipamento(item.id);
+  }
+}
+
 function renderEquipamentosCadastro() {
   const table = $("#equipamentosTable");
   if (!table) return;
@@ -6705,6 +6851,16 @@ function renderEquipamentosCadastro() {
     tdCheck.appendChild(chk);
 
     const tdMenu = document.createElement("td");
+    tdMenu.style.whiteSpace = "nowrap";
+    const btnQr = document.createElement("button");
+    btnQr.className = "btn-menu";
+    btnQr.textContent = "▦";
+    btnQr.title = "Imprimir QR code deste equipamento";
+    btnQr.addEventListener("click", (e) => {
+      e.stopPropagation();
+      imprimirQrEquipamentos([item]);
+    });
+    tdMenu.appendChild(btnQr);
     const btnMenu = document.createElement("button");
     btnMenu.className = "btn-menu";
     btnMenu.textContent = "⋯";
@@ -7585,6 +7741,21 @@ if (btnExportarPDF) {
     }
     toast("Gerando relatório PDF...");
     baixarRelatorioPDF(ESTADO.equipamentos, ESTADO.cicloAtual, ESTADO.historico);
+  });
+}
+
+const btnExportarPMOC = $("#btnExportarPMOC");
+if (btnExportarPMOC) {
+  btnExportarPMOC.addEventListener("click", () => {
+    if (!ESTADO.equipamentos.length) {
+      toast("Gere o cronograma primeiro.");
+      return;
+    }
+    if (!ESTADO.configSite.responsavelTecnico) {
+      toast("Preencha o responsável técnico em Configurações > Sistema antes de gerar esse relatório.");
+    }
+    toast("Gerando relatório PMOC...");
+    baixarRelatorioAnexoI(ESTADO.equipamentos, ESTADO.ordens, ESTADO.configSite, numeroDoCiclo(ESTADO.cicloAtual));
   });
 }
 
