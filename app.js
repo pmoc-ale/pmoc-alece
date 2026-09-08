@@ -2300,7 +2300,7 @@ function iniciarSincronizacao() {
   if (ESTADO.unsubscribe) ESTADO.unsubscribe();
   const q = query( collection(db, "ciclos", ESTADO.cicloAtual, "equipamentos"),orderBy("ordemExecucao")
 );
-  ESTADO.unsubscribe = onSnapshot(q, (snap) => {
+  ESTADO.unsubscribe = onSnapshot(q, async (snap) => {
     ESTADO.equipamentos = snap.docs.map((d) => d.data());
     if (!ESTADO.calYear && ESTADO.equipamentos.length) {
       const primeira = new Date(ESTADO.equipamentos[0].dataAgendada + "T12:00:00Z");
@@ -2310,13 +2310,19 @@ function iniciarSincronizacao() {
     renderCalendar();
     renderDashboard();
     renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
-    renderLocalizacao();
+    // Precisa terminar ANTES de abrirEquipamentoViaLink (que pode chamar
+    // renderLocalizacao() de novo, pra trocar de planta): as duas chamadas
+    // rodando ao mesmo tempo disputavam a mesma planta -- quem terminasse
+    // por último redesenhava tudo e escondia o painel que a outra acabou
+    // de abrir. Resultado visto de verdade: escanear o QR abria a planta
+    // certa, mas o painel com as informações do aparelho não aparecia.
+    await renderLocalizacao();
     atualizarBannerAtrasados();
     atualizarAlertaDiasVazios();
     renderCiclos();
     verificarFechamentoCiclo();
     renderTodosSeletoresLocal();
-    abrirEquipamentoViaLink();
+    await abrirEquipamentoViaLink();
   }, (err) => {
     console.error(err);
     toast("Erro ao ler dados do Firebase: " + err.message);
@@ -6761,7 +6767,7 @@ $("#btnImprimirQrSelecionados")?.addEventListener("click", () => {
 // página, e limpa o "?aparelho=" da URL logo depois (senão reabriria
 // sozinho a cada atualização da tela).
 let _linkAparelhoProcessado = false;
-function abrirEquipamentoViaLink() {
+async function abrirEquipamentoViaLink() {
   if (_linkAparelhoProcessado) return;
   const id = new URLSearchParams(location.search).get("aparelho");
   if (!id) { _linkAparelhoProcessado = true; return; }
@@ -6771,9 +6777,9 @@ function abrirEquipamentoViaLink() {
   history.replaceState(null, "", location.pathname);
   if (item.plantaId && item.plantaX != null && item.plantaY != null) {
     irParaAba("localizacao");
-    irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
+    await irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
   } else {
-    abrirDrawerEquipamento(item.id);
+    await abrirDrawerEquipamento(item.id);
   }
 }
 
