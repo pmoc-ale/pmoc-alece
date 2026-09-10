@@ -102,10 +102,11 @@
     <section class="view active" id="view-upload">
       <div class="card">
         <h2>Envie o levantamento</h2>
-        <p class="muted">Arquivo .xlsx ou .csv com colunas <strong>Setor</strong>, <strong>Ambiente</strong>, <strong>Patrimônio</strong>.</p>
+        <p class="muted">Arquivo .xlsx ou .csv com colunas <span class="tag-coluna">Setor</span> <span class="tag-coluna">Ambiente</span> <span class="tag-coluna">Patrimônio</span>.</p>
         <label class="dropzone" id="dropzone">
           <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
           <span id="dropzoneLabel">Clique ou arraste o arquivo aqui</span>
+          <button type="button" class="btn primary" id="btnSelecionarArquivo">Selecionar arquivo</button>
         </label>
       </div>
       <div class="card" id="previewCard" hidden>
@@ -780,7 +781,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=59"></script>
+<script type="module" src="app.js?v=60"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

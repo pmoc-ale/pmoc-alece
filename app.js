@@ -1165,6 +1165,15 @@ const dropzone = $("#dropzone");
 const fileInput = $("#fileInput");
 
 dropzone.addEventListener("click", () => fileInput.click());
+// O botão "Selecionar arquivo" fica dentro do <label> do dropzone --
+// sem parar a propagação aqui, o clique nele dispararia o seletor de
+// arquivo TRÊS vezes (o comportamento nativo do label, o listener de
+// cima e este mesmo clique).
+$("#btnSelecionarArquivo").addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileInput.click();
+});
 dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
 dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
 dropzone.addEventListener("drop", (e) => {
@@ -7078,15 +7087,15 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
       .grade { display: grid; grid-template-columns: repeat(auto-fit, 205px); justify-content: center; gap: 10px; max-width: 645px; margin: 0 auto; }
-      .etiqueta { width: 205px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 5px 8px 6px; display: flex; flex-direction: column; gap: 4px; break-inside: avoid; }
+      .etiqueta { width: 205px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 6px 6px 7px; display: flex; flex-direction: column; gap: 5px; break-inside: avoid; }
       .etiqueta-topo { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #10263D; text-align: center; }
-      .etiqueta-corpo { display: flex; align-items: center; gap: 6px; }
-      .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 52px; }
+      .etiqueta-corpo { display: flex; align-items: center; gap: 5px; }
+      .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 44px; }
       .etiqueta-divisor { width: 1px; align-self: stretch; background: #ddd; flex-shrink: 0; }
       .etiqueta-patrimonio { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-width: 0; }
       .etiqueta-patrimonio .rotulo { font-size: 7.5px; font-weight: 600; letter-spacing: 0.03em; color: #333; text-transform: uppercase; }
       .etiqueta-patrimonio .valor { font-size: 14px; font-weight: 800; color: #1a1a1a; line-height: 1.15; }
-      .qr svg { width: 40px; height: 40px; display: block; flex-shrink: 0; }
+      .qr svg { width: 56px; height: 56px; display: block; flex-shrink: 0; }
       .barra { text-align: center; margin-bottom: 14px; }
       @media print { .barra { display: none; } body { padding: 0; } }
     </style>
