@@ -7077,16 +7077,16 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
   janela.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas QR</title>
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
-      .grade { display: grid; grid-template-columns: repeat(auto-fit, 240px); justify-content: center; gap: 12px; max-width: 756px; margin: 0 auto; }
-      .etiqueta { width: 240px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 5px; break-inside: avoid; }
-      .etiqueta-topo { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #10263D; text-align: center; }
-      .etiqueta-corpo { display: flex; align-items: center; gap: 8px; }
-      .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 62px; }
+      .grade { display: grid; grid-template-columns: repeat(auto-fit, 205px); justify-content: center; gap: 10px; max-width: 645px; margin: 0 auto; }
+      .etiqueta { width: 205px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 5px 8px 6px; display: flex; flex-direction: column; gap: 4px; break-inside: avoid; }
+      .etiqueta-topo { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #10263D; text-align: center; }
+      .etiqueta-corpo { display: flex; align-items: center; gap: 6px; }
+      .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 52px; }
       .etiqueta-divisor { width: 1px; align-self: stretch; background: #ddd; flex-shrink: 0; }
       .etiqueta-patrimonio { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-width: 0; }
-      .etiqueta-patrimonio .rotulo { font-size: 8.5px; font-weight: 600; letter-spacing: 0.04em; color: #333; text-transform: uppercase; }
-      .etiqueta-patrimonio .valor { font-size: 16px; font-weight: 800; color: #1a1a1a; line-height: 1.15; }
-      .qr svg { width: 48px; height: 48px; display: block; flex-shrink: 0; }
+      .etiqueta-patrimonio .rotulo { font-size: 7.5px; font-weight: 600; letter-spacing: 0.03em; color: #333; text-transform: uppercase; }
+      .etiqueta-patrimonio .valor { font-size: 14px; font-weight: 800; color: #1a1a1a; line-height: 1.15; }
+      .qr svg { width: 40px; height: 40px; display: block; flex-shrink: 0; }
       .barra { text-align: center; margin-bottom: 14px; }
       @media print { .barra { display: none; } body { padding: 0; } }
     </style>
