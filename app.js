@@ -7063,12 +7063,23 @@ function gerarQrSvg(texto) {
 // no meio, QR à direita -- só que com o "Climatização" como categoria,
 // já que essa etiqueta é específica de ar-condicionado.
 function abrirJanelaDeEtiquetas(etiquetasHtml) {
-  const janela = window.open("", "_blank", "width=900,height=700");
+  // Tamanho da janela proporcional à quantidade de etiquetas -- antes
+  // era sempre 900x700 fixo, e com só 1 ou 2 etiquetas sobrava um monte
+  // de espaço em branco embaixo (a Jovanna reclamou que ficava "muito
+  // alongado"). Aqui a altura é calculada pela quantidade de linhas da
+  // grade (2 colunas) e depois ainda é reajustada pro tamanho real do
+  // conteúdo assim que a janela carrega.
+  const qtdEtiquetas = (etiquetasHtml.match(/class="etiqueta"/g) || []).length || 1;
+  const umaColuna = qtdEtiquetas === 1;
+  const larguraJanela = umaColuna ? 480 : 900;
+  const linhas = umaColuna ? 1 : Math.ceil(qtdEtiquetas / 2);
+  const alturaEstimada = Math.min(700, Math.max(260, linhas * 130 + 110));
+  const janela = window.open("", "_blank", `width=${larguraJanela},height=${alturaEstimada}`);
   if (!janela) { toast("O navegador bloqueou a janela de impressão -- permita pop-ups pra esse site."); return; }
   janela.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas QR</title>
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
-      .grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .grade { display: grid; grid-template-columns: ${umaColuna ? "1fr" : "repeat(2, 1fr)"}; gap: 12px; }
       .etiqueta { border: 1px solid #ccc; border-radius: 4px; padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px; break-inside: avoid; }
       .etiqueta-topo { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #10263D; text-align: center; }
       .etiqueta-corpo { display: flex; align-items: center; gap: 12px; }
@@ -7086,6 +7097,12 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
     <div class="grade">${etiquetasHtml}</div>
   </body></html>`);
   janela.document.close();
+  setTimeout(() => {
+    try {
+      const alturaReal = janela.document.body.scrollHeight + 60;
+      janela.resizeTo(larguraJanela, Math.min(700, Math.max(260, alturaReal)));
+    } catch (e) { /* alguns navegadores bloqueiam resizeTo -- sem problema, fica no tamanho estimado */ }
+  }, 80);
 }
 
 // Marca ALECE reaproveitada nas duas etiquetas (equipamento e
