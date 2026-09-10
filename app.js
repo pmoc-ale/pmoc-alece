@@ -7151,7 +7151,10 @@ function renderCondensadorasCadastro() {
     if (!termo) return true;
     return normalizarCodigo(cond.codigo).toLowerCase().includes(termo);
   });
-  filtradas.sort((a, b) => normalizarCodigo(a.codigo).localeCompare(normalizarCodigo(b.codigo)));
+  // "numeric: true" faz "C2" vir antes de "C10" -- do menor pro maior
+  // número de verdade, não por ordem alfabética (que colocaria "C10"
+  // antes de "C2").
+  filtradas.sort((a, b) => normalizarCodigo(a.codigo).localeCompare(normalizarCodigo(b.codigo), undefined, { numeric: true }));
 
   $("#condensadorasCount").textContent = `${filtradas.length} itens`;
   table.innerHTML = `<thead><tr>
@@ -7193,6 +7196,31 @@ function renderCondensadorasCadastro() {
       imprimirQrCondensadoras([cond]);
     });
     tdAcoes.appendChild(btnQr);
+
+    // "⋯" com a localização e as evaporadoras vinculadas, ali mesmo na
+    // linha -- sem precisar sair da tela de Condensadoras.
+    const detalhes = document.createElement("details");
+    detalhes.className = "menu-linha";
+    detalhes.innerHTML = `<summary title="Ver localização e evaporadoras vinculadas">⋯</summary>
+      <div class="menu-linha-opcoes" style="min-width:220px">
+        <div style="padding:6px 10px;font-size:12px;color:var(--texto-suave);border-bottom:1px solid var(--borda);margin-bottom:4px;">
+          📍 ${escapeHtml(cond.local)} — ${escapeHtml(cond.plantaNome || "planta sem nome")}
+        </div>
+        ${vinculadas.length
+          ? vinculadas.map((e) => `<button class="menu-linha-item" data-ver-evap-cond="${escapeHtml(e.id)}">${escapeHtml(e.codigoPlanta || e.patrimonio || e.ambiente || "-")}</button>`).join("")
+          : `<div style="padding:8px 10px;font-size:12px;color:var(--texto-suave);">Nenhuma evaporadora vinculada ainda.</div>`}
+      </div>`;
+    detalhes.addEventListener("click", (e) => e.stopPropagation());
+    detalhes.querySelectorAll("[data-ver-evap-cond]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        detalhes.open = false;
+        const item = ESTADO.equipamentos.find((eq) => eq.id === btn.dataset.verEvapCond);
+        if (!item) return;
+        irParaAba("localizacao");
+        irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
+      });
+    });
+    tdAcoes.appendChild(detalhes);
     tr.appendChild(tdAcoes);
 
     tr.addEventListener("click", () => {
