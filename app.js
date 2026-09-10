@@ -7070,7 +7070,7 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
       .grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
       .etiqueta { border: 1px solid #ccc; border-radius: 4px; padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px; break-inside: avoid; }
-      .etiqueta-topo { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #10263D; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+      .etiqueta-topo { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #10263D; text-align: center; }
       .etiqueta-corpo { display: flex; align-items: center; gap: 12px; }
       .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 96px; }
       .etiqueta-divisor { width: 1px; align-self: stretch; background: #ddd; flex-shrink: 0; }
