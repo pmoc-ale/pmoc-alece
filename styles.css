@@ -639,8 +639,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 120px;
+  gap: 10px;
+  min-height: 160px;
   border: 2px dashed var(--borda);
   border-radius: var(--raio);
   background: var(--superficie);
@@ -655,7 +655,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 /* Ícone de nuvem/arquivo antes do texto */
 .dropzone::before {
   content: "📁";
-  font-size: 26px;
+  font-size: 32px;
   opacity: 0.8;
   transition: transform 0.2s ease;
 }
