@@ -6189,20 +6189,26 @@ function piscarDestaque(svg, x, y) {
 // Destaque FIXO (não passa uns segundos e some, como o pisca acima) do
 // marcador que a pessoa chegou vendo por último -- pedido depois do QR
 // code: numa planta com vários aparelhos parecidos, achar qual é "esse
-// aqui" só pelo pisca-pisca rápido não bastava. Fica desenhado enquanto
-// o painel de informações daquele aparelho estiver aberto;
-// renderMarcadoresPlanta() redesenha ele por cima dos outros marcadores
-// toda vez que a planta é redesenhada (senão sumiria a cada atualização
-// vinda do Firebase), e limparPainelPlanta() apaga o estado quando o
-// painel fecha.
+// aqui" só pelo pisca-pisca rápido não bastava. Fica desenhado por um
+// tempo (ver DURACAO_DESTAQUE_FIXO_MS -- não pra sempre, senão incomoda
+// quem fica um tempo lendo o painel) ou até o painel fechar, o que
+// vier primeiro. renderMarcadoresPlanta() redesenha ele por cima dos
+// outros marcadores toda vez que a planta é redesenhada (senão sumiria
+// a cada atualização vinda do Firebase), e limparPainelPlanta() apaga
+// o estado quando o painel fecha.
+const DURACAO_DESTAQUE_FIXO_MS = 6000;
 let _destaqueFixo = null; // { plantaId, x, y }
+let _destaqueFixoTimeout = null;
 
 function definirDestaqueFixo(plantaId, x, y) {
   _destaqueFixo = { plantaId, x, y };
+  clearTimeout(_destaqueFixoTimeout);
+  _destaqueFixoTimeout = setTimeout(limparDestaqueFixo, DURACAO_DESTAQUE_FIXO_MS);
 }
 
 function limparDestaqueFixo() {
   _destaqueFixo = null;
+  clearTimeout(_destaqueFixoTimeout);
   $("#plantaMarcadoresSvg")?.querySelectorAll(".planta-destaque-fixo").forEach((el) => el.remove());
 }
 
@@ -7059,11 +7065,14 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
       .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-      .etiqueta { border: 1px dashed #999; border-radius: 6px; padding: 10px; display: flex; gap: 10px; align-items: center; break-inside: avoid; }
-      .qr svg { width: 90px; height: 90px; display: block; flex-shrink: 0; }
-      .texto { display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.3; overflow: hidden; }
-      .texto strong { font-size: 13px; }
-      .texto .ambiente { color: #555; }
+      .etiqueta { border: 1px solid #10263D; border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; break-inside: avoid; }
+      .etiqueta-topo { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #10263D; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+      .etiqueta-corpo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      .etiqueta-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+      .etiqueta-rotulo { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+      .etiqueta-valor { font-size: 17px; font-weight: 700; color: #10263D; line-height: 1.15; }
+      .etiqueta-instituicao { font-size: 8px; color: #666; line-height: 1.25; margin-top: 4px; }
+      .qr svg { width: 78px; height: 78px; display: block; flex-shrink: 0; }
       .barra { text-align: center; margin-bottom: 14px; }
       @media print { .barra { display: none; } body { padding: 0; } }
     </style>
@@ -7082,15 +7091,17 @@ function imprimirQrEquipamentos(itens) {
   if (!itens.length) { toast("Selecione ao menos um equipamento."); return; }
   const etiquetas = itens.map((item) => {
     const svg = gerarQrSvg(urlDoEquipamento(item));
-    const titulo = escapeHtml(item.codigoPlanta || item.patrimonio || item.tag || item.ambiente || "Aparelho");
-    const linha2 = [item.patrimonio && `Pat. ${item.patrimonio}`, item.tag && `Tag ${item.tag}`].filter(Boolean).join(" · ");
+    const tombo = escapeHtml(item.patrimonio || item.codigoPlanta || item.tag || "-");
     return `
       <div class="etiqueta">
-        <div class="qr">${svg}</div>
-        <div class="texto">
-          <strong>${titulo}</strong>
-          ${linha2 ? `<span>${escapeHtml(linha2)}</span>` : ""}
-          <span class="ambiente">${escapeHtml(item.ambiente || "-")}</span>
+        <div class="etiqueta-topo">Climatização</div>
+        <div class="etiqueta-corpo">
+          <div class="etiqueta-info">
+            <span class="etiqueta-rotulo">Tombo</span>
+            <span class="etiqueta-valor">${tombo}</span>
+            <span class="etiqueta-instituicao">ALECE — Assembleia Legislativa<br>do Estado do Ceará</span>
+          </div>
+          <div class="qr">${svg}</div>
         </div>
       </div>`;
   }).join("");
@@ -7129,10 +7140,14 @@ function imprimirQrCondensadoras(itens) {
   if (!itens.length) { toast("Selecione ao menos uma condensadora."); return; }
   const etiquetas = itens.map((cond) => `
       <div class="etiqueta">
-        <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
-        <div class="texto">
-          <strong>${escapeHtml("Condensadora " + cond.codigo)}</strong>
-          <span class="ambiente">${escapeHtml(cond.plantaNome || cond.local)}</span>
+        <div class="etiqueta-topo">Climatização</div>
+        <div class="etiqueta-corpo">
+          <div class="etiqueta-info">
+            <span class="etiqueta-rotulo">Condensadora</span>
+            <span class="etiqueta-valor">${escapeHtml(cond.codigo)}</span>
+            <span class="etiqueta-instituicao">ALECE — Assembleia Legislativa<br>do Estado do Ceará</span>
+          </div>
+          <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
         </div>
       </div>`).join("");
   abrirJanelaDeEtiquetas(etiquetas);
