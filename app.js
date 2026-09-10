@@ -7069,13 +7069,14 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
       .grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-      .etiqueta { border: 1px solid #ccc; border-radius: 4px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; break-inside: avoid; }
+      .etiqueta { border: 1px solid #ccc; border-radius: 4px; padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 6px; break-inside: avoid; }
+      .etiqueta-topo { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #10263D; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+      .etiqueta-corpo { display: flex; align-items: center; gap: 12px; }
       .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 96px; }
       .etiqueta-marca .logo-nome { font-size: 20px; font-weight: 800; color: #1a1a1a; letter-spacing: 0.3px; line-height: 1; }
       .etiqueta-marca .logo-sub { font-size: 7px; font-weight: 700; color: #444; letter-spacing: 0.2px; line-height: 1.35; margin-top: 3px; }
       .etiqueta-divisor { width: 1px; align-self: stretch; background: #ddd; flex-shrink: 0; }
       .etiqueta-patrimonio { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-width: 0; }
-      .etiqueta-patrimonio .kicker { font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #10263D; margin-bottom: 1px; }
       .etiqueta-patrimonio .rotulo { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; color: #333; text-transform: uppercase; }
       .etiqueta-patrimonio .valor { font-size: 23px; font-weight: 800; color: #1a1a1a; line-height: 1.15; }
       .qr svg { width: 68px; height: 68px; display: block; flex-shrink: 0; }
@@ -7113,13 +7114,15 @@ function imprimirQrEquipamentos(itens) {
     const tombo = escapeHtml(item.patrimonio || item.codigoPlanta || item.tag || "-");
     return `
       <div class="etiqueta">
-        ${marcaAleceHtml()}
-        <div class="etiqueta-patrimonio">
-          <span class="kicker">Climatização</span>
-          <span class="rotulo">Patrimônio</span>
-          <span class="valor">${tombo}</span>
+        <div class="etiqueta-topo">Climatização</div>
+        <div class="etiqueta-corpo">
+          ${marcaAleceHtml()}
+          <div class="etiqueta-patrimonio">
+            <span class="rotulo">Patrimônio</span>
+            <span class="valor">${tombo}</span>
+          </div>
+          <div class="qr">${svg}</div>
         </div>
-        <div class="qr">${svg}</div>
       </div>`;
   }).join("");
   abrirJanelaDeEtiquetas(etiquetas);
@@ -7157,13 +7160,15 @@ function imprimirQrCondensadoras(itens) {
   if (!itens.length) { toast("Selecione ao menos uma condensadora."); return; }
   const etiquetas = itens.map((cond) => `
       <div class="etiqueta">
-        ${marcaAleceHtml()}
-        <div class="etiqueta-patrimonio">
-          <span class="kicker">Climatização</span>
-          <span class="rotulo">Condensadora</span>
-          <span class="valor">${escapeHtml(cond.codigo)}</span>
+        <div class="etiqueta-topo">Climatização</div>
+        <div class="etiqueta-corpo">
+          ${marcaAleceHtml()}
+          <div class="etiqueta-patrimonio">
+            <span class="rotulo">Condensadora</span>
+            <span class="valor">${escapeHtml(cond.codigo)}</span>
+          </div>
+          <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
         </div>
-        <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
       </div>`).join("");
   abrirJanelaDeEtiquetas(etiquetas);
 }
