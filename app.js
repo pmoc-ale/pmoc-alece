@@ -7056,6 +7056,17 @@ function gerarQrSvg(texto) {
   return qr.createSvgTag({ cellSize: 5, margin: 2 });
 }
 
+// Logo da ALECE em SVG (embutido, não um <img src> -- a janela de
+// impressão é criada com document.write num popup em branco, e um
+// arquivo externo podia não carregar dependendo do navegador). Pedido
+// do supervisor: essa marca no lugar do texto corrido "ALECE —
+// Assembleia Legislativa do Estado do Ceará".
+const LOGO_ALECE_SVG = `<svg viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
+  <text x="200" y="46" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="50" letter-spacing="1" fill="#4B5563">ALECE</text>
+  <text x="200" y="70" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" letter-spacing="1.3" fill="#4B5563">ASSEMBLEIA LEGISLATIVA</text>
+  <text x="200" y="90" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" letter-spacing="1.3" fill="#4B5563">DO ESTADO DO CEARÁ</text>
+</svg>`;
+
 // Abre a aba nova de impressão -- reaproveitado tanto pras etiquetas de
 // equipamento quanto de condensadora (só muda o HTML de cada etiqueta).
 function abrirJanelaDeEtiquetas(etiquetasHtml) {
@@ -7071,7 +7082,8 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
       .etiqueta-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
       .etiqueta-rotulo { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
       .etiqueta-valor { font-size: 17px; font-weight: 700; color: #10263D; line-height: 1.15; }
-      .etiqueta-instituicao { font-size: 8px; color: #666; line-height: 1.25; margin-top: 4px; }
+      .etiqueta-logo { width: 105px; margin-top: 4px; }
+      .etiqueta-logo svg { width: 100%; height: auto; display: block; }
       .qr svg { width: 78px; height: 78px; display: block; flex-shrink: 0; }
       .barra { text-align: center; margin-bottom: 14px; }
       @media print { .barra { display: none; } body { padding: 0; } }
@@ -7099,7 +7111,7 @@ function imprimirQrEquipamentos(itens) {
           <div class="etiqueta-info">
             <span class="etiqueta-rotulo">Tombo</span>
             <span class="etiqueta-valor">${tombo}</span>
-            <span class="etiqueta-instituicao">ALECE — Assembleia Legislativa<br>do Estado do Ceará</span>
+            <div class="etiqueta-logo">${LOGO_ALECE_SVG}</div>
           </div>
           <div class="qr">${svg}</div>
         </div>
@@ -7145,7 +7157,7 @@ function imprimirQrCondensadoras(itens) {
           <div class="etiqueta-info">
             <span class="etiqueta-rotulo">Condensadora</span>
             <span class="etiqueta-valor">${escapeHtml(cond.codigo)}</span>
-            <span class="etiqueta-instituicao">ALECE — Assembleia Legislativa<br>do Estado do Ceará</span>
+            <div class="etiqueta-logo">${LOGO_ALECE_SVG}</div>
           </div>
           <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
         </div>
