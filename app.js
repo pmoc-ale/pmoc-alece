@@ -7056,35 +7056,29 @@ function gerarQrSvg(texto) {
   return qr.createSvgTag({ cellSize: 5, margin: 2 });
 }
 
-// Logo da ALECE em SVG (embutido, não um <img src> -- a janela de
-// impressão é criada com document.write num popup em branco, e um
-// arquivo externo podia não carregar dependendo do navegador). Pedido
-// do supervisor: essa marca no lugar do texto corrido "ALECE —
-// Assembleia Legislativa do Estado do Ceará".
-const LOGO_ALECE_SVG = `<svg viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">
-  <text x="200" y="46" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="50" letter-spacing="1" fill="#4B5563">ALECE</text>
-  <text x="200" y="70" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" letter-spacing="1.3" fill="#4B5563">ASSEMBLEIA LEGISLATIVA</text>
-  <text x="200" y="90" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" letter-spacing="1.3" fill="#4B5563">DO ESTADO DO CEARÁ</text>
-</svg>`;
-
 // Abre a aba nova de impressão -- reaproveitado tanto pras etiquetas de
 // equipamento quanto de condensadora (só muda o HTML de cada etiqueta).
+// Layout no estilo das etiquetas de patrimônio já usadas de verdade na
+// ALECE (foto real mandada pela Jovanna): logo à esquerda, patrimônio
+// no meio, QR à direita -- só que com o "Climatização" como categoria,
+// já que essa etiqueta é específica de ar-condicionado.
 function abrirJanelaDeEtiquetas(etiquetasHtml) {
   const janela = window.open("", "_blank", "width=900,height=700");
   if (!janela) { toast("O navegador bloqueou a janela de impressão -- permita pop-ups pra esse site."); return; }
   janela.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas QR</title>
     <style>
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
-      .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-      .etiqueta { border: 1px solid #10263D; border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; break-inside: avoid; }
-      .etiqueta-topo { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #10263D; text-align: center; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-      .etiqueta-corpo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-      .etiqueta-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-      .etiqueta-rotulo { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
-      .etiqueta-valor { font-size: 17px; font-weight: 700; color: #10263D; line-height: 1.15; }
-      .etiqueta-logo { width: 105px; margin-top: 4px; }
-      .etiqueta-logo svg { width: 100%; height: auto; display: block; }
-      .qr svg { width: 78px; height: 78px; display: block; flex-shrink: 0; }
+      .grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .etiqueta { border: 1px solid #ccc; border-radius: 4px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; break-inside: avoid; }
+      .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 96px; }
+      .etiqueta-marca .logo-nome { font-size: 20px; font-weight: 800; color: #1a1a1a; letter-spacing: 0.3px; line-height: 1; }
+      .etiqueta-marca .logo-sub { font-size: 7px; font-weight: 700; color: #444; letter-spacing: 0.2px; line-height: 1.35; margin-top: 3px; }
+      .etiqueta-divisor { width: 1px; align-self: stretch; background: #ddd; flex-shrink: 0; }
+      .etiqueta-patrimonio { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; min-width: 0; }
+      .etiqueta-patrimonio .kicker { font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #10263D; margin-bottom: 1px; }
+      .etiqueta-patrimonio .rotulo { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; color: #333; text-transform: uppercase; }
+      .etiqueta-patrimonio .valor { font-size: 23px; font-weight: 800; color: #1a1a1a; line-height: 1.15; }
+      .qr svg { width: 68px; height: 68px; display: block; flex-shrink: 0; }
       .barra { text-align: center; margin-bottom: 14px; }
       @media print { .barra { display: none; } body { padding: 0; } }
     </style>
@@ -7093,6 +7087,19 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
     <div class="grade">${etiquetasHtml}</div>
   </body></html>`);
   janela.document.close();
+}
+
+// Marca ALECE reaproveitada nas duas etiquetas (equipamento e
+// condensadora) -- texto puro em vez de logo em imagem: é como a
+// etiqueta física de verdade já mostra (foto mandada pela Jovanna),
+// mais simples e sempre nítido na impressão.
+function marcaAleceHtml() {
+  return `
+    <div class="etiqueta-marca">
+      <span class="logo-nome">ALECE</span>
+      <span class="logo-sub">ASSEMBLEIA LEGISLATIVA<br>DO ESTADO DO CEARÁ</span>
+    </div>
+    <div class="etiqueta-divisor"></div>`;
 }
 
 // Abre uma aba nova só com as etiquetas (QR + patrimônio/tag/ambiente),
@@ -7106,15 +7113,13 @@ function imprimirQrEquipamentos(itens) {
     const tombo = escapeHtml(item.patrimonio || item.codigoPlanta || item.tag || "-");
     return `
       <div class="etiqueta">
-        <div class="etiqueta-topo">Climatização</div>
-        <div class="etiqueta-corpo">
-          <div class="etiqueta-info">
-            <span class="etiqueta-rotulo">Tombo</span>
-            <span class="etiqueta-valor">${tombo}</span>
-            <div class="etiqueta-logo">${LOGO_ALECE_SVG}</div>
-          </div>
-          <div class="qr">${svg}</div>
+        ${marcaAleceHtml()}
+        <div class="etiqueta-patrimonio">
+          <span class="kicker">Climatização</span>
+          <span class="rotulo">Patrimônio</span>
+          <span class="valor">${tombo}</span>
         </div>
+        <div class="qr">${svg}</div>
       </div>`;
   }).join("");
   abrirJanelaDeEtiquetas(etiquetas);
@@ -7152,15 +7157,13 @@ function imprimirQrCondensadoras(itens) {
   if (!itens.length) { toast("Selecione ao menos uma condensadora."); return; }
   const etiquetas = itens.map((cond) => `
       <div class="etiqueta">
-        <div class="etiqueta-topo">Climatização</div>
-        <div class="etiqueta-corpo">
-          <div class="etiqueta-info">
-            <span class="etiqueta-rotulo">Condensadora</span>
-            <span class="etiqueta-valor">${escapeHtml(cond.codigo)}</span>
-            <div class="etiqueta-logo">${LOGO_ALECE_SVG}</div>
-          </div>
-          <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
+        ${marcaAleceHtml()}
+        <div class="etiqueta-patrimonio">
+          <span class="kicker">Climatização</span>
+          <span class="rotulo">Condensadora</span>
+          <span class="valor">${escapeHtml(cond.codigo)}</span>
         </div>
+        <div class="qr">${gerarQrSvg(urlDaCondensadora(cond))}</div>
       </div>`).join("");
   abrirJanelaDeEtiquetas(etiquetas);
 }
