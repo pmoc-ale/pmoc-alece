@@ -1189,16 +1189,42 @@ function processarArquivo(file) {
   $("#dropzoneLabel").textContent = `Lendo "${file.name}"...`;
   const cardSumidosAntigo = $("#cardSumidosPlanilha");
   if (cardSumidosAntigo) cardSumidosAntigo.hidden = true;
+  const ehCsv = /\.csv$/i.test(file.name);
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
-      const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: "array" });
+      let wb;
+      if (ehCsv) {
+        // CSV é texto puro -- deixar o XLSX.read adivinhar a codificação
+        // (type: "array") dá errado sempre que o arquivo não tem BOM
+        // (comum: Excel/Google Planilhas exportando CSV "simples"),
+        // trocando acento por caractere errado -- ex: "Patrimônio" virava
+        // "PatrimÃ´nio", e como isso corrompe até o NOME da coluna, o
+        // sistema deixava de achar a coluna "Patrimônio" e o campo ficava
+        // em branco silenciosamente pra planilha inteira. Decodifica como
+        // texto de verdade primeiro: tenta UTF-8 (o padrão hoje em dia) e,
+        // se aparecer o caractere de erro de decodificação, tenta de novo
+        // como Windows-1252 (comum em CSV exportado do Excel em
+        // português).
+        const bytes = new Uint8Array(e.target.result);
+        let texto = new TextDecoder("utf-8").decode(bytes);
+        if (texto.includes("�")) texto = new TextDecoder("windows-1252").decode(bytes);
+        wb = XLSX.read(texto, { type: "string" });
+      } else {
+        const data = new Uint8Array(e.target.result);
+        wb = XLSX.read(data, { type: "array" });
+      }
       let todasAsLinhas = [];
       wb.SheetNames.forEach((nomeAba) => {
         const sheet = wb.Sheets[nomeAba];
         const linhas = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-        linhas.forEach((linha) => { linha.__local = nomeAba.trim(); });
+        // Um CSV não tem como ter mais de uma aba de verdade -- o nome
+        // "Sheet1" que a biblioteca inventa pra ele não significa nada
+        // pra quem tá usando o sistema (viraria o nome do prédio de
+        // todo mundo). Só faz sentido usar o nome da aba como prédio
+        // pra .xlsx de verdade, onde a pessoa escolheu esse nome.
+        const local = ehCsv ? "SEDE" : nomeAba.trim();
+        linhas.forEach((linha) => { linha.__local = local; });
         todasAsLinhas = todasAsLinhas.concat(linhas);
       });
 
