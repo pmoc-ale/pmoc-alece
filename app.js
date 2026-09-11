@@ -112,14 +112,19 @@ function normalizarStatus(valor) {
 }
 
 function localizarColuna(nomesPossiveis, headers) {
-  const lower = headers.map((h) => h.trim().toLowerCase());
+  // normalizarBusca tira acento além de maiúscula/minúscula -- sem isso,
+  // um cabeçalho tipo "Potencia (BTU)" (sem acento) não batia com
+  // "Potência" e a coluna inteira ficava em branco sem avisar nada
+  // (só "Patrimônio"/"Gás" tinham as duas grafias cadastradas à mão;
+  // qualquer outra coluna acentuada tinha o mesmo risco).
+  const normalizados = headers.map((h) => normalizarBusca(h));
   for (const nome of nomesPossiveis) {
-    const idx = lower.indexOf(nome.toLowerCase());
+    const idx = normalizados.indexOf(normalizarBusca(nome));
     if (idx !== -1) return headers[idx];
   }
-  for (const h of headers) {
+  for (let i = 0; i < headers.length; i++) {
     for (const nome of nomesPossiveis) {
-      if (h.toUpperCase().includes(nome.toUpperCase())) return h;
+      if (normalizados[i].includes(normalizarBusca(nome))) return headers[i];
     }
   }
   return null;
