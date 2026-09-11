@@ -1719,17 +1719,21 @@ function compararComPlanilha(itensDaPlanilha) {
 
   for (const [local, itensDoPredio] of porPredio.entries()) {
     const existentesDoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
-    const patrimoniosNaPlanilha = new Set(itensDoPredio.filter((i) => i.patrimonio).map((i) => i.patrimonio));
+    // normalizarTexto (trim + maiúscula) evita que o mesmo patrimônio
+    // digitado com espaço a mais ou caixa diferente entre duas planilhas
+    // (ex: "pat-001" numa e "PAT-001" na outra) seja tratado como um
+    // equipamento novo em vez de reconhecido como o mesmo já cadastrado.
+    const patrimoniosNaPlanilha = new Set(itensDoPredio.filter((i) => i.patrimonio).map((i) => normalizarTexto(i.patrimonio)));
     const porPatrimonioExistente = new Map();
-    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonioExistente.set(e.patrimonio, e); });
+    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonioExistente.set(normalizarTexto(e.patrimonio), e); });
 
     let atualizarPredio = 0, novosPredio = 0;
     itensDoPredio.forEach((item) => {
-      if (item.patrimonio && porPatrimonioExistente.has(item.patrimonio)) atualizarPredio++;
+      if (item.patrimonio && porPatrimonioExistente.has(normalizarTexto(item.patrimonio))) atualizarPredio++;
       else novosPredio++;
     });
 
-    const sumidosDoPredio = existentesDoLocal.filter((e) => e.patrimonio && !patrimoniosNaPlanilha.has(e.patrimonio));
+    const sumidosDoPredio = existentesDoLocal.filter((e) => e.patrimonio && !patrimoniosNaPlanilha.has(normalizarTexto(e.patrimonio)));
 
     totalAtualizar += atualizarPredio;
     totalNovos += novosPredio;
@@ -1789,7 +1793,7 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
     const existentesDoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
     existentesDoLocal.forEach((e) => itensAntesSnapshot.push({ ...e }));
     const porPatrimonio = new Map();
-    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonio.set(e.patrimonio, e); });
+    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonio.set(normalizarTexto(e.patrimonio), e); });
 
     let contadorLocal = existentesDoLocal.length;
     let maiorOrdem = existentesDoLocal.reduce((max, e) => Math.max(max, e.ordemExecucao || 0), 0);
@@ -1798,7 +1802,7 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
     let atualizadosPredio = 0, adicionadosPredio = 0;
 
     itensDoPredio.forEach((itemPlanilha) => {
-      const existente = itemPlanilha.patrimonio ? porPatrimonio.get(itemPlanilha.patrimonio) : null;
+      const existente = itemPlanilha.patrimonio ? porPatrimonio.get(normalizarTexto(itemPlanilha.patrimonio)) : null;
       if (existente) {
         const campos = {};
         CAMPOS_CADASTRO.forEach((campo) => { campos[campo] = itemPlanilha[campo]; });
@@ -4873,7 +4877,7 @@ async function adicionarEquipamentoManual() {
 
   if (patrimonio) {
     const duplicado = ESTADO.equipamentos.find((e) =>
-      e.patrimonio && e.patrimonio.trim() === patrimonio && e.id !== idEquipamentoEmEdicao
+      e.patrimonio && normalizarTexto(e.patrimonio) === normalizarTexto(patrimonio) && e.id !== idEquipamentoEmEdicao
     );
     if (duplicado) {
       const ok = window.confirm(
