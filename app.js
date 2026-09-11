@@ -679,6 +679,20 @@ function normalizarTexto(v) {
   return String(v || "").trim().toUpperCase();
 }
 
+// Usado nas caixas de busca (equipamentos, condensadoras, feriados, ordens,
+// histórico) -- sem isso, buscar "secretaria" não achava "Secretária" e
+// "administracao" não achava "Administração" (o .toLowerCase() sozinho já
+// ignora maiúscula/minúscula, mas não ignora acento nenhum). O
+// normalize("NFD") separa a letra do acento (é́ em vez de é) e o
+// replace tira só a parte do acento, sobrando a letra "pelada".
+function normalizarBusca(v) {
+  return String(v || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 // Protege contra HTML/script escondido em texto vindo de fora (planilha
 // importada, formulário público de chamados, campos digitados por usuários)
 // antes de inserir na tela via innerHTML. Sem isso, alguém poderia escrever
@@ -3449,7 +3463,7 @@ function ligarBusca(inputId, chaveFiltro, renderFn) {
   if (!input) return;
   const renderComDebounce = debounce(renderFn);
   input.addEventListener("input", () => {
-    ESTADO.filtros[chaveFiltro] = input.value.trim().toLowerCase();
+    ESTADO.filtros[chaveFiltro] = normalizarBusca(input.value);
     renderComDebounce();
   });
 }
@@ -4427,7 +4441,7 @@ function renderHistorico(){
   const termo = ESTADO.filtros.historico;
   const historico = aplicarFiltroLocal(ESTADO.historico).filter((h) => {
     if (!termo) return true;
-    const alvo = `${h.patrimonio || ""} ${h.setor || ""} ${h.equipe || ""}`.toLowerCase();
+    const alvo = normalizarBusca(`${h.patrimonio || ""} ${h.setor || ""} ${h.equipe || ""}`);
     return alvo.includes(termo);
   });
   
@@ -4514,7 +4528,7 @@ function renderOrdens() {
   const termo = ESTADO.filtros.ordens;
   const ordens = aplicarFiltroLocal(ESTADO.ordens).filter((o) => {
     if (!termo) return true;
-    const alvo = `${o.patrimonio || ""} ${o.setor || ""} ${o.ambiente || ""} ${o.equipe || ""}`.toLowerCase();
+    const alvo = normalizarBusca(`${o.patrimonio || ""} ${o.setor || ""} ${o.ambiente || ""} ${o.equipe || ""}`);
     return alvo.includes(termo);
   });
   $("#ordensCount").textContent = `${ordens.length} OS Emitidas`;
@@ -7391,7 +7405,7 @@ function renderEquipamentosCadastro() {
   const origemFiltro = $("#filtroOrigem")?.value || "";
   const filtrados = aplicarFiltroLocal(ESTADO.equipamentos).filter((item) => {
     if (termo) {
-      const alvo = `${item.patrimonio || ""} ${item.tag || ""} ${item.setor || ""} ${item.ambiente || ""} ${item.setorPCM || ""} ${item.equipeResponsavel || ""}`.toLowerCase();
+      const alvo = normalizarBusca(`${item.patrimonio || ""} ${item.tag || ""} ${item.setor || ""} ${item.ambiente || ""} ${item.setorPCM || ""} ${item.equipeResponsavel || ""}`);
       if (!alvo.includes(termo)) return false;
     }
     if (statusFiltro) {
@@ -7983,7 +7997,7 @@ function renderFeriados() {
   const termo = ESTADO.filtros.feriados;
   const feriados = ESTADO.feriados.filter((f) => {
     if (!termo) return true;
-    const alvo = `${f.label || ""} ${f.tipo || ""}`.toLowerCase();
+    const alvo = normalizarBusca(`${f.label || ""} ${f.tipo || ""}`);
     return alvo.includes(termo);
   });
 
