@@ -1233,6 +1233,17 @@ function processarArquivo(file) {
         const data = new Uint8Array(e.target.result);
         wb = XLSX.read(data, { type: "array" });
       }
+      // Nomes de prédio já cadastrados (equipamentos + lista em
+      // Configurações) -- usados abaixo pra reconhecer que a aba "Sede"
+      // de um .xlsx é o mesmo prédio que o "SEDE" já cadastrado, em vez
+      // de criar um prédio novo (e duplicado) só por causa de acento ou
+      // maiúscula/minúscula diferente na hora de nomear a aba.
+      const nomesPrediosConhecidos = [
+        ...new Set([
+          ...ESTADO.equipamentos.map((e) => e.local || "SEDE"),
+          ...((ESTADO.configSite && ESTADO.configSite.predios) || []),
+        ]),
+      ];
       let todasAsLinhas = [];
       wb.SheetNames.forEach((nomeAba) => {
         const sheet = wb.Sheets[nomeAba];
@@ -1242,7 +1253,9 @@ function processarArquivo(file) {
         // pra quem tá usando o sistema (viraria o nome do prédio de
         // todo mundo). Só faz sentido usar o nome da aba como prédio
         // pra .xlsx de verdade, onde a pessoa escolheu esse nome.
-        const local = ehCsv ? "SEDE" : nomeAba.trim();
+        const nomeDaAba = nomeAba.trim();
+        const predioConhecido = nomesPrediosConhecidos.find((p) => normalizarBusca(p) === normalizarBusca(nomeDaAba));
+        const local = ehCsv ? "SEDE" : (predioConhecido || nomeDaAba);
         linhas.forEach((linha) => { linha.__local = local; });
         todasAsLinhas = todasAsLinhas.concat(linhas);
       });
