@@ -25,9 +25,7 @@ const PRIORIDADE = {
   "4 - TI/Racks": 4, "5 - Plenário": 5, "6 - Administração": 6, "7 - Todo o resto": 7,
 };
 const NOMES_DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
-const STATUS_VALIDOS = ["Pendente", "Em andamento", "Concluída"];
 const ROTULOS_PERMISSAO = { admin: "Administrador", padrao: "Padrão", trabalhador: "Trabalhador" };
-const CHAVE_VERIFICACAO_ATRASADOS = "PMOCVerificacaoAtrasados";
 
 const CHECKLIST_PREVENTIVA = [
   "Limpeza do filtro de ar",
@@ -102,13 +100,6 @@ function descobrirPiso(setorTxt) {
   const m = texto.match(/(\d+)\s*[ºÂ°]?\s*PISO/);
   if (m) return parseInt(m[1], 10);
   return 99;
-}
-
-function normalizarStatus(valor) {
-  const t = String(valor || "").trim().toUpperCase();
-  if (t.includes("CONCL")) return "Concluída";
-  if (t.includes("ANDAMENTO") || t.includes("EXECU")) return "Em andamento";
-  return "Pendente";
 }
 
 function localizarColuna(nomesPossiveis, headers) {
@@ -1162,23 +1153,6 @@ async function adiantarDiasVazios() {
   ESTADO.diasVaziosCronograma = [];
   atualizarAlertaDiasVazios();
 }
-
-function jaVerificouAtrasadosHoje() {
-  try {
-    return localStorage.getItem(CHAVE_VERIFICACAO_ATRASADOS) === formatISO(new Date());
-  } catch (e) {
-    return false;
-  }
-}
-
-function marcarVerificacaoAtrasadosHoje() {
-  try {
-    localStorage.setItem(CHAVE_VERIFICACAO_ATRASADOS, formatISO(new Date()));
-  } catch (e) {
-    // localStorage indisponível (modo privado etc.) — tudo bem, só não terá o cache diário
-  }
-}
-
 
 const dropzone = $("#dropzone");
 const fileInput = $("#fileInput");
@@ -3588,7 +3562,6 @@ function renderCalendar() {
     });
 
     // Cria uma etiqueta (badge) separada para cada prédio no mesmo dia
-    // Cria uma etiqueta (badge) separada para cada prédio no mesmo dia
     const ROTULOS_STATUS = { pendente: "pendentes", andamento: "em andamento", concluido: "concluídos", atrasado: "atrasados" };
     Object.entries(porPredio).forEach(([predio, itensPredio]) => {
       const concluidas = itensPredio.filter((i) => i.statusPreventiva === "Concluída").length;
@@ -4668,22 +4641,6 @@ $("#btnExcluirSelecionadosHistorico")?.addEventListener("click", async () => {
   }
 });
 
-function prepararEdicao(item) {
-  idEquipamentoEmEdicao = item.id;
-  $("#eqPatrimonio").value = item.patrimonio || "";
-  $("#eqSetor").value = item.setor || "";
-  $("#eqAmbiente").value = item.ambiente || "";
-  if ($("#eqLocal")) $("#eqLocal").value = item.local || "SEDE";
-  if ($("#eqTipoGas")) $("#eqTipoGas").value = item.tipoGas || "";
-  if ($("#eqObservacao")) $("#eqObservacao").value = item.observacao || "";
-
-  if (btnAdicionarEquipamento) {
-    btnAdicionarEquipamento.textContent = "Salvar Alterações";
-  }
-  $("#eqSetor")?.focus();
-  toast("Modo de edição ativado para o item selecionado.");
-}
-
 const btnAdicionarEquipamento = $("#btnAdicionarEquipamento");
 if (btnAdicionarEquipamento) {
   btnAdicionarEquipamento.addEventListener("click", adicionarEquipamentoManual);
@@ -5009,19 +4966,6 @@ async function adicionarEquipamentoManual() {
   if ($("#eqTipoGas")) $("#eqTipoGas").value = "";
   if ($("#eqObservacao")) $("#eqObservacao").value = "";
   if ($("#eqFotoInput")) $("#eqFotoInput").value = "";
-}
-
-async function removerEquipamento(id, descricao) {
-  const ok = window.confirm(`Remover "${descricao}"? Essa ação não pode ser desfeita.`);
-  if (!ok) return;
-  try {
-    await deleteDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id));
-    toast("Equipamento removido. Reorganizando cronograma...");
-    await reagendarTudo();
-  } catch (err) {
-    console.error(err);
-    toast("Erro ao remover: " + err.message);
-  }
 }
 
 function atualizarBarraSelecao(nomeSet, containerId, textoId) {
@@ -8047,12 +7991,6 @@ const FONT_NAME = "Arial";
 const COR_HEADER = "FF1F4E78";
 const COR_BANDA = "FFEEF3F8";
 const COR_BORDA = "FFBFBFBF";
-const STATUS_COND_COLORS = { RUIM: "FFF8CBAD", RAZOAVEL: "FFFFE699", BOM: "FFC6E0B4" };
-const STATUS_PREV_COLORS = {
-  Pendente: { fill: "FFF8CBAD", font: "FFC00000" },
-  "Em andamento": { fill: "FFFFE699", font: "FF9C6500" },
-  "Concluída": { fill: "FFC6E0B4", font: "FF375623" },
-};
 const NOME_ORGAO = "ASSEMBLEIA LEGISLATIVA DO ESTADO DO CEARÁ";
 const NOME_SISTEMA = "Sistema de Planejamento da Manutenção Preventiva";
 const NOME_MARCA = "PCM ALCE";
@@ -8570,70 +8508,6 @@ async function limparMarcacoesOrfas() {
   }
 }
 
-async function apagarColecaoCompleta(nomeColecao, mensagem) {
-
-  if (!ESTADO.cicloAtual) {
-    toast("Nenhum ciclo selecionado.");
-    return;
-  }
-
-  const confirmado = window.confirm(mensagem);
-  if (!confirmado) return;
-
-  try {
-
-    const colecaoRef = collection(
-      db,
-      "ciclos",
-      ESTADO.cicloAtual,
-      nomeColecao
-    );
-
-    const snap = await getDocs(colecaoRef);
-
-    const ids = snap.docs.map((d) => d.id);
-
-    if (!ids.length) {
-      toast("Não há registros para apagar.");
-      return;
-    }
-
-    const TAMANHO_LOTE = 400;
-
-    for (let inicio = 0; inicio < ids.length; inicio += TAMANHO_LOTE) {
-
-      const batch = writeBatch(db);
-
-      ids
-        .slice(inicio, inicio + TAMANHO_LOTE)
-        .forEach((id) => {
-
-          batch.delete(
-            doc(
-              db,
-              "ciclos",
-              ESTADO.cicloAtual,
-              nomeColecao,
-              id
-            )
-          );
-
-        });
-
-      await batch.commit();
-
-    }
-
-    toast(`${ids.length} registro(s) apagado(s).`);
-
-  } catch (err) {
-
-    console.error(err);
-    toast("Erro ao apagar: " + err.message);
-
-  }
-}
-
 const btnLimparHistorico = $("#btnLimparHistorico");
 if (btnLimparHistorico) {
   btnLimparHistorico.addEventListener("click", apagarTodoHistoricoTodosOsCiclos);
@@ -8937,19 +8811,6 @@ async function deletarRegistroHistorico(cicloId, id) {
   }
 }
 
-async function deletarRegistro(colecao, id) {
-  const ok = window.confirm("Excluir este registro permanentemente?");
-  if (!ok) return;
-  try {
-    // Agora ele exclui o item de dentro do ciclo atual!
-    await deleteDoc(doc(db, "ciclos", ESTADO.cicloAtual, colecao, id));
-    toast("Registro excluído!");
-  } catch (err) {
-    console.error(err);
-    toast("Erro ao excluir: " + err.message);
-  }
-}
-
 // CONTROLE DO BOTÃO DE REAGENDAR ATRASADOS MANUALMENTE
 
 async function executarReagendamento(btn, textoNormal) {
@@ -8986,9 +8847,6 @@ function numeroDoCiclo(id) {
   return idx === -1 ? ordenado.length + 1 : idx + 1;
 }
 
-// ------------------------------------------------------------------
-// Ciclos de 4 meses — fecha quando todos concluem e reagenda o próximo
-// ------------------------------------------------------------------
 // ------------------------------------------------------------------
 // Ciclos de 4 meses — fecha quando todos concluem e reagenda o próximo
 // ------------------------------------------------------------------
