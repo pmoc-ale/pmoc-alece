@@ -7116,10 +7116,10 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
 // condensadora) -- texto puro em vez de logo em imagem: é como a
 // etiqueta física de verdade já mostra (foto mandada pela Jovanna),
 // mais simples e sempre nítido na impressão.
-// Logo de verdade da ALECE (arquivo logo-alece.png, na raiz do
-// repositório -- é onde fica o "original" pra quem precisar atualizar
-// essa imagem no futuro) -- embutida aqui em base64 direto no HTML da
-// etiqueta, não um <img src="logo-alece.png"> comum: a janela de
+// Logo de verdade da ALECE (arquivo assets/logo-alece.png -- é onde
+// fica o "original" pra quem precisar atualizar essa imagem no
+// futuro) -- embutida aqui em base64 direto no HTML da etiqueta, não
+// um <img src="logo-alece.png"> comum: a janela de
 // impressão é um popup criado com document.write a partir de uma URL
 // em branco, e um caminho de arquivo dependeria da resolução de URL
 // base desse popup (inconsistente entre navegadores); em base64
