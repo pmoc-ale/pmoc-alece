@@ -124,7 +124,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   content: "";
   position: absolute;
   top: 50%;
-  right: -8%;
+  right: 4%;
   width: min(85vw, 820px);
   aspect-ratio: 500 / 610;
   background: url("assets/ceara-silhueta.svg") no-repeat center / contain;
@@ -133,16 +133,17 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   pointer-events: none;
 }
 
-/* Na tela estreita, o card ocupa quase toda a altura -- a silhueta
-   centralizada quase some atrás dele. Em vez disso, mostra só um pedaço
-   dela no respiro que sobra acima do card. */
+/* Na tela estreita, o card ocupa quase toda a altura -- uma silhueta
+   grande e cortada no topo ficava esquisita, sem dar pra reconhecer a
+   forma. Em vez disso, uma silhueta pequena e INTEIRA (sem cortar, sem
+   girar) no respiro que sobra acima do card. */
 @media (max-width: 560px) {
   .auth-overlay::before {
-    top: 0;
-    right: -20%;
-    width: min(75vw, 420px);
-    opacity: 0.09;
-    transform: translateY(-28%) rotate(-6deg);
+    top: var(--sp-4);
+    right: 50%;
+    width: 140px;
+    opacity: 0.12;
+    transform: translateX(50%) rotate(0deg);
   }
 }
 
