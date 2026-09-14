@@ -135,6 +135,34 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   font-size: 22px;
 }
 
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: var(--sp-4);
+}
+.auth-brand img {
+  height: 64px;
+  width: auto;
+  margin-bottom: var(--sp-2);
+}
+.auth-brand-org {
+  font-family: var(--fonte-corpo);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+.auth-brand-name {
+  font-family: var(--fonte-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--azul-900);
+}
+
 .auth-card label {
   display: block;
   font-size: 12px;
@@ -511,17 +539,6 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 }
 .btn.danger-inverted:hover { background: var(--vermelho-fundo); }
 
-.link-discreto {
-  background: none;
-  border: none;
-  color: var(--texto-fraco);
-  font-size: 12px;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  padding: var(--sp-2);
-}
-.link-discreto:hover { color: var(--vermelho-texto); }
-
 .btn-icon {
   background: none;
   border: none;
@@ -661,6 +678,23 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 }
 
 .dropzone .btn { margin-top: 2px; }
+
+/* Escolher-arquivo simples (sem dropzone/arrastar) -- usado em Foto do
+   equipamento e Enviar planta -- pra não depender do botão nativo do
+   navegador ("Choose File"), que destoa do resto do visual. */
+.file-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.file-picker-nome {
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--texto-suave);
+}
 
 .dropzone:hover { 
   border-color: var(--azul-600); 
@@ -1653,16 +1687,23 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .brand img { height: 40px; }
   .brand-name { font-size: 18px; }
   
-  .tabs { 
-    width: 100%; 
+  .tabs {
+    width: 100%;
     display: flex;
     flex-wrap: nowrap;
-    overflow-x: auto; 
-    padding-bottom: 4px; 
+    overflow-x: auto;
+    padding-bottom: 4px;
     -webkit-overflow-scrolling: touch; /* Rolar suave no iPhone */
     scrollbar-width: none; /* Esconde a barrinha de rolagem feia */
   }
   .tabs::-webkit-scrollbar { display: none; }
+  /* Esfumaça as bordas quando tem mais aba pra cada lado -- sem isso, a
+     aba cortada na borda parecia layout quebrado, não "arraste pra ver
+     mais" (a Jovanna notou isso na revisão de estética). */
+  .tabs, .sidenav {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  }
   .tab { padding: 8px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
 
   /* 3. MENU LATERAL VIRA MENU INFERIOR (APP) */
@@ -1855,7 +1896,8 @@ body.modo-padrao button.sidenav-danger,
 body.modo-padrao #drawerEnviarFoto,
 body.modo-padrao #drawerExcluir,
 body.modo-padrao .menu-linha-item,
-body.modo-padrao .link-discreto {
+body.modo-padrao #btnLimparHistorico,
+body.modo-padrao #btnLimparOrdens {
   pointer-events: none !important;
   cursor: not-allowed;
   background: var(--fundo) !important;

@@ -12,6 +12,28 @@ import {
 const $ = (sel) => document.querySelector(sel);
 const $all = (sel) => Array.from(document.querySelectorAll(sel));
 
+// Liga um <input type="file" hidden> a um botão próprio (em vez do botão
+// nativo "Choose File"/"Escolher arquivo" do navegador, que destoa do
+// resto do visual) -- preventDefault+stopPropagation evita disparar o
+// seletor de arquivo duas vezes (o clique no botão + o comportamento
+// nativo do <label> em volta).
+function ligarSeletorDeArquivo(idInput, idBotao, idNome, textoPadrao) {
+  const input = $(`#${idInput}`);
+  const botao = $(`#${idBotao}`);
+  const nome = $(`#${idNome}`);
+  if (!input || !botao) return;
+  botao.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    input.click();
+  });
+  if (nome) {
+    input.addEventListener("change", () => {
+      nome.textContent = input.files?.[0]?.name || textoPadrao;
+    });
+  }
+}
+
 const SUFIXO_LOGIN = "@pcm-alece.local";
 function usuarioParaEmail(usuario) {
   return usuario.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") + SUFIXO_LOGIN;
@@ -4645,6 +4667,7 @@ const btnAdicionarEquipamento = $("#btnAdicionarEquipamento");
 if (btnAdicionarEquipamento) {
   btnAdicionarEquipamento.addEventListener("click", adicionarEquipamentoManual);
 }
+ligarSeletorDeArquivo("eqFotoInput", "btnEqFotoEscolher", "eqFotoNome", "Nenhuma selecionada");
 
 // Botão flutuante (mobile): quando a lista de equipamentos já está longa,
 // evita ter que rolar a tela de volta lá pra cima só pra achar o formulário
@@ -4966,6 +4989,7 @@ async function adicionarEquipamentoManual() {
   if ($("#eqTipoGas")) $("#eqTipoGas").value = "";
   if ($("#eqObservacao")) $("#eqObservacao").value = "";
   if ($("#eqFotoInput")) $("#eqFotoInput").value = "";
+  if ($("#eqFotoNome")) $("#eqFotoNome").textContent = "Nenhuma selecionada";
 }
 
 function atualizarBarraSelecao(nomeSet, containerId, textoId) {
@@ -6907,6 +6931,8 @@ function renderUploadPlanta() {
     local.innerHTML = ESTADO.configSite.predios.map((l) => `<option value="${escapeHtml(l)}">${escapeHtml(l)}</option>`).join("");
   }
 }
+
+ligarSeletorDeArquivo("uploadPlantaArquivo", "btnUploadPlantaEscolher", "uploadPlantaNome", "Nenhum arquivo selecionado");
 
 $("#btnMostrarUploadPlanta")?.addEventListener("click", () => {
   const painel = $("#painelUploadPlanta");

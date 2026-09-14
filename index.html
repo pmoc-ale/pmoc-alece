@@ -18,6 +18,11 @@
 <body>
 <div class="auth-overlay" id="authOverlay" hidden>
   <div class="auth-card">
+    <div class="auth-brand">
+      <img src="assets/site-header-mobile.png" alt="Brasão do Ceará">
+      <span class="auth-brand-org">ASSEMBLEIA LEGISLATIVA DO ESTADO DO CEARÁ</span>
+      <span class="auth-brand-name">PMOC ALECE</span>
+    </div>
     <h2 id="authTitulo">Entrar</h2>
     <label>Usuário<input type="text" id="authEmail" placeholder="ex: joana.feira"></label>
     <label>Senha<input type="password" id="authSenha" placeholder="Mínimo 6 caracteres"></label>
@@ -288,7 +293,7 @@
           <table id="ordensTable"></table>
         </div>
         <div style="text-align: right;">
-          <button class="link-discreto" id="btnLimparOrdens">Apagar todas as ordens de serviço</button>
+          <button class="btn danger-inverted" id="btnLimparOrdens">Apagar todas as ordens de serviço</button>
         </div>
       </div>
     </section>
@@ -317,7 +322,7 @@
             <table id="historicoTable"></table>
         </div>
         <div style="text-align: right;">
-          <button class="link-discreto" id="btnLimparHistorico">Apagar todo o histórico</button>
+          <button class="btn danger-inverted" id="btnLimparHistorico">Apagar todo o histórico</button>
         </div>
     </div>
 </section>
@@ -345,7 +350,13 @@
               <option value="Outro">Outro</option>
             </select>
           </label>
-          <label>Foto (opcional)<input type="file" accept="image/*" capture="environment" id="eqFotoInput"></label>
+          <label>Foto (opcional)
+            <span class="file-picker">
+              <input type="file" accept="image/*" capture="environment" id="eqFotoInput" hidden>
+              <button type="button" class="btn secondary" id="btnEqFotoEscolher">Escolher foto</button>
+              <span class="file-picker-nome" id="eqFotoNome">Nenhuma selecionada</span>
+            </span>
+          </label>
         </div>
         <label>Observações (ex: contato da sala, restrições de horário...)
           <input type="text" id="eqObservacao" placeholder="Ex: falar com Fulano, ramal 1234">
@@ -464,7 +475,13 @@
       <div class="card" id="painelUploadPlanta" hidden>
         <h2>Enviar planta (.dwf / .dwfx)</h2>
         <p class="muted">Exporte a planta do AutoCAD como .dwf ou .dwfx ("Plotar" ou "Exportar") e envie aqui. A leitura é feita aqui mesmo, no navegador.</p>
-        <label>Arquivo<input type="file" id="uploadPlantaArquivo" accept=".dwf,.dwfx"></label>
+        <label>Arquivo
+          <span class="file-picker">
+            <input type="file" id="uploadPlantaArquivo" accept=".dwf,.dwfx" hidden>
+            <button type="button" class="btn secondary" id="btnUploadPlantaEscolher">Selecionar arquivo</button>
+            <span class="file-picker-nome" id="uploadPlantaNome">Nenhum arquivo selecionado</span>
+          </span>
+        </label>
         <p class="muted" id="uploadPlantaStatus"></p>
         <div id="uploadPlantaPreviewWrap" hidden>
           <div class="planta-area">
@@ -781,7 +798,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=70"></script>
+<script type="module" src="app.js?v=71"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
