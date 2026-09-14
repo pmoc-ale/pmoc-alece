@@ -114,12 +114,44 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   justify-content: center;
   z-index: 200;
   padding: var(--sp-4);
+  overflow: hidden;
+}
+
+/* Silhueta do Ceará no fundo -- bem sutil, só textura/identidade visual
+   (a Jovanna pediu; combina com o manual de marca da ALECE, que usa o
+   contorno do mapa do estado em destaque nos materiais oficiais). */
+.auth-overlay::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -8%;
+  width: min(85vw, 820px);
+  aspect-ratio: 500 / 610;
+  background: url("assets/ceara-silhueta.svg") no-repeat center / contain;
+  opacity: 0.07;
+  transform: translateY(-50%) rotate(-6deg);
+  pointer-events: none;
+}
+
+/* Na tela estreita, o card ocupa quase toda a altura -- a silhueta
+   centralizada quase some atrás dele. Em vez disso, mostra só um pedaço
+   dela no respiro que sobra acima do card. */
+@media (max-width: 560px) {
+  .auth-overlay::before {
+    top: 0;
+    right: -20%;
+    width: min(75vw, 420px);
+    opacity: 0.09;
+    transform: translateY(-28%) rotate(-6deg);
+  }
 }
 
 .auth-overlay[hidden] {
   display: none;
 }
 .auth-card {
+  position: relative;
+  z-index: 1;
   background: var(--superficie);
   width: 100%;
   max-width: 380px;
