@@ -4463,7 +4463,7 @@ function renderHistorico(){
       
     const colPara = ehReagendamento
       ? `<td>${formatarDataBR(h.dataNova)}</td>`
-      : `<td><span class="status-select ${classeStatus(h.statusNovo)}">${h.statusNovo}</span></td>`;
+      : `<td><span class="status-select ${classeStatus(h.statusNovo)}">${h.statusNovo || "-"}</span></td>`;
       
     tr.innerHTML = `
         <td></td>
