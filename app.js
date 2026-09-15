@@ -8134,11 +8134,19 @@ async function adicionarFeriadosNacionais() {
   const ok = window.confirm(`Adicionar ${novos.length} feriado(s) nacional(is)?\n\n${novos.map((f) => f.label).join(", ")}`);
   if (!ok) return;
   try {
+    const idsNovos = [];
     for (const f of novos) {
-      await addDoc(collection(db, "feriados"), f);
+      const ref = await addDoc(collection(db, "feriados"), f);
+      idsNovos.push(ref.id);
     }
     const snap = await getDocs(query(collection(db, "feriados"), orderBy("dataInicio")));
     ESTADO.feriados = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // A tabela é ordenada por data, então os feriados recém-adicionados
+    // ficam espalhados no meio da lista (não no topo nem no fim) -- sem
+    // isso, quem clicou no botão (lá em cima, numa aba diferente da
+    // tabela) não veria nada mudar na tela e pensaria que sumiu.
+    ESTADO.feriadosDestaque = { ids: new Set(idsNovos), rolou: false, ate: Date.now() + 4000 };
+    renderFeriados();
     await registrarAuditoria("Adicionar feriados nacionais", novos.map((f) => f.label).join(", "));
     toast(`${novos.length} feriado(s) nacional(is) adicionado(s). Reorganizando cronograma...`);
     await reagendarTudo();
@@ -8193,8 +8201,12 @@ function renderFeriados() {
   table.innerHTML = `<thead><tr><th>Tipo</th><th>Descrição</th><th>Início</th><th>Fim</th><th>Repete</th><th></th></tr></thead><tbody></tbody>`;
   const tbody = table.querySelector("tbody");
   const anoAtual = new Date().getFullYear();
+  const destaque = ESTADO.feriadosDestaque && Date.now() < ESTADO.feriadosDestaque.ate ? ESTADO.feriadosDestaque : null;
+  if (ESTADO.feriadosDestaque && !destaque) ESTADO.feriadosDestaque = null;
   feriados.forEach((f) => {
     const tr = document.createElement("tr");
+    tr.dataset.id = f.id;
+    if (destaque?.ids.has(f.id)) tr.classList.add("linha-destaque");
     const ehMovel = f.baseInicioPascoa != null && f.baseFimPascoa != null;
     // Móvel: a data cadastrada foi só a do ano em que foi criado -- mostra
     // sempre a do ano atual (recalculada pela Páscoa), senão pareceria
@@ -8237,6 +8249,15 @@ function renderFeriados() {
     tr.appendChild(tdBtn);
     tbody.appendChild(tr);
   });
+
+  // Rola até a primeira linha nova e a destaca por alguns segundos, pra
+  // quem clicou em "Adicionar feriados nacionais" (num card acima da
+  // tabela) ver na hora que a lista mudou, mesmo com a tabela ordenada
+  // por data espalhando as novas linhas no meio das já cadastradas.
+  if (destaque && !destaque.rolou) {
+    destaque.rolou = true;
+    tbody.querySelector(".linha-destaque")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 const FONT_NAME = "Arial";

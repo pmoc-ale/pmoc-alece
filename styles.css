@@ -802,6 +802,19 @@ table {
   font-size: 13px;
 }
 
+/* Pisca a linha de uma data recém-adicionada (ex: "Adicionar feriados
+   nacionais") pra ficar óbvio que ela entrou na lista, já que a tabela é
+   ordenada por data e a linha nova pode cair no meio de muitas outras,
+   longe de onde a pessoa clicou. Some sozinha (animation-fill-mode:
+   forwards) sem precisar de JS pra tirar a classe depois. */
+@keyframes destacarLinha {
+  0% { background-color: #fff3b0; }
+  100% { background-color: transparent; }
+}
+.linha-destaque {
+  animation: destacarLinha 2.5s ease-out forwards;
+}
+
 table thead th {
   background: var(--azul-100);
   color: var(--azul-800);
