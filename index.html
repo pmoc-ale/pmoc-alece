@@ -620,6 +620,10 @@
           <label>Data início<input type="date" id="feriadoInicio"></label>
           <label id="labelFeriadoFim">Data fim<input type="date" id="feriadoFim"></label>
         </div>
+        <label style="display:flex; align-items:center; gap:8px; margin:10px 0; cursor:pointer;">
+          <input type="checkbox" id="feriadoAnual">
+          Repete todo ano nessa mesma data (feriado fixo, ex: Natal, Independência)
+        </label>
         <button class="btn primary" id="btnAdicionarFeriado">+ Adicionar</button>
       </div>
       <div class="card">
@@ -798,7 +802,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=72"></script>
+<script type="module" src="app.js?v=73"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

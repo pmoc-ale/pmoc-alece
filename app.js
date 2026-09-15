@@ -2041,10 +2041,25 @@ $("#btnGerar").addEventListener("click", () => {
 
 $("#btnDesfazerPlanilha")?.addEventListener("click", desfazerUltimaAtualizacaoPlanilha);
 
+// Acha o feriado/período de férias que cai numa data (ou null) -- feriados
+// "anuais" (ex: Natal, Independência) são cadastrados só uma vez, com uma
+// data de exemplo, e comparados aqui só por mês/dia (ignorando o ano) pra
+// valerem em qualquer ano, sem precisar recadastrar todo ano.
+function feriadoNaData(iso) {
+  if (!iso || !ESTADO.feriados) return null;
+  return ESTADO.feriados.find((f) => {
+    if (!f.dataInicio || !f.dataFim) return false;
+    if (f.anual) {
+      const mdAlvo = iso.slice(5);
+      return mdAlvo >= f.dataInicio.slice(5) && mdAlvo <= f.dataFim.slice(5);
+    }
+    return iso >= f.dataInicio && iso <= f.dataFim;
+  }) || null;
+}
+
 function estaEmFeriado(date) {
   if (!date || !ESTADO.feriados || ESTADO.feriados.length === 0) return false;
-  const iso = formatISO(date);
-  return ESTADO.feriados.some((f) => f.dataInicio && f.dataFim && iso >= f.dataInicio && iso <= f.dataFim);
+  return !!feriadoNaData(formatISO(date));
 }
 
 async function gerarCronograma() {
@@ -3590,7 +3605,7 @@ function renderCalendar() {
   for (let dia = 1; dia <= diasNoMes; dia++) {
     const iso = `${ESTADO.calYear}-${String(ESTADO.calMonth + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
     const itensDoDia = porData[iso] || [];
-    const feriadoDoDia = ESTADO.feriados.find((f) => iso >= f.dataInicio && iso <= f.dataFim);
+    const feriadoDoDia = feriadoNaData(iso);
     const ehDiaVazio = datasVazias.has(iso);
     const el = document.createElement("div");
     el.className = "cal-day" + (itensDoDia.length ? " has-tasks" : "") +
@@ -7885,7 +7900,7 @@ async function abrirDrawerEquipamento(id) {
     const localItem = item.local || "SEDE";
     const cap = (ESTADO.config?.capacidades || {})[localItem] || { nEquipes: 1, aparelhosDia: 2 };
     const capacidadeDia = Math.max(1, cap.nEquipes) * Math.max(1, cap.aparelhosDia);
-    const feriadoNoDia = ESTADO.feriados.find((f) => novaData >= f.dataInicio && novaData <= f.dataFim);
+    const feriadoNoDia = feriadoNaData(novaData);
     if (feriadoNoDia) {
       const ok = window.confirm(
         `Esse dia é ${feriadoNoDia.tipo === "feriado" ? "feriado" : "período de férias"} (${feriadoNoDia.label}). Agendar mesmo assim?`
@@ -7969,6 +7984,7 @@ async function adicionarFeriado() {
   const label = $("#feriadoLabel").value.trim();
   const dataInicio = $("#feriadoInicio").value;
   const dataFimInput = $("#feriadoFim").value;
+  const anual = $("#feriadoAnual")?.checked || false;
   if (!dataInicio) {
     toast("Escolha a data início.");
     return;
@@ -7979,14 +7995,18 @@ async function adicionarFeriado() {
     return;
   }
   try {
-    const novoFeriado = { tipo, label: label || (tipo === "feriado" ? "Feriado" : "Férias"), dataInicio, dataFim };
+    const novoFeriado = { tipo, label: label || (tipo === "feriado" ? "Feriado" : "Férias"), dataInicio, dataFim, anual };
     const refDoc = await addDoc(collection(db, "feriados"), novoFeriado);
     const snapFeriadosAtual = await getDocs(query(collection(db, "feriados"), orderBy("dataInicio")));
     ESTADO.feriados = snapFeriadosAtual.docs.map((d) => ({ id: d.id, ...d.data() }));
-    await registrarAuditoria("Adicionar feriado/férias", `${novoFeriado.label} (${novoFeriado.dataInicio} a ${novoFeriado.dataFim})`);
+    await registrarAuditoria(
+      "Adicionar feriado/férias",
+      `${novoFeriado.label} (${novoFeriado.dataInicio} a ${novoFeriado.dataFim}${anual ? ", todo ano" : ""})`
+    );
     $("#feriadoLabel").value = "";
     $("#feriadoInicio").value = "";
     $("#feriadoFim").value = "";
+    if ($("#feriadoAnual")) $("#feriadoAnual").checked = false;
     toast("Data cadastrada. Reorganizando cronograma...");
     await reagendarTudo();
   } catch (err) {
@@ -8035,14 +8055,19 @@ function renderFeriados() {
   });
 
   $("#feriadosCount").textContent = `${feriados.length} datas`;
-  table.innerHTML = `<thead><tr><th>Tipo</th><th>Descrição</th><th>Início</th><th>Fim</th><th></th></tr></thead><tbody></tbody>`;
+  table.innerHTML = `<thead><tr><th>Tipo</th><th>Descrição</th><th>Início</th><th>Fim</th><th>Repete</th><th></th></tr></thead><tbody></tbody>`;
   const tbody = table.querySelector("tbody");
   feriados.forEach((f) => {
     const tr = document.createElement("tr");
     const [ai, am, ad] = f.dataInicio.split("-");
     const [bi, bm, bd] = f.dataFim.split("-");
+    // Anual: o ano cadastrado foi só o da primeira vez -- mostrar sem ele
+    // pra não parecer que só vale naquele ano específico.
+    const inicioTexto = f.anual ? `${ad}/${am}` : `${ad}/${am}/${ai}`;
+    const fimTexto = f.anual ? `${bd}/${bm}` : `${bd}/${bm}/${bi}`;
     tr.innerHTML = `<td>${f.tipo === "feriado" ? "Feriado" : "Férias"}</td><td>${escapeHtml(f.label)}</td>
-      <td>${ad}/${am}/${ai}</td><td>${bd}/${bm}/${bi}</td>`;
+      <td>${inicioTexto}</td><td>${fimTexto}</td>
+      <td>${f.anual ? '<span class="pill">Todo ano</span>' : "-"}</td>`;
     const tdBtn = document.createElement("td");
     const btnDel = document.createElement("button");
     btnDel.className = "btn ghost";
