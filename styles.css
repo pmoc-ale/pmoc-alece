@@ -1707,6 +1707,37 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .menu-linha-excluir { color: var(--vermelho-texto); }
 .menu-linha-excluir:hover { background: var(--vermelho-fundo); }
 
+/* Botão "⋯" discreto pra mostrar um texto informativo dentro de um
+   card-head (ex: "Feriados nacionais"), sem deixar o parágrafo grande
+   sempre visível ocupando espaço no card. Classe própria (não reusa
+   .menu-linha) pra não herdar o reposicionamento mobile daquele menu,
+   que é pensado pra linha de tabela que rola pro lado -- aqui o botão
+   já fica perto da borda direita normal do card em qualquer largura. */
+.info-popover { position: relative; display: inline-block; flex-shrink: 0; }
+.info-popover summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--raio-pequeno);
+  color: var(--texto-suave);
+}
+.info-popover summary::-webkit-details-marker { display: none; }
+.info-popover summary:hover { background: var(--azul-50); }
+.info-popover-painel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-pequeno);
+  box-shadow: var(--sombra-elevada);
+  z-index: 20;
+  width: 280px;
+  max-width: min(280px, calc(100vw - 48px));
+  padding: 10px 12px;
+}
+.info-popover-painel p { margin: 0; }
+
 /* Toast */
 .toast {
   position: fixed;
