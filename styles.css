@@ -115,6 +115,22 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   z-index: 200;
   padding: var(--sp-4);
   overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+/* Esmaece o login ao entrar, em vez de sumir na hora (ver app.js,
+   transicaoParaApp). */
+.auth-overlay.saindo {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#appRoot {
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+#appRoot.entrando {
+  opacity: 0;
 }
 
 /* Silhueta do Ceará no fundo -- bem sutil, só textura/identidade visual

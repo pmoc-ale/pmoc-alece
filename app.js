@@ -2661,6 +2661,14 @@ $("#btnAuthEntrar")?.addEventListener("click", async () => {
   if (!usuarioDigitado || !senha) { mostrarErroAuth("Preencha usuário e senha."); return; }
   const email = usuarioParaEmail(usuarioDigitado);
   mostrarErroAuth("");
+  // Feedback na hora do clique -- sem isso, o botão ficava do mesmo jeito
+  // enquanto o Firebase confere a senha (a espera parecia trava/bug).
+  // A troca de tela pra dentro do app já mostra o próprio carregamento
+  // das telas, então só precisa desfazer isso se der erro.
+  const btn = $("#btnAuthEntrar");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = modoCadastro ? "Criando conta..." : "Entrando...";
   try {
     if (modoCadastro) {
       await createUserWithEmailAndPassword(auth, email, senha);
@@ -2678,6 +2686,8 @@ $("#btnAuthEntrar")?.addEventListener("click", async () => {
       "auth/invalid-credential": "E-mail ou senha incorretos.",
     };
     mostrarErroAuth(mensagens[err.code] || ("Erro: " + err.message));
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
   }
 });
 
@@ -2714,6 +2724,30 @@ async function registrarUsuarioLogado(user) {
   return snap.data();
 }
 
+// Esmaece o login e revela o app por baixo, em vez de trocar as duas
+// telas na hora -- sem isso, depois de ficar esperando o clique em
+// "Entrar", a tela trocava de uma vez, parecendo mais um susto/bug do
+// que uma resposta do sistema.
+function transicaoParaApp(overlay, appRoot) {
+  if (appRoot) {
+    appRoot.hidden = false;
+    appRoot.classList.add("entrando");
+    // Dois requestAnimationFrame pra garantir que o navegador pinte o
+    // estado inicial (opacidade 0) antes de tirar a classe -- um só às
+    // vezes cai no mesmo frame e a transição não chega a aparecer.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => appRoot.classList.remove("entrando"));
+    });
+  }
+  if (overlay) {
+    overlay.classList.add("saindo");
+    setTimeout(() => {
+      overlay.hidden = true;
+      overlay.classList.remove("saindo");
+    }, 350);
+  }
+}
+
 onAuthStateChanged(auth, async (user) => {
   const overlay = $("#authOverlay");
   const appRoot = $("#appRoot");
@@ -2733,8 +2767,7 @@ onAuthStateChanged(auth, async (user) => {
     } catch (err) {
       console.error("Erro ao verificar usuário:", err);
     }
-    if (overlay) overlay.hidden = true;
-    if (appRoot) appRoot.hidden = false;
+    transicaoParaApp(overlay, appRoot);
     atualizarVisibilidadeAdmin();
     if (!appJaInicializado) {
           appJaInicializado = true;
@@ -2747,6 +2780,14 @@ onAuthStateChanged(auth, async (user) => {
   } else {
     if (overlay) overlay.hidden = false;
     if (appRoot) appRoot.hidden = true;
+    // Desfaz o "Entrando..."/desabilitado do botão -- senão, depois de
+    // sair (Sair) e voltar pra tela de login, o botão ficava travado do
+    // jeito que ficou na última tentativa.
+    const btnEntrar = $("#btnAuthEntrar");
+    if (btnEntrar) {
+      btnEntrar.disabled = false;
+      btnEntrar.textContent = modoCadastro ? "Criar conta" : "Entrar";
+    }
   }
 });
 
