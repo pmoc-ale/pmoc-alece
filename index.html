@@ -607,7 +607,14 @@
     <!-- VIEW 9: FERIADOS E FÉRIAS -->
     <section class="view" id="view-feriados">
       <div class="card">
-        <h2>Feriados e férias</h2>
+        <div class="card-head">
+          <h2>Feriados nacionais</h2>
+        </div>
+        <p class="muted">Adiciona de uma vez os feriados nacionais fixos (Ano Novo, Tiradentes, Dia do Trabalho, Independência, Nossa Senhora Aparecida, Finados, Proclamação da República, Natal) e os móveis calculados a partir da Páscoa (Carnaval, Sexta-feira Santa, Corpo de Cristo) -- os móveis já caem certos em qualquer ano, sem precisar recadastrar. Os que já estiverem cadastrados não são duplicados.</p>
+        <button class="btn secondary" id="btnAdicionarFeriadosNacionais">+ Adicionar feriados nacionais</button>
+      </div>
+      <div class="card">
+        <h2 id="feriadoFormTitulo">Feriado ou férias personalizado</h2>
         <p class="muted">
         <div class="grid-form">
           <label>Tipo
@@ -624,7 +631,10 @@
           <input type="checkbox" id="feriadoAnual">
           Repete todo ano nessa mesma data (feriado fixo, ex: Natal, Independência)
         </label>
-        <button class="btn primary" id="btnAdicionarFeriado">+ Adicionar</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn primary" id="btnAdicionarFeriado">+ Adicionar</button>
+          <button class="btn ghost" id="btnCancelarEdicaoFeriado" hidden>Cancelar edição</button>
+        </div>
       </div>
       <div class="card">
         <div class="card-head">
@@ -802,7 +812,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=73"></script>
+<script type="module" src="app.js?v=74"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

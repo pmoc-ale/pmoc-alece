@@ -2041,13 +2041,51 @@ $("#btnGerar").addEventListener("click", () => {
 
 $("#btnDesfazerPlanilha")?.addEventListener("click", desfazerUltimaAtualizacaoPlanilha);
 
-// Acha o feriado/período de férias que cai numa data (ou null) -- feriados
-// "anuais" (ex: Natal, Independência) são cadastrados só uma vez, com uma
-// data de exemplo, e comparados aqui só por mês/dia (ignorando o ano) pra
-// valerem em qualquer ano, sem precisar recadastrar todo ano.
+// Domingo de Páscoa de um ano (algoritmo Gregoriano/Meeus -- o mesmo usado
+// pra calcular Carnaval, Sexta-feira Santa e Corpo de Cristo, que mudam de
+// data todo ano e por isso não davam pra tratar com o "anual" comum, que só
+// repete mês/dia fixos).
+function dataDaPascoa(ano) {
+  const a = ano % 19;
+  const b = Math.floor(ano / 100);
+  const c = ano % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(ano, mes - 1, dia);
+}
+
+function somaDias(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+// Acha o feriado/período de férias que cai numa data (ou null).
+//  - Feriados "anuais" de data fixa (ex: Natal, Independência) são
+//    cadastrados uma vez, com uma data de exemplo, e comparados aqui só
+//    por mês/dia (ignorando o ano) pra valerem em qualquer ano.
+//  - Feriados "móveis" (Carnaval, Sexta-feira Santa, Corpo de Cristo) têm
+//    a data calculada a partir da Páscoa do ano da data pesquisada, em vez
+//    de mês/dia fixo -- eles mudam de data todo ano de verdade.
 function feriadoNaData(iso) {
   if (!iso || !ESTADO.feriados) return null;
+  const ano = parseInt(iso.slice(0, 4), 10);
   return ESTADO.feriados.find((f) => {
+    if (f.baseInicioPascoa != null && f.baseFimPascoa != null) {
+      const pascoa = dataDaPascoa(ano);
+      const ini = formatISO(somaDias(pascoa, f.baseInicioPascoa));
+      const fim = formatISO(somaDias(pascoa, f.baseFimPascoa));
+      return iso >= ini && iso <= fim;
+    }
     if (!f.dataInicio || !f.dataFim) return false;
     if (f.anual) {
       const mdAlvo = iso.slice(5);
@@ -7979,6 +8017,8 @@ if (btnAdicionarFeriado) {
   btnAdicionarFeriado.addEventListener("click", adicionarFeriado);
 }
 
+let idFeriadoEmEdicao = null;
+
 async function adicionarFeriado() {
   const tipo = $("#feriadoTipo").value;
   const label = $("#feriadoLabel").value.trim();
@@ -7995,18 +8035,18 @@ async function adicionarFeriado() {
     return;
   }
   try {
-    const novoFeriado = { tipo, label: label || (tipo === "feriado" ? "Feriado" : "Férias"), dataInicio, dataFim, anual };
-    const refDoc = await addDoc(collection(db, "feriados"), novoFeriado);
+    const dadosFeriado = { tipo, label: label || (tipo === "feriado" ? "Feriado" : "Férias"), dataInicio, dataFim, anual };
+    const descricaoAuditoria = `${dadosFeriado.label} (${dadosFeriado.dataInicio} a ${dadosFeriado.dataFim}${anual ? ", todo ano" : ""})`;
+    if (idFeriadoEmEdicao) {
+      await updateDoc(doc(db, "feriados", idFeriadoEmEdicao), dadosFeriado);
+      await registrarAuditoria("Editar feriado/férias", descricaoAuditoria);
+    } else {
+      await addDoc(collection(db, "feriados"), dadosFeriado);
+      await registrarAuditoria("Adicionar feriado/férias", descricaoAuditoria);
+    }
     const snapFeriadosAtual = await getDocs(query(collection(db, "feriados"), orderBy("dataInicio")));
     ESTADO.feriados = snapFeriadosAtual.docs.map((d) => ({ id: d.id, ...d.data() }));
-    await registrarAuditoria(
-      "Adicionar feriado/férias",
-      `${novoFeriado.label} (${novoFeriado.dataInicio} a ${novoFeriado.dataFim}${anual ? ", todo ano" : ""})`
-    );
-    $("#feriadoLabel").value = "";
-    $("#feriadoInicio").value = "";
-    $("#feriadoFim").value = "";
-    if ($("#feriadoAnual")) $("#feriadoAnual").checked = false;
+    cancelarEdicaoFeriado();
     toast("Data cadastrada. Reorganizando cronograma...");
     await reagendarTudo();
   } catch (err) {
@@ -8015,12 +8055,107 @@ async function adicionarFeriado() {
   }
 }
 
+// Preenche o formulário com os dados de um feriado já cadastrado, pra
+// editar em vez de ter que apagar e criar outro do zero -- os "móveis"
+// (calculados pela Páscoa, ver adicionarFeriadosNacionais) não têm um
+// campo de data fixo pra editar aqui, então só deixa remover.
+function editarFeriado(f) {
+  if (f.baseInicioPascoa != null) {
+    toast('Esse feriado é calculado pela Páscoa (não tem uma data fixa pra editar) -- remova e clique em "Adicionar feriados nacionais" de novo se precisar.');
+    return;
+  }
+  idFeriadoEmEdicao = f.id;
+  $("#feriadoTipo").value = f.tipo;
+  $("#feriadoTipo").dispatchEvent(new Event("change"));
+  $("#feriadoLabel").value = f.label || "";
+  $("#feriadoInicio").value = f.dataInicio;
+  $("#feriadoFim").value = f.dataFim;
+  if ($("#feriadoAnual")) $("#feriadoAnual").checked = !!f.anual;
+  if ($("#feriadoFormTitulo")) $("#feriadoFormTitulo").textContent = "Editando feriado/férias";
+  if ($("#btnAdicionarFeriado")) $("#btnAdicionarFeriado").textContent = "Salvar alterações";
+  if ($("#btnCancelarEdicaoFeriado")) $("#btnCancelarEdicaoFeriado").hidden = false;
+  $("#feriadoLabel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelarEdicaoFeriado() {
+  idFeriadoEmEdicao = null;
+  $("#feriadoLabel").value = "";
+  $("#feriadoInicio").value = "";
+  $("#feriadoFim").value = "";
+  if ($("#feriadoAnual")) $("#feriadoAnual").checked = false;
+  if ($("#feriadoFormTitulo")) $("#feriadoFormTitulo").textContent = "Feriado ou férias personalizado";
+  if ($("#btnAdicionarFeriado")) $("#btnAdicionarFeriado").textContent = "+ Adicionar";
+  if ($("#btnCancelarEdicaoFeriado")) $("#btnCancelarEdicaoFeriado").hidden = true;
+}
+$("#btnCancelarEdicaoFeriado")?.addEventListener("click", cancelarEdicaoFeriado);
+
+// Feriados nacionais oficiais (fixos) + Carnaval/Sexta-feira Santa/Corpo de
+// Cristo (móveis, calculados a partir da Páscoa DESSE ano só pra ter uma
+// data de referência pra mostrar na tabela -- o cálculo de verdade, pra
+// qualquer ano, é feito de novo em feriadoNaData). Estaduais/municipais
+// (ex: aniversário de cidade) não entram aqui -- é só o calendário
+// nacional, pra não arriscar cadastrar uma data regional errada.
+function listaFeriadosNacionais(ano) {
+  const pascoa = dataDaPascoa(ano);
+  const fixo = (mes, dia, label) => {
+    const data = `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    return { tipo: "feriado", label, dataInicio: data, dataFim: data, anual: true };
+  };
+  const movel = (label, baseInicioPascoa, baseFimPascoa) => ({
+    tipo: "feriado", label,
+    dataInicio: formatISO(somaDias(pascoa, baseInicioPascoa)),
+    dataFim: formatISO(somaDias(pascoa, baseFimPascoa)),
+    anual: false, baseInicioPascoa, baseFimPascoa,
+  });
+  return [
+    fixo(1, 1, "Confraternização Universal"),
+    movel("Carnaval", -48, -47),
+    movel("Sexta-feira Santa", -2, -2),
+    fixo(4, 21, "Tiradentes"),
+    fixo(5, 1, "Dia do Trabalho"),
+    movel("Corpo de Cristo", 60, 60),
+    fixo(9, 7, "Independência do Brasil"),
+    fixo(10, 12, "Nossa Senhora Aparecida"),
+    fixo(11, 2, "Finados"),
+    fixo(11, 15, "Proclamação da República"),
+    fixo(12, 25, "Natal"),
+  ];
+}
+
+async function adicionarFeriadosNacionais() {
+  const ano = new Date().getFullYear();
+  const lista = listaFeriadosNacionais(ano);
+  const jaCadastrados = new Set(ESTADO.feriados.map((f) => normalizarBusca(f.label || "")));
+  const novos = lista.filter((f) => !jaCadastrados.has(normalizarBusca(f.label)));
+  if (!novos.length) {
+    toast("Os feriados nacionais já estão todos cadastrados.");
+    return;
+  }
+  const ok = window.confirm(`Adicionar ${novos.length} feriado(s) nacional(is)?\n\n${novos.map((f) => f.label).join(", ")}`);
+  if (!ok) return;
+  try {
+    for (const f of novos) {
+      await addDoc(collection(db, "feriados"), f);
+    }
+    const snap = await getDocs(query(collection(db, "feriados"), orderBy("dataInicio")));
+    ESTADO.feriados = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    await registrarAuditoria("Adicionar feriados nacionais", novos.map((f) => f.label).join(", "));
+    toast(`${novos.length} feriado(s) nacional(is) adicionado(s). Reorganizando cronograma...`);
+    await reagendarTudo();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao adicionar feriados nacionais: " + err.message);
+  }
+}
+$("#btnAdicionarFeriadosNacionais")?.addEventListener("click", adicionarFeriadosNacionais);
+
 async function removerFeriado(id, label) {
   const ok = window.confirm(`Remover "${label}"?`);
   if (!ok) return;
   try {
     await deleteDoc(doc(db, "feriados", id));
     ESTADO.feriados = ESTADO.feriados.filter((f) => f.id !== id);
+    if (idFeriadoEmEdicao === id) cancelarEdicaoFeriado();
     await registrarAuditoria("Remover feriado/férias", label);
     toast("Removido. Reorganizando cronograma...");
     await reagendarTudo(true);
@@ -8057,18 +8192,43 @@ function renderFeriados() {
   $("#feriadosCount").textContent = `${feriados.length} datas`;
   table.innerHTML = `<thead><tr><th>Tipo</th><th>Descrição</th><th>Início</th><th>Fim</th><th>Repete</th><th></th></tr></thead><tbody></tbody>`;
   const tbody = table.querySelector("tbody");
+  const anoAtual = new Date().getFullYear();
   feriados.forEach((f) => {
     const tr = document.createElement("tr");
-    const [ai, am, ad] = f.dataInicio.split("-");
-    const [bi, bm, bd] = f.dataFim.split("-");
-    // Anual: o ano cadastrado foi só o da primeira vez -- mostrar sem ele
-    // pra não parecer que só vale naquele ano específico.
-    const inicioTexto = f.anual ? `${ad}/${am}` : `${ad}/${am}/${ai}`;
-    const fimTexto = f.anual ? `${bd}/${bm}` : `${bd}/${bm}/${bi}`;
+    const ehMovel = f.baseInicioPascoa != null && f.baseFimPascoa != null;
+    // Móvel: a data cadastrada foi só a do ano em que foi criado -- mostra
+    // sempre a do ano atual (recalculada pela Páscoa), senão pareceria
+    // desatualizado ano após ano. Anual (fixo): mostra sem o ano, já que
+    // vale pra qualquer um.
+    let inicioTexto, fimTexto;
+    if (ehMovel) {
+      const pascoa = dataDaPascoa(anoAtual);
+      const [, mi, di] = formatISO(somaDias(pascoa, f.baseInicioPascoa)).split("-");
+      const [, mf, df] = formatISO(somaDias(pascoa, f.baseFimPascoa)).split("-");
+      inicioTexto = `${di}/${mi}/${anoAtual}`;
+      fimTexto = `${df}/${mf}/${anoAtual}`;
+    } else {
+      const [ai, am, ad] = f.dataInicio.split("-");
+      const [bi, bm, bd] = f.dataFim.split("-");
+      inicioTexto = f.anual ? `${ad}/${am}` : `${ad}/${am}/${ai}`;
+      fimTexto = f.anual ? `${bd}/${bm}` : `${bd}/${bm}/${bi}`;
+    }
+    const repeteTexto = ehMovel
+      ? '<span class="pill">Móvel (Páscoa)</span>'
+      : f.anual ? '<span class="pill">Todo ano</span>' : "-";
     tr.innerHTML = `<td>${f.tipo === "feriado" ? "Feriado" : "Férias"}</td><td>${escapeHtml(f.label)}</td>
       <td>${inicioTexto}</td><td>${fimTexto}</td>
-      <td>${f.anual ? '<span class="pill">Todo ano</span>' : "-"}</td>`;
+      <td>${repeteTexto}</td>`;
     const tdBtn = document.createElement("td");
+    tdBtn.style.display = "flex";
+    tdBtn.style.gap = "6px";
+    if (!ehMovel) {
+      const btnEditar = document.createElement("button");
+      btnEditar.className = "btn ghost";
+      btnEditar.textContent = "Editar";
+      btnEditar.addEventListener("click", () => editarFeriado(f));
+      tdBtn.appendChild(btnEditar);
+    }
     const btnDel = document.createElement("button");
     btnDel.className = "btn ghost";
     btnDel.textContent = "Remover";
