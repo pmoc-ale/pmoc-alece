@@ -464,6 +464,8 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   unsubscribeHistorico: null,
   calYear: null,
   calMonth: null,
+  calModo: "mes",
+  calDiaRef: null,
   diaSelecionado: null,
   localFiltro: "Todos",
   diasVaziosCronograma: [],
@@ -2758,6 +2760,11 @@ $("#btnAuthEntrar")?.addEventListener("click", async () => {
   }
 });
 
+$("#btnSairTopbar")?.addEventListener("click", () => {
+  $("#btnSairTopbar")?.closest(".topbar-conta")?.removeAttribute("open");
+  $("#btnSair")?.click();
+});
+
 $("#btnSair")?.addEventListener("click", () => {
   
   // Desliga todos os "escutadores" do Firestore antes de sair — senão eles
@@ -3602,8 +3609,21 @@ ligarBusca("buscaHistorico", "historico", renderHistorico);
   $(`#${id}`)?.addEventListener("change", renderEquipamentosCadastro);
 });
 
-$("#prevMonth").addEventListener("click", () => mudarMes(-1));
-$("#nextMonth").addEventListener("click", () => mudarMes(1));
+$("#prevMonth").addEventListener("click", () => mudarPeriodo(-1));
+$("#nextMonth").addEventListener("click", () => mudarPeriodo(1));
+
+$("#calendarModo")?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".btn-modo");
+  if (!btn || btn.classList.contains("active")) return;
+  ESTADO.calModo = btn.dataset.modo;
+  $all("#calendarModo .btn-modo").forEach((b) => b.classList.toggle("active", b === btn));
+  if (ESTADO.calModo !== "mes") {
+    // Ao trocar pra semana/dia, parte do dia já selecionado (se tiver)
+    // ou de hoje -- não do 1º dia do mês que estava sendo visto no modo mês.
+    ESTADO.calDiaRef = ESTADO.diaSelecionado || formatISO(new Date());
+  }
+  renderCalendar();
+});
 
 function mudarMes(delta) {
   if (ESTADO.calMonth === null) { ESTADO.calMonth = new Date().getMonth(); ESTADO.calYear = new Date().getFullYear(); }
@@ -3613,18 +3633,30 @@ function mudarMes(delta) {
   renderCalendar();
 }
 
+// Semana/dia navegam por uma data de referência à parte de calMonth/calYear
+// (que continuam sendo só do modo mês, usados também por outras telas que
+// pulam pro calendário já num mês específico).
+function referenciaCalSemanaDia() {
+  return ESTADO.calDiaRef || ESTADO.diaSelecionado || formatISO(new Date());
+}
+
+function mudarPeriodo(delta) {
+  if (ESTADO.calModo === "mes") { mudarMes(delta); return; }
+  const dias = ESTADO.calModo === "semana" ? delta * 7 : delta;
+  ESTADO.calDiaRef = formatISO(somaDias(new Date(referenciaCalSemanaDia() + "T00:00:00"), dias));
+  renderCalendar();
+}
+
+function inicioDaSemana(iso) {
+  const d = new Date(iso + "T00:00:00");
+  const diasDesdeSegunda = (d.getDay() + 6) % 7;
+  return formatISO(somaDias(d, -diasDesdeSegunda));
+}
+
 const NOMES_MES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho",
   "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-function renderCalendar() {
-  const grid = $("#calendarGrid");
-  if (ESTADO.calMonth === null) {
-    const hoje = new Date();
-    ESTADO.calYear = hoje.getFullYear();
-    ESTADO.calMonth = hoje.getMonth();
-  }
-  $("#calendarTitle").textContent = `${NOMES_MES[ESTADO.calMonth]} de ${ESTADO.calYear}`;
-
+function contextoCalendario() {
   const hojeISO = formatISO(new Date());
   const porData = {};
   for (const item of aplicarFiltroLocal(ESTADO.equipamentos)) {
@@ -3635,55 +3667,50 @@ function renderCalendar() {
       .filter((d) => ESTADO.localFiltro === "Todos" || d.local === ESTADO.localFiltro)
       .map((d) => d.data)
   );
+  return { hojeISO, porData, datasVazias };
+}
 
-  grid.innerHTML = "";
+function renderDowHeader(grid) {
   ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].forEach((d) => {
     const el = document.createElement("div");
     el.className = "cal-dow";
     el.textContent = d;
     grid.appendChild(el);
   });
+}
 
-  const primeiroDia = new Date(ESTADO.calYear, ESTADO.calMonth, 1);
-  const offsetInicial = (primeiroDia.getDay() + 6) % 7;
-  const diasNoMes = new Date(ESTADO.calYear, ESTADO.calMonth + 1, 0).getDate();
+// Monta a célula de um dia (número, marcador de feriado/sem-agenda,
+// etiquetas de status por prédio) -- usado tanto no grid do mês quanto
+// no da semana, já que são a mesma célula, só que em quantidades diferentes.
+function construirCelulaDia(iso, hojeISO, porData, datasVazias) {
+  const itensDoDia = porData[iso] || [];
+  const feriadoDoDia = feriadoNaData(iso);
+  const ehDiaVazio = datasVazias.has(iso);
+  const el = document.createElement("div");
+  el.className = "cal-day" + (itensDoDia.length ? " has-tasks" : "") +
+    (ESTADO.diaSelecionado === iso ? " selected" : "") + (feriadoDoDia ? " is-holiday" : "") +
+    (ehDiaVazio ? " is-gap" : "");
 
-  for (let i = 0; i < offsetInicial; i++) {
-    const el = document.createElement("div");
-    el.className = "cal-day empty";
-    grid.appendChild(el);
+  const num = document.createElement("div");
+  num.className = "cal-day-num";
+  num.textContent = parseInt(iso.slice(8, 10), 10);
+  el.appendChild(num);
+
+  if (ehDiaVazio) {
+    const tag = document.createElement("div");
+    tag.className = "cal-day-badge gap";
+    tag.textContent = "Sem agenda";
+    el.appendChild(tag);
   }
 
-  for (let dia = 1; dia <= diasNoMes; dia++) {
-    const iso = `${ESTADO.calYear}-${String(ESTADO.calMonth + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-    const itensDoDia = porData[iso] || [];
-    const feriadoDoDia = feriadoNaData(iso);
-    const ehDiaVazio = datasVazias.has(iso);
-    const el = document.createElement("div");
-    el.className = "cal-day" + (itensDoDia.length ? " has-tasks" : "") +
-      (ESTADO.diaSelecionado === iso ? " selected" : "") + (feriadoDoDia ? " is-holiday" : "") +
-      (ehDiaVazio ? " is-gap" : "");
+  if (feriadoDoDia) {
+    const tag = document.createElement("div");
+    tag.className = "cal-day-badge holiday";
+    tag.textContent = feriadoDoDia.label || (feriadoDoDia.tipo === "feriado" ? "Feriado" : "Férias");
+    el.appendChild(tag);
+  }
 
-    const num = document.createElement("div");
-    num.className = "cal-day-num";
-    num.textContent = dia;
-    el.appendChild(num);
-
-    if (ehDiaVazio) {
-      const tag = document.createElement("div");
-      tag.className = "cal-day-badge gap";
-      tag.textContent = "Sem agenda";
-      el.appendChild(tag);
-    }
-
-    if (feriadoDoDia) {
-      const tag = document.createElement("div");
-      tag.className = "cal-day-badge holiday";
-      tag.textContent = feriadoDoDia.label || (feriadoDoDia.tipo === "feriado" ? "Feriado" : "Férias");
-      el.appendChild(tag);
-    }
-
-    if (itensDoDia.length) {
+  if (itensDoDia.length) {
     // Agrupa os itens do dia por prédio/anexo
     const porPredio = {};
     itensDoDia.forEach(i => {
@@ -3697,13 +3724,13 @@ function renderCalendar() {
       const concluidas = itensPredio.filter((i) => i.statusPreventiva === "Concluída").length;
       const andamento = itensPredio.filter((i) => i.statusPreventiva === "Em andamento").length;
       const temAtrasado = iso < hojeISO && concluidas < itensPredio.length;
-      
+
       const badge = document.createElement("div");
       let classe = "pendente";
       if (concluidas === itensPredio.length) classe = "concluido";
       else if (andamento > 0 || concluidas > 0) classe = "andamento";
       if (temAtrasado) classe = "atrasado";
-      
+
       badge.className = "cal-day-badge " + classe + (ESTADO.localFiltro === "Todos" ? "" : " badge-empilhado");
       badge.innerHTML = ESTADO.localFiltro === "Todos"
         ? `<span class="badge-predio">${escapeHtml(predio)}</span><span class="badge-contagem">${itensPredio.length} ${ROTULOS_STATUS[classe]}</span>`
@@ -3717,11 +3744,80 @@ function renderCalendar() {
       });
       el.appendChild(badge);
     });
-    
+
     el.addEventListener("click", () => selecionarDia(iso));
   }
+  return el;
+}
+
+function renderCalendar() {
+  $all("#calendarModo .btn-modo").forEach((b) => b.classList.toggle("active", b.dataset.modo === ESTADO.calModo));
+  if (ESTADO.calModo === "semana") return renderCalendarSemana();
+  if (ESTADO.calModo === "dia") return renderCalendarDia();
+  return renderCalendarMes();
+}
+
+function renderCalendarMes() {
+  const grid = $("#calendarGrid");
+  grid.hidden = false;
+  if (ESTADO.calMonth === null) {
+    const hoje = new Date();
+    ESTADO.calYear = hoje.getFullYear();
+    ESTADO.calMonth = hoje.getMonth();
+  }
+  $("#calendarTitle").textContent = `${NOMES_MES[ESTADO.calMonth]} de ${ESTADO.calYear}`;
+
+  const { hojeISO, porData, datasVazias } = contextoCalendario();
+
+  grid.className = "calendar-grid";
+  grid.innerHTML = "";
+  renderDowHeader(grid);
+
+  const primeiroDia = new Date(ESTADO.calYear, ESTADO.calMonth, 1);
+  const offsetInicial = (primeiroDia.getDay() + 6) % 7;
+  const diasNoMes = new Date(ESTADO.calYear, ESTADO.calMonth + 1, 0).getDate();
+
+  for (let i = 0; i < offsetInicial; i++) {
+    const el = document.createElement("div");
+    el.className = "cal-day empty";
     grid.appendChild(el);
   }
+
+  for (let dia = 1; dia <= diasNoMes; dia++) {
+    const iso = `${ESTADO.calYear}-${String(ESTADO.calMonth + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    grid.appendChild(construirCelulaDia(iso, hojeISO, porData, datasVazias));
+  }
+}
+
+function renderCalendarSemana() {
+  const grid = $("#calendarGrid");
+  grid.hidden = false;
+  const inicioSemana = inicioDaSemana(referenciaCalSemanaDia());
+  const dias = [];
+  for (let i = 0; i < 7; i++) dias.push(formatISO(somaDias(new Date(inicioSemana + "T00:00:00"), i)));
+
+  const [ai, am, ad] = dias[0].split("-");
+  const [bi, bm, bd] = dias[6].split("-");
+  $("#calendarTitle").textContent = am === bm
+    ? `${parseInt(ad,10)} a ${parseInt(bd,10)} de ${NOMES_MES[parseInt(am, 10) - 1]} de ${ai}`
+    : `${ad}/${am} a ${bd}/${bm} de ${bi}`;
+
+  const { hojeISO, porData, datasVazias } = contextoCalendario();
+  grid.className = "calendar-grid cal-grid-semana";
+  grid.innerHTML = "";
+  renderDowHeader(grid);
+  dias.forEach((iso) => grid.appendChild(construirCelulaDia(iso, hojeISO, porData, datasVazias)));
+}
+
+function renderCalendarDia() {
+  const grid = $("#calendarGrid");
+  const ref = referenciaCalSemanaDia();
+  const data = new Date(ref + "T00:00:00");
+  $("#calendarTitle").textContent = `${data.getDate()} de ${NOMES_MES[data.getMonth()]} de ${data.getFullYear()}`;
+  grid.hidden = true;
+  grid.innerHTML = "";
+  ESTADO.diaSelecionado = ref;
+  mostrarDetalheDia(ref);
 }
 
 function mostrarTooltipCalendario(elemento, predio, itens) {
@@ -3751,12 +3847,19 @@ function ocultarTooltipCalendario() {
 function selecionarDia(iso) {
   ESTADO.diaSelecionado = iso;
   renderCalendar();
+  mostrarDetalheDia(iso);
+}
+
+// Só a parte de mostrar a tabela de detalhe do dia, sem re-renderizar o
+// calendário -- o modo Dia chama isso direto (o grid dele É o detalhe),
+// pra não entrar em recursão com renderCalendar()/renderCalendarDia().
+function mostrarDetalheDia(iso) {
   const itensDoDia = aplicarFiltroLocal(ESTADO.equipamentos).filter((i) => i.dataAgendada === iso);
   const [ano, mes, dia] = iso.split("-");
   $("#dayDetailCard").hidden = false;
   $("#dayDetailTitle").textContent = `${dia}/${mes}/${ano} — ${itensDoDia.length} aparelho(s)`;
-  renderTabelaDetalheDia(itensDoDia, () => selecionarDia(iso));
-  
+  renderTabelaDetalheDia(itensDoDia, () => mostrarDetalheDia(iso));
+
   // CORREÇÃO MOBILE: Desliza a tela suavemente para baixo até a tabela
   if (window.innerWidth <= 768) {
     setTimeout(() => $("#dayDetailCard").scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);

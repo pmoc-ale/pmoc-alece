@@ -63,12 +63,20 @@
       </div>
     </div>
     <nav class="tabs" id="tabs">
-      <button class="tab active" data-view="upload">Levantamento</button>
-      <button class="tab" data-view="config">Cronograma</button>
-      <button class="tab" data-view="calendar">Calendário</button>
-      <button class="tab" data-view="dashboard">Dashboard</button>
+      <button class="tab active" data-view="upload"><span class="tab-icon" aria-hidden="true">🏠</span>Levantamento</button>
+      <button class="tab" data-view="config"><span class="tab-icon" aria-hidden="true">📊</span>Cronograma</button>
+      <button class="tab" data-view="calendar"><span class="tab-icon" aria-hidden="true">📅</span>Calendário</button>
+      <button class="tab" data-view="dashboard"><span class="tab-icon" aria-hidden="true">▦</span>Dashboard</button>
     </nav>
-    <button id="navConfigSite" hidden title="Configurações" style="background:none;border:none;color:rgba(255,255,255,0.75);font-size:20px;cursor:pointer;padding:6px;border-radius:6px;line-height:1">⚙</button>
+    <div class="topbar-acoes">
+      <button id="navConfigSite" hidden title="Configurações" style="background:none;border:none;color:rgba(255,255,255,0.75);font-size:20px;cursor:pointer;padding:6px;border-radius:6px;line-height:1">⚙</button>
+      <details class="topbar-conta">
+        <summary title="Conta" aria-label="Conta">👤</summary>
+        <div class="topbar-conta-menu">
+          <button type="button" id="btnSairTopbar">Sair</button>
+        </div>
+      </details>
+    </div>
   </div>
 </header>
 
@@ -202,12 +210,24 @@
 
     <!-- VIEW 3: CALENDAR -->
     <section class="view" id="view-calendar">
+      <div class="page-header">
+        <span class="page-header-icon" aria-hidden="true">📅</span>
+        <div>
+          <h1>Calendário</h1>
+          <p class="muted">Visualize os eventos, manutenções e prazos do sistema.</p>
+        </div>
+      </div>
       <div class="card">
         <div class="card-head">
-          <h2 id="calendarTitle">Calendário</h2>
           <div class="calendar-nav">
             <button class="btn ghost" id="prevMonth">‹</button>
+            <h2 id="calendarTitle">Calendário</h2>
             <button class="btn ghost" id="nextMonth">›</button>
+          </div>
+          <div class="calendar-modo" id="calendarModo">
+            <button type="button" class="btn-modo active" data-modo="mes">Mês</button>
+            <button type="button" class="btn-modo" data-modo="semana">Semana</button>
+            <button type="button" class="btn-modo" data-modo="dia">Dia</button>
           </div>
         </div>
         <div class="local-filtro" id="localFiltroCalendario"></div>
@@ -834,7 +854,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=76"></script>
+<script type="module" src="app.js?v=77"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
