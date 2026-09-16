@@ -27,15 +27,15 @@
     <h2 id="authTitulo">Acesse sua conta</h2>
     <label>Usuário
       <div class="auth-campo">
-        <span class="auth-campo-icone" aria-hidden="true">👤</span>
+        <span class="auth-campo-icone" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span>
         <input type="text" id="authEmail" placeholder="ex: joana.feira">
       </div>
     </label>
     <label>Senha
       <div class="auth-campo">
-        <span class="auth-campo-icone" aria-hidden="true">🔒</span>
+        <span class="auth-campo-icone" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="1.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></span>
         <input type="password" id="authSenha" placeholder="Mínimo 6 caracteres">
-        <button type="button" class="auth-campo-olho" id="btnMostrarSenha" title="Mostrar senha" aria-label="Mostrar senha">👁</button>
+        <button type="button" class="auth-campo-olho" id="btnMostrarSenha" title="Mostrar senha" aria-label="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
       </div>
     </label>
     <button type="button" class="auth-esqueci" id="btnEsqueciSenha">Esqueci minha senha</button>
@@ -63,15 +63,18 @@
       </div>
     </div>
     <nav class="tabs" id="tabs">
-      <button class="tab active" data-view="upload"><span class="tab-icon" aria-hidden="true">🏠</span>Levantamento</button>
-      <button class="tab" data-view="config"><span class="tab-icon" aria-hidden="true">📊</span>Cronograma</button>
-      <button class="tab" data-view="calendar"><span class="tab-icon" aria-hidden="true">📅</span>Calendário</button>
-      <button class="tab" data-view="dashboard"><span class="tab-icon" aria-hidden="true">▦</span>Dashboard</button>
+      <button class="tab active" data-view="upload"><span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg></span>Levantamento</button>
+      <button class="tab" data-view="config"><span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg></span>Cronograma</button>
+      <button class="tab" data-view="calendar"><span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v4"/><path d="M16 3v4"/></svg></span>Calendário</button>
+      <button class="tab" data-view="dashboard"><span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></svg></span>Dashboard</button>
     </nav>
     <div class="topbar-acoes">
       <button id="navConfigSite" hidden title="Configurações" style="background:none;border:none;color:rgba(255,255,255,0.75);font-size:20px;cursor:pointer;padding:6px;border-radius:6px;line-height:1">⚙</button>
       <details class="topbar-conta">
-        <summary title="Conta" aria-label="Conta">👤</summary>
+        <summary title="Conta" aria-label="Conta">
+          <span class="topbar-conta-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span>
+          <span class="topbar-conta-seta" aria-hidden="true">⌄</span>
+        </summary>
         <div class="topbar-conta-menu">
           <button type="button" id="btnSairTopbar">Sair</button>
         </div>
@@ -210,13 +213,6 @@
 
     <!-- VIEW 3: CALENDAR -->
     <section class="view" id="view-calendar">
-      <div class="page-header">
-        <span class="page-header-icon" aria-hidden="true">📅</span>
-        <div>
-          <h1>Calendário</h1>
-          <p class="muted">Visualize os eventos, manutenções e prazos do sistema.</p>
-        </div>
-      </div>
       <div class="card">
         <div class="card-head">
           <div class="calendar-nav">
