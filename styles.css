@@ -423,7 +423,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 85px; 
+  min-height: 100px;
   gap: var(--sp-5);
 }
 
@@ -433,16 +433,16 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   gap: var(--sp-3);
   min-width: 0;
 }
-.brand img { 
-  height: 60px; 
-  width: auto; 
-  flex-shrink: 0; 
-  opacity: 0.95; 
+.brand img {
+  height: 72px;
+  width: auto;
+  flex-shrink: 0;
+  opacity: 0.95;
 }
 
 .brand-org {
   font-family: var(--fonte-corpo);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: rgba(255,255,255,0.75);
   text-transform: uppercase;
@@ -451,7 +451,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 }
 .brand-name {
   font-family: var(--fonte-display);
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   color: #fff;
   letter-spacing: 0.01em;
@@ -466,8 +466,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   background: transparent;
   border: none;
   color: rgba(255,255,255,0.68);
-  padding: 12px 18px;
-  font-size: 15px;
+  padding: 14px 20px;
+  font-size: 16.5px;
   font-weight: 600;
   border-radius: var(--raio-pequeno) var(--raio-pequeno) 0 0;
   position: relative;
@@ -483,8 +483,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   background: var(--dourado);
   border-radius: 2px 2px 0 0;
 }
-.tab-icon { margin-right: 6px; opacity: 0.85; display: inline-flex; vertical-align: -3px; }
-.tab-icon svg { width: 16px; height: 16px; display: block; }
+.tab-icon { margin-right: 7px; opacity: 0.85; display: inline-flex; vertical-align: -4px; }
+.tab-icon svg { width: 19px; height: 19px; display: block; }
 
 .topbar-acoes {
   display: flex;
@@ -509,8 +509,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 .topbar-conta summary::-webkit-details-marker { display: none; }
 .topbar-conta summary:hover { background: rgba(255,255,255,0.1); }
 .topbar-conta-avatar {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: rgba(255,255,255,0.14);
   color: #fff;
@@ -519,10 +519,10 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   justify-content: center;
   flex-shrink: 0;
 }
-.topbar-conta-avatar svg { width: 16px; height: 16px; display: block; }
+.topbar-conta-avatar svg { width: 19px; height: 19px; display: block; }
 .topbar-conta-seta {
   color: rgba(255,255,255,0.65);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1;
 }
 .topbar-conta-menu {
