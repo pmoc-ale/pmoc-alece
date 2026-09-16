@@ -842,6 +842,8 @@ function chamadosSemEquipamento() {
 // Preenche o formulário de cadastro manual com o que dá pra aproveitar do
 // chamado (prédio, sala/gabinete, tombo) -- a pessoa só confere e confirma.
 function prepararCadastroDoChamado(c) {
+  const painel = $("#painelCadastrarEquipamento");
+  if (painel) painel.open = true;
   if ($("#eqPatrimonio")) $("#eqPatrimonio").value = c.tombo || c.tag || "";
 
   const anexoNormalizado = normalizarTexto(c.anexo);
@@ -4882,8 +4884,11 @@ ligarSeletorDeArquivo("eqFotoInput", "btnEqFotoEscolher", "eqFotoNome", "Nenhuma
 
 // Botão flutuante (mobile): quando a lista de equipamentos já está longa,
 // evita ter que rolar a tela de volta lá pra cima só pra achar o formulário
-// de cadastro -- pula direto pra ele.
+// de cadastro -- pula direto pra ele. O formulário agora fica escondido
+// atrás do "⋯" (painelCadastrarEquipamento), então precisa abrir antes.
 $("#fabAdicionarEquipamento")?.addEventListener("click", () => {
+  const painel = $("#painelCadastrarEquipamento");
+  if (painel) painel.open = true;
   $("#eqPatrimonio")?.scrollIntoView({ behavior: "smooth", block: "start" });
   $("#eqPatrimonio")?.focus();
 });

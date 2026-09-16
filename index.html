@@ -363,48 +363,53 @@
     <!-- VIEW 8: EQUIPAMENTOS -->
     <section class="view" id="view-equipamentos">
       <div class="card">
-        <h2>Cadastro de equipamentos</h2>
-        <p class="muted">Adicione, edite ou remova aparelhos individualmente, sem precisar reimportar a planilha inteira.</p>
-        <div class="grid-form">
-          <label>Patrimônio<input type="text" id="eqPatrimonio" placeholder="Ex: 12345"></label>
-          <label>Setor<input type="text" id="eqSetor" placeholder="Ex: Gabinete Dep. Fulano, 2º Piso"></label>
-          <label>Ambiente<input type="text" id="eqAmbiente" placeholder="Ex: Sala de reuniões"></label>
-          <label>Prédio
-            <select id="eqLocal"></select>
-           </label>
-          <label>Tipo de gás
-            <select id="eqTipoGas">
-              <option value="">Não informado</option>
-              <option value="R22">R22</option>
-              <option value="R410A">R410A</option>
-              <option value="R32">R32</option>
-              <option value="R404A">R404A</option>
-              <option value="R134a">R134a</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </label>
-          <label>Foto (opcional)
-            <span class="file-picker">
-              <input type="file" accept="image/*" capture="environment" id="eqFotoInput" hidden>
-              <button type="button" class="btn secondary" id="btnEqFotoEscolher">Escolher foto</button>
-              <span class="file-picker-nome" id="eqFotoNome">Nenhuma selecionada</span>
-            </span>
-          </label>
-        </div>
-        <label>Observações (ex: contato da sala, restrições de horário...)
-          <input type="text" id="eqObservacao" placeholder="Ex: falar com Fulano, ramal 1234">
-        </label>
-        <button class="btn primary" id="btnAdicionarEquipamento" style="margin-top:16px">+ Adicionar equipamento</button>
-      </div>
-      <div class="card">
         <div class="card-head" style="align-items: center;">
           <div style="display: flex; align-items: center; gap: 12px;">
             <h2>Equipamentos cadastrados</h2>
             <span class="pill" id="equipamentosCount">0 itens</span>
           </div>
-          <button class="btn ghost" id="btnBaixarCondensadoras" style="font-size: 12.5px; padding: 6px 14px; border-color: var(--azul-700); color: var(--azul-800);">
-            Relatório Técnico (.xlsx)
-          </button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="btn ghost" id="btnBaixarCondensadoras" style="font-size: 12.5px; padding: 6px 14px; border-color: var(--azul-700); color: var(--azul-800);">
+              Relatório Técnico (.xlsx)
+            </button>
+            <details class="info-popover" id="painelCadastrarEquipamento">
+              <summary title="Cadastrar equipamento" aria-label="Cadastrar equipamento">⋯</summary>
+              <div class="info-popover-painel info-popover-painel-formulario">
+                <h2 style="margin-bottom:2px">Cadastro de equipamentos</h2>
+                <p class="muted">Adicione um aparelho individualmente, sem precisar reimportar a planilha inteira.</p>
+                <div class="grid-form">
+                  <label>Patrimônio<input type="text" id="eqPatrimonio" placeholder="Ex: 12345"></label>
+                  <label>Setor<input type="text" id="eqSetor" placeholder="Ex: Gabinete Dep. Fulano, 2º Piso"></label>
+                  <label>Ambiente<input type="text" id="eqAmbiente" placeholder="Ex: Sala de reuniões"></label>
+                  <label>Prédio
+                    <select id="eqLocal"></select>
+                   </label>
+                  <label>Tipo de gás
+                    <select id="eqTipoGas">
+                      <option value="">Não informado</option>
+                      <option value="R22">R22</option>
+                      <option value="R410A">R410A</option>
+                      <option value="R32">R32</option>
+                      <option value="R404A">R404A</option>
+                      <option value="R134a">R134a</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </label>
+                  <label>Foto (opcional)
+                    <span class="file-picker">
+                      <input type="file" accept="image/*" capture="environment" id="eqFotoInput" hidden>
+                      <button type="button" class="btn secondary" id="btnEqFotoEscolher">Escolher foto</button>
+                      <span class="file-picker-nome" id="eqFotoNome">Nenhuma selecionada</span>
+                    </span>
+                  </label>
+                </div>
+                <label>Observações (ex: contato da sala, restrições de horário...)
+                  <input type="text" id="eqObservacao" placeholder="Ex: falar com Fulano, ramal 1234">
+                </label>
+                <button class="btn primary" id="btnAdicionarEquipamento" style="margin-top:16px; width:100%">+ Adicionar equipamento</button>
+              </div>
+            </details>
+          </div>
         </div>
 
         <!-- Fica em cima da barra de pesquisa -->
@@ -850,7 +855,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=77"></script>
+<script type="module" src="app.js?v=78"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

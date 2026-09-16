@@ -6,7 +6,7 @@
 // acontece sozinho -- toda vez que tem sinal, o site busca a versão nova
 // na rede antes de qualquer cache, ver estratégia "rede primeiro" abaixo
 // -- isso aqui só limpa versões antigas que sobraram no aparelho).
-const CACHE_VERSAO = "pmoc-alece-v15";
+const CACHE_VERSAO = "pmoc-alece-v16";
 
 // SEM os "?v=NN" de cache-busting -- index.html/app.js mudam esse número
 // toda vez que o código muda, e escrever o número aqui de novo (fácil de

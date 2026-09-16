@@ -1938,6 +1938,34 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 }
 .info-popover-painel p { margin: 0; }
 
+/* Variante maior do popover "⋯", pra caber um formulário inteiro (ex:
+   cadastro manual de equipamento) em vez de só um texto curto. */
+.info-popover-painel-formulario {
+  width: 560px;
+  max-width: min(560px, calc(100vw - 48px));
+  max-height: min(560px, calc(100vh - 140px));
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+.info-popover-painel-formulario p { margin-bottom: var(--sp-3); }
+
+/* Em tela estreita, "right: 0" (herdado de .info-popover-painel) corta o
+   formulário pra fora da tela, já que o "⋯" que abre fica perto da borda
+   direita do card -- vira um painel fixo, centralizado na tela, em vez de
+   um dropdown ancorado no botão. */
+@media (max-width: 768px) {
+  .info-popover-painel-formulario {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - 100px);
+  }
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -1968,6 +1996,13 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .page { padding: var(--sp-4); }
   .drawer { width: 100%; max-width: 100%; }
 }
+
+/* Escondido por padrão (desktop) -- o @media abaixo mostra em telas
+   estreitas. Precisa vir ANTES dele: com a mesma especificidade, a
+   regra que aparece DEPOIS no arquivo é que vence, então se essa regra
+   ficasse depois do @media ela sempre ganhava e o botão nunca aparecia
+   em lugar nenhum, nem no celular (bug real que existia antes). */
+.fab { display: none; }
 
 @media (max-width: 768px) {
   /* 1. LAYOUT GERAL E ESPAÇO PRO MENU INFERIOR */
@@ -2163,8 +2198,6 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
      nem aparecia (escondida atrás do menu). */
   .toast { bottom: 78px; }
 }
-
-.fab { display: none; }
 
 .drawer-overlay {
   transition: opacity 0.2s ease;
