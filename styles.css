@@ -107,6 +107,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   position: fixed;
   inset: 0;
   background:
+    radial-gradient(circle at 6% -8%, transparent 0, transparent 36vmax, rgba(201,163,78,0.4) 36.4vmax, rgba(201,163,78,0.4) 36.7vmax, transparent 37.1vmax),
+    radial-gradient(circle at 97% 106%, transparent 0, transparent 28vmax, rgba(201,163,78,0.3) 28.4vmax, rgba(201,163,78,0.3) 28.7vmax, transparent 29.1vmax),
     radial-gradient(circle at 15% 20%, rgba(201,163,78,0.10), transparent 45%),
     linear-gradient(160deg, var(--azul-900), var(--azul-800) 60%, #0C1E32);
   display: flex;
@@ -144,8 +146,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   width: min(85vw, 820px);
   aspect-ratio: 500 / 610;
   background: url("assets/ceara-silhueta.svg") no-repeat center / contain;
-  opacity: 0.07;
-  transform: translateY(-50%) rotate(-6deg);
+  opacity: 0.13;
+  transform: translateY(-50%);
   pointer-events: none;
 }
 
@@ -172,16 +174,18 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   background: var(--superficie);
   width: 100%;
   max-width: 380px;
-  padding: var(--sp-6) var(--sp-5);
-  border-radius: var(--raio);
+  padding: var(--sp-6) var(--sp-5) 0;
+  border-radius: 12px;
   box-shadow: var(--sombra-elevada);
-  border-top: 3px solid var(--dourado);
+  border-top: 4px solid var(--dourado);
+  overflow: hidden;
 }
 
 .auth-card h2 {
   margin-bottom: var(--sp-4);
   text-align: center;
-  font-size: 22px;
+  font-size: 17px;
+  color: var(--azul-900);
 }
 
 .auth-brand {
@@ -196,20 +200,40 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   width: auto;
   margin-bottom: var(--sp-2);
 }
+.auth-brand-name {
+  font-family: var(--fonte-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--azul-900);
+}
+.auth-brand-subtitulo {
+  font-family: var(--fonte-corpo);
+  font-size: 13px;
+  color: var(--texto-suave);
+  margin-top: 1px;
+}
 .auth-brand-org {
   font-family: var(--fonte-corpo);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--texto-suave);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   text-align: center;
+  margin-top: var(--sp-2);
+  position: relative;
+  padding-top: var(--sp-3);
 }
-.auth-brand-name {
-  font-family: var(--fonte-display);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--azul-900);
+/* Linha dourada curta separando o bloco de marca do formulário. */
+.auth-brand-org::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 2px;
+  background: var(--dourado);
 }
 
 .auth-card label {
@@ -222,11 +246,14 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   margin-bottom: var(--sp-3);
 }
 
+.auth-campo {
+  position: relative;
+  margin-top: var(--sp-1);
+}
 .auth-card input {
   display: block;
   width: 100%;
-  margin-top: var(--sp-1);
-  padding: 10px 12px;
+  padding: 10px 12px 10px 36px;
   border: 1px solid var(--borda-forte);
   border-radius: var(--raio-pequeno);
   font-size: 14px;
@@ -234,6 +261,75 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   background: var(--azul-50);
 }
 .auth-card input:focus { border-color: var(--azul-700); background: var(--superficie); }
+.auth-campo-icone {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.55;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+.auth-campo-olho {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px;
+  opacity: 0.55;
+  filter: grayscale(1);
+  line-height: 1;
+}
+.auth-campo-olho:hover { opacity: 0.85; }
+.auth-campo-olho.ativo { opacity: 1; filter: grayscale(0.3); }
+.auth-campo input#authSenha { padding-right: 34px; }
+
+.auth-esqueci {
+  display: block;
+  margin: -6px 0 var(--sp-4);
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--azul-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.auth-esqueci:hover { color: var(--azul-900); }
+
+/* Faixa de rodapé dentro do próprio card -- var(--sp-5)/6 negativos
+   cancelam o padding do .auth-card pra faixa encostar nas bordas e
+   ganhar o mesmo raio arredondado de baixo. */
+.auth-card-footer {
+  margin: var(--sp-5) calc(-1 * var(--sp-5)) 0;
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--azul-50);
+  border-top: 1px solid var(--borda);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.auth-card-footer strong {
+  font-size: 12px;
+  color: var(--azul-900);
+}
+.auth-card-footer span {
+  font-size: 11px;
+  color: var(--texto-suave);
+}
+
+/* Seta no botão de entrar via CSS (não como texto) pra não se perder
+   toda vez que o app.js reescreve o textContent do botão (estado de
+   carregando, reset ao deslogar, etc.). */
+#btnAuthEntrar::after { content: " →"; }
+#btnAuthEntrar:disabled::after { content: ""; }
 
 /* Modal de confirmação -- substitui o window.confirm() feio do navegador
    no fluxo de subir planilha (a Jovanna pediu pra ter a cara do sistema). */

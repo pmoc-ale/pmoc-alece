@@ -2700,6 +2700,20 @@ function mostrarErroAuth(msg) {
   if (el) el.textContent = msg;
 }
 
+$("#btnMostrarSenha")?.addEventListener("click", () => {
+  const input = $("#authSenha");
+  const btn = $("#btnMostrarSenha");
+  if (!input || !btn) return;
+  const mostrando = input.type === "text";
+  input.type = mostrando ? "password" : "text";
+  btn.classList.toggle("ativo", !mostrando);
+  btn.title = mostrando ? "Mostrar senha" : "Ocultar senha";
+});
+
+$("#btnEsqueciSenha")?.addEventListener("click", () => {
+  toast("Ainda não tem recuperação automática -- peça pra quem administra o sistema pra te ajudar com a senha.");
+});
+
 $("#btnAuthCriarConta")?.addEventListener("click", () => {
   modoCadastro = !modoCadastro;
   $("#authTitulo").textContent = modoCadastro ? "Criar conta" : "Entrar";
