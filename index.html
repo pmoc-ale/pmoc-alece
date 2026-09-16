@@ -72,11 +72,12 @@
       <button id="navConfigSite" hidden title="Configurações" style="background:none;border:none;color:rgba(255,255,255,0.75);font-size:23px;cursor:pointer;padding:6px;border-radius:6px;line-height:1">⚙</button>
       <details class="topbar-conta">
         <summary title="Conta" aria-label="Conta">
-          <span class="topbar-conta-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span>
+          <span class="topbar-conta-avatar" id="topbarContaAvatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span>
           <span class="topbar-conta-seta" aria-hidden="true">⌄</span>
         </summary>
         <div class="topbar-conta-menu">
-          <button type="button" id="btnSairTopbar">Sair</button>
+          <button type="button" id="btnMinhaConta">Minha conta</button>
+          <button type="button" id="btnSairTopbar" class="topbar-conta-menu-perigo">Sair</button>
         </div>
       </details>
     </div>
@@ -840,6 +841,31 @@
   </div>
   <div class="drawer-body" id="modalConclusaoCorpo"></div>
 </aside>
+<div class="drawer-overlay" id="drawerContaOverlay" hidden></div>
+<aside class="drawer" id="drawerConta" hidden>
+  <div class="drawer-head">
+    <h2>Minha conta</h2>
+    <button class="drawer-close" id="drawerContaFechar" aria-label="Fechar">×</button>
+  </div>
+  <div class="drawer-body">
+    <div class="conta-avatar-linha">
+      <span class="conta-avatar-preview" id="contaAvatarPreview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/></svg></span>
+      <span class="file-picker">
+        <input type="file" accept="image/*" id="contaFotoInput" hidden>
+        <button type="button" class="btn secondary" id="btnContaFotoEscolher">Trocar foto</button>
+      </span>
+    </div>
+    <label>Nome<input type="text" id="contaNome" placeholder="Ex: Joana Feira"></label>
+    <label>Usuário (login)<input type="text" id="contaUsuario" placeholder="ex: joana.feira"></label>
+
+    <p class="muted" style="margin-top:var(--sp-4)">Pra trocar o usuário ou a senha, confirme sua senha atual.</p>
+    <label>Senha atual<input type="password" id="contaSenhaAtual" placeholder="Só necessária pra trocar usuário/senha"></label>
+    <label>Nova senha (opcional)<input type="password" id="contaNovaSenha" placeholder="Deixe em branco pra manter a mesma"></label>
+    <label>Confirmar nova senha<input type="password" id="contaConfirmarSenha"></label>
+    <p class="muted" id="contaErro" style="color:var(--vermelho); min-height:18px"></p>
+    <button class="btn primary" id="btnSalvarConta" style="width:100%; margin-top:6px">Salvar alterações</button>
+  </div>
+</aside>
 <div class="toast" id="toast"></div>
 <div class="modal-overlay" id="modalConfirmOverlay" hidden>
   <div class="modal-confirm-card">
@@ -855,7 +881,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=78"></script>
+<script type="module" src="app.js?v=79"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

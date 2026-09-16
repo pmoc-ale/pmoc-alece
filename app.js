@@ -6,7 +6,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
-  setPersistence, inMemoryPersistence
+  setPersistence, inMemoryPersistence, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -2767,6 +2767,153 @@ $("#btnSairTopbar")?.addEventListener("click", () => {
   $("#btnSair")?.click();
 });
 
+// ------------------------------------------------------------------
+// Minha conta -- foto, nome, trocar usuário e senha, tudo num drawer
+// só, aberto pelo menu do avatar na topbar.
+// ------------------------------------------------------------------
+function atualizarAvatarTopbar() {
+  const el = $("#topbarContaAvatar");
+  if (!el) return;
+  const fotoUrl = ESTADO.meuUsuarioDoc?.fotoUrl;
+  el.innerHTML = fotoUrl
+    ? `<img src="${escapeHtml(fotoUrl)}" alt="Foto de perfil">`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg>`;
+}
+
+const ICONE_AVATAR_PADRAO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/></svg>`;
+let _contaFotoArquivo = null;
+
+function abrirDrawerConta() {
+  const dados = ESTADO.meuUsuarioDoc || {};
+  $("#contaNome").value = dados.nome || "";
+  $("#contaUsuario").value = dados.usuario || ESTADO.usuarioNome || "";
+  $("#contaSenhaAtual").value = "";
+  $("#contaNovaSenha").value = "";
+  $("#contaConfirmarSenha").value = "";
+  $("#contaErro").textContent = "";
+  _contaFotoArquivo = null;
+  $("#contaAvatarPreview").innerHTML = dados.fotoUrl
+    ? `<img src="${escapeHtml(dados.fotoUrl)}" alt="Foto de perfil">`
+    : ICONE_AVATAR_PADRAO;
+  $("#drawerConta").hidden = false;
+  $("#drawerContaOverlay").hidden = false;
+}
+
+function fecharDrawerConta() {
+  $("#drawerConta").hidden = true;
+  $("#drawerContaOverlay").hidden = true;
+}
+
+$("#btnMinhaConta")?.addEventListener("click", () => {
+  $("#btnMinhaConta")?.closest(".topbar-conta")?.removeAttribute("open");
+  abrirDrawerConta();
+});
+$("#drawerContaFechar")?.addEventListener("click", fecharDrawerConta);
+$("#drawerContaOverlay")?.addEventListener("click", fecharDrawerConta);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("#drawerConta")?.hidden) fecharDrawerConta();
+});
+
+$("#btnContaFotoEscolher")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  $("#contaFotoInput")?.click();
+});
+$("#contaFotoInput")?.addEventListener("change", () => {
+  const arquivo = $("#contaFotoInput").files?.[0];
+  if (!arquivo) return;
+  _contaFotoArquivo = arquivo;
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    $("#contaAvatarPreview").innerHTML = `<img src="${leitor.result}" alt="Foto de perfil">`;
+  };
+  leitor.readAsDataURL(arquivo);
+});
+
+// Confere se já existe outro usuário (que não seja eu mesmo) com esse
+// login -- a regra do Firestore deixa qualquer pessoa logada e não
+// bloqueada ler a coleção toda, então dá pra checar sem ser admin.
+async function usuarioJaExiste(usuarioNovo) {
+  const alvo = normalizarTexto(usuarioNovo);
+  const snap = await getDocs(collection(db, "usuarios"));
+  return snap.docs.some((d) => d.id !== auth.currentUser.uid && normalizarTexto(d.data().usuario) === alvo);
+}
+
+async function salvarMinhaConta() {
+  const erroEl = $("#contaErro");
+  erroEl.textContent = "";
+  const nome = $("#contaNome").value.trim();
+  const usuarioNovo = $("#contaUsuario").value.trim();
+  const senhaAtual = $("#contaSenhaAtual").value;
+  const novaSenha = $("#contaNovaSenha").value;
+  const confirmarSenha = $("#contaConfirmarSenha").value;
+
+  if (!usuarioNovo) { erroEl.textContent = "O usuário não pode ficar em branco."; return; }
+
+  const usuarioAtual = ESTADO.meuUsuarioDoc?.usuario || ESTADO.usuarioNome || "";
+  const usuarioMudou = normalizarTexto(usuarioNovo) !== normalizarTexto(usuarioAtual);
+  const querTrocarSenha = novaSenha.length > 0;
+
+  if (querTrocarSenha && novaSenha.length < 6) { erroEl.textContent = "A nova senha precisa ter pelo menos 6 caracteres."; return; }
+  if (querTrocarSenha && novaSenha !== confirmarSenha) { erroEl.textContent = "A confirmação não bate com a nova senha."; return; }
+  if ((usuarioMudou || querTrocarSenha) && !senhaAtual) { erroEl.textContent = "Digite sua senha atual pra confirmar essa mudança."; return; }
+
+  const btn = $("#btnSalvarConta");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+
+  try {
+    if (usuarioMudou && await usuarioJaExiste(usuarioNovo)) {
+      erroEl.textContent = "Esse nome de usuário já está em uso.";
+      return;
+    }
+
+    if (usuarioMudou || querTrocarSenha) {
+      const credencial = EmailAuthProvider.credential(auth.currentUser.email, senhaAtual);
+      await reauthenticateWithCredential(auth.currentUser, credencial);
+    }
+    if (usuarioMudou) await updateEmail(auth.currentUser, usuarioParaEmail(usuarioNovo));
+    if (querTrocarSenha) await updatePassword(auth.currentUser, novaSenha);
+    if (usuarioMudou || querTrocarSenha) {
+      // Trocar e-mail/senha invalida o token de acesso atual -- sem forçar
+      // a renovação aqui, os listeners em tempo real que já estavam
+      // abertos (ex: lista de usuários, pro admin) dão erro de permissão
+      // por um instante, até o SDK renovar sozinho.
+      await auth.currentUser.getIdToken(true);
+    }
+
+    let fotoUrl = ESTADO.meuUsuarioDoc?.fotoUrl || null;
+    if (_contaFotoArquivo) {
+      fotoUrl = await enviarFoto(_contaFotoArquivo, { publicId: `usuarios/${auth.currentUser.uid}/foto`, overwrite: true });
+    }
+
+    const campos = { nome };
+    if (usuarioMudou) campos.usuario = usuarioNovo;
+    if (fotoUrl) campos.fotoUrl = fotoUrl;
+    await updateDoc(doc(db, "usuarios", auth.currentUser.uid), campos);
+
+    ESTADO.meuUsuarioDoc = { ...ESTADO.meuUsuarioDoc, ...campos };
+    if (usuarioMudou) ESTADO.usuarioNome = usuarioNovo;
+    atualizarAvatarTopbar();
+    toast("Conta atualizada com sucesso.");
+    fecharDrawerConta();
+  } catch (err) {
+    console.error(err);
+    const mensagens = {
+      "auth/wrong-password": "Senha atual incorreta.",
+      "auth/invalid-credential": "Senha atual incorreta.",
+      "auth/requires-recent-login": "Por segurança, informe sua senha atual de novo.",
+      "auth/email-already-in-use": "Esse nome de usuário já está em uso.",
+      "auth/weak-password": "A nova senha é fraca demais -- tente uma com mais caracteres.",
+    };
+    erroEl.textContent = mensagens[err.code] || ("Erro: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+$("#btnSalvarConta")?.addEventListener("click", salvarMinhaConta);
+
 $("#btnSair")?.addEventListener("click", () => {
   
   // Desliga todos os "escutadores" do Firestore antes de sair — senão eles
@@ -2840,6 +2987,8 @@ onAuthStateChanged(auth, async (user) => {
         return;
       }
       ESTADO.permissao = (dadosUsuario && dadosUsuario.permissao) || "padrao";
+      ESTADO.meuUsuarioDoc = dadosUsuario || null;
+      atualizarAvatarTopbar();
     } catch (err) {
       console.error("Erro ao verificar usuário:", err);
     }

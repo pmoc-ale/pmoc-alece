@@ -518,8 +518,10 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
 }
 .topbar-conta-avatar svg { width: 19px; height: 19px; display: block; }
+.topbar-conta-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .topbar-conta-seta {
   color: rgba(255,255,255,0.65);
   font-size: 15px;
@@ -533,7 +535,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   border: 1px solid var(--borda);
   border-radius: var(--raio-pequeno);
   box-shadow: var(--sombra-elevada);
-  min-width: 140px;
+  min-width: 160px;
   z-index: 150;
   padding: 4px;
 }
@@ -546,10 +548,12 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   padding: 8px 10px;
   border-radius: var(--raio-pequeno);
   font-size: 13px;
-  color: var(--vermelho-texto);
+  color: var(--texto);
   cursor: pointer;
 }
-.topbar-conta-menu button:hover { background: var(--vermelho-fundo); }
+.topbar-conta-menu button:hover { background: var(--azul-50); }
+.topbar-conta-menu-perigo { color: var(--vermelho-texto) !important; }
+.topbar-conta-menu-perigo:hover { background: var(--vermelho-fundo) !important; }
 
 /* Faixa de alerta (atrasados) */
 .alert-banner {
@@ -1431,6 +1435,50 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   overflow-y: auto;
   padding: var(--sp-4) var(--sp-5);
 }
+/* Empilha rótulo/campo dentro de drawers com <label> soltos (ex: Minha
+   conta) -- sem isso o <label> fica "inline" (padrão do navegador) e os
+   campos ficam grudados lado a lado em vez de um embaixo do outro. */
+.drawer-body > label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: var(--sp-4) 0 var(--sp-1);
+}
+.drawer-body > label input {
+  display: block;
+  width: 100%;
+  margin-top: var(--sp-1);
+  padding: 9px 11px;
+  border: 1px solid var(--borda-forte);
+  border-radius: var(--raio-pequeno);
+  font-size: 14px;
+  color: var(--texto);
+}
+.drawer-body > label input:focus { border-color: var(--azul-700); }
+
+.conta-avatar-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+.conta-avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--azul-50);
+  color: var(--azul-900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.conta-avatar-preview svg { width: 30px; height: 30px; display: block; }
+.conta-avatar-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .drawer-secao {
   border: 1px solid var(--borda);
