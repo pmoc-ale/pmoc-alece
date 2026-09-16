@@ -5409,6 +5409,31 @@ const CORES_STATUS_MARCADOR = {
   atrasado: "#10263D",
 };
 
+// Acha o número do andar no nome da planta (ex: "Anexo 2 — 1º Piso" -> 1),
+// procurando especificamente perto de "piso/andar/pavimento" -- só olhar
+// pro primeiro número do nome pegaria errado o "2" de "Anexo 2".
+function extrairAndarDaPlanta(nome) {
+  const texto = String(nome || "");
+  const m = texto.match(/(\d+)\s*[ºª°]?\s*(?:piso|andar|pavimento)/i)
+    || texto.match(/(?:piso|andar|pavimento)\s*[ºª°]?\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Ordena as plantas de um mesmo prédio: as que têm andar identificável no
+// nome vão do menor pro maior; as que são só texto (ex: "Térreo",
+// "Cobertura", "Estacionamento", sem nenhum número) ficam todas depois,
+// em ordem alfabética.
+function ordenarPlantasPorAndar(lista) {
+  return [...lista].sort((a, b) => {
+    const na = extrairAndarDaPlanta(a.nome);
+    const nb = extrairAndarDaPlanta(b.nome);
+    if (na !== null && nb !== null) return na - nb;
+    if (na !== null) return -1;
+    if (nb !== null) return 1;
+    return String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR");
+  });
+}
+
 async function renderLocalizacao() {
   const seletor = $("#plantaSeletor");
   if (!seletor) return;
@@ -5429,7 +5454,7 @@ async function renderLocalizacao() {
   if (painelUpload && !isAdmin) painelUpload.hidden = true;
 
   if (!ESTADO.plantaSelecionada || !ESTADO.plantas.some((p) => p.id === ESTADO.plantaSelecionada)) {
-    ESTADO.plantaSelecionada = ESTADO.plantas[0].id;
+    ESTADO.plantaSelecionada = ordenarPlantasPorAndar(ESTADO.plantas)[0].id;
   }
   // Agrupa por prédio/anexo (planta.local) -- a Jovanna pediu pra ficar
   // como se fossem "pastas" separadas, pra achar mais fácil quando tem
@@ -5437,13 +5462,13 @@ async function renderLocalizacao() {
   // grupo, fica igual antes.
   const prediosComPlanta = [...new Set(ESTADO.plantas.map((p) => p.local || "SEDE"))];
   if (prediosComPlanta.length <= 1) {
-    seletor.innerHTML = ESTADO.plantas.map((p) =>
+    seletor.innerHTML = ordenarPlantasPorAndar(ESTADO.plantas).map((p) =>
       `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
     ).join("");
   } else {
     seletor.innerHTML = prediosComPlanta.map((predio) => `
       <optgroup label="${escapeHtml(predio)}">
-        ${ESTADO.plantas.filter((p) => (p.local || "SEDE") === predio).map((p) =>
+        ${ordenarPlantasPorAndar(ESTADO.plantas.filter((p) => (p.local || "SEDE") === predio)).map((p) =>
           `<option value="${p.id}" ${p.id === ESTADO.plantaSelecionada ? "selected" : ""}>${escapeHtml(p.nome)}</option>`
         ).join("")}
       </optgroup>`
