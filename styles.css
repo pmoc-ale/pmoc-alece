@@ -173,12 +173,22 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   z-index: 1;
   background: var(--superficie);
   width: 100%;
-  max-width: 380px;
-  padding: var(--sp-6) var(--sp-5) 0;
-  border-radius: 12px;
+  max-width: 460px;
+  padding: calc(var(--sp-6) + 4px) var(--sp-5) 0;
+  border-radius: 16px;
   box-shadow: var(--sombra-elevada);
-  border-top: 4px solid var(--dourado);
   overflow: hidden;
+}
+/* Barra dourada do topo com um brilho suave no meio, em vez de cor
+   sólida -- fica mais parecida com a referência que a Jovanna mandou. */
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--dourado) 0%, #F0DDA8 50%, var(--dourado) 100%);
 }
 
 .auth-card h2 {
