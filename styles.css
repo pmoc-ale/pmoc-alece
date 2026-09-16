@@ -143,7 +143,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   position: absolute;
   top: 50%;
   right: 4%;
-  width: min(85vw, 820px);
+  width: min(65vw, 620px);
   aspect-ratio: 500 / 610;
   background: url("assets/ceara-silhueta.svg") no-repeat center / contain;
   opacity: 0.13;
