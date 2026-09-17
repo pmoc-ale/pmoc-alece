@@ -659,15 +659,6 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   flex-shrink: 0;
 }
 
-.sidenav-item-icon {
-  display: flex;
-  align-items: center;
-  color: var(--texto-fraco);
-  flex-shrink: 0;
-}
-.sidenav-item-icon svg { width: 18px; height: 18px; display: block; }
-.sidenav-item.active .sidenav-item-icon { color: var(--azul-900); }
-
 .sidenav-spacer { flex: 1; }
 
 .sidenav-danger { color: var(--vermelho-texto); }
@@ -906,45 +897,13 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   box-shadow: inset 0 2px 8px rgba(0,0,0,0.01);
 }
 
-/* Título de card com um ícone ao lado (ex: "Envie o levantamento") */
-.card-titulo-icone {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
-}
-.card-titulo-icone-caixa {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--azul-50);
-  color: var(--azul-900);
-  border-radius: var(--raio);
-  flex-shrink: 0;
-}
-.card-titulo-icone-caixa svg { width: 22px; height: 22px; display: block; }
-.card-titulo-icone h2 { margin-bottom: 2px; }
-.card-titulo-icone p { margin: 0; }
-
-.formatos-aceitos {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  padding-bottom: var(--sp-4);
-  margin-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--borda);
-}
-
-/* Ícone de arquivo acima do texto */
-.dropzone-icon {
-  color: var(--azul-700);
+/* Ícone de nuvem/arquivo antes do texto */
+.dropzone::before {
+  content: "📁";
+  font-size: 32px;
   opacity: 0.8;
   transition: transform 0.2s ease;
 }
-.dropzone-icon svg { width: 32px; height: 32px; display: block; }
 
 .dropzone .btn { margin-top: 2px; }
 
@@ -969,7 +928,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   border-color: var(--azul-600); 
   background: var(--azul-50);
 }
-.dropzone:hover .dropzone-icon {
+.dropzone:hover::before {
   transform: translateY(-4px); /* O ícone dá um pulinho no hover */
 }
 
@@ -2158,7 +2117,6 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     border-left: none; /* a linha à esquerda do menu de desktop não faz sentido numa barra horizontal */
   }
   .sidenav-icon { display: block; margin: 0 auto; width: 16px; height: 4px; border-radius: 2px; } /* Deixei as bolinhas parecendo "tracinhos" de app */
-  .sidenav-item-icon { display: none; } /* mantém a barra inferior do celular como já estava, só o desktop ganha os ícones novos */
   #btnSair, #btnApagarCronograma { margin-top: 0 !important; }
 
   /* Trabalhador só enxerga Calendário/Dashboard — sem isso, a barra
