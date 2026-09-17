@@ -885,7 +885,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 160px;
+  min-height: 210px;
   border: 2px dashed var(--borda);
   border-radius: var(--raio);
   background: var(--superficie);
