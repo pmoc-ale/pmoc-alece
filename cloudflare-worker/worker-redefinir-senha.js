@@ -100,6 +100,11 @@ function chavePemParaArrayBuffer(pem) {
   const base64 = pem
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
     .replace(/-----END PRIVATE KEY-----/, "")
+    // Aceita tanto quebra de linha de verdade quanto "\n" digitado como
+    // texto (dois caracteres: barra + n) -- acontece quando o valor é
+    // colado direto do arquivo .json baixado do Firebase, sem passar por
+    // um parser de JSON que converteria isso numa quebra de linha real.
+    .replace(/\\n/g, "")
     .replace(/\s+/g, "");
   const binario = atob(base64);
   const bytes = new Uint8Array(binario.length);
