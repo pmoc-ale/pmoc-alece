@@ -3355,15 +3355,15 @@ function renderUsuarios() {
 
     // Lógica 2.6: Definir equipe (só trabalhador) -- é isso que faz "Hoje"
     // e o Calendário mostrarem só os aparelhos daquela equipe pra essa
-    // pessoa, em vez de tudo (ver aplicarFiltroLocal). Lista as equipes
-    // que já existem DE VERDADE nos aparelhos do prédio escolhido, em vez
-    // de depender da tela de "Equipes" (que pode nem estar configurada
-    // com nomes próprios ainda).
+    // pessoa, em vez de tudo (ver aplicarFiltroLocal). Lista os prédios e
+    // as equipes que já existem DE VERDADE nos aparelhos (mesma fonte de
+    // locaisDisponiveis) -- não a lista de "Configurações" nem a tela de
+    // "Equipes", que podem ter nomes cadastrados sem bater exatamente com
+    // o que está gravado em cada aparelho (aí a lista de equipes aparecia
+    // vazia mesmo o prédio tendo equipe de verdade).
     if (u.permissao === "trabalhador") {
       tdMenu.querySelector('[data-acao="definir-equipe"]').addEventListener("click", async () => {
-        const predios = ESTADO.configSite?.predios?.length
-          ? ESTADO.configSite.predios
-          : [...new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"))].sort();
+        const predios = [...new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"))].sort();
         const predioAtual = u.predio && predios.includes(u.predio) ? u.predio : (predios[0] || "SEDE");
 
         const corpoHtml = `
