@@ -1646,9 +1646,14 @@ async function confirmarAdicaoPredioNovo() {
       }
 
       const capacidadeDia = nEquipes * aparelhosDia;
-      let dataCursor = new Date(dataInicioBase);
-      let contador = 0;
-      let diasUteisAgendados = 0;
+      // Uma data/contador POR EQUIPE (não um só compartilhado) -- assim
+      // o limite de "aparelhos por dia" nunca estoura pra uma equipe só
+      // porque a sala que calhou de ir pra ela tinha mais itens do que
+      // isso. Só a equipe que encheu o dia passa pro dia seguinte; as
+      // outras continuam no ritmo delas.
+      const dataPorEquipe = Array.from({ length: nEquipes }, () => new Date(dataInicioBase));
+      const contadorPorEquipe = new Array(nEquipes).fill(0);
+      const diasUteisPorEquipe = new Array(nEquipes).fill(0);
       let grupoAmbienteAtual = null;
       let indiceGrupo = -1;
       let ordem = 0;
@@ -1670,9 +1675,20 @@ async function confirmarAdicaoPredioNovo() {
         }
         const slotDaSala = indiceGrupo % nEquipes;
 
+        // Uma sala com mais aparelhos do que o limite da equipe: o que
+        // não coube hoje vai pro próximo dia útil DESSA MESMA equipe
+        // (ela volta na mesma sala depois), em vez de estourar o limite.
+        if (contadorPorEquipe[slotDaSala] >= aparelhosDia) {
+          contadorPorEquipe[slotDaSala] = 0;
+          diasUteisPorEquipe[slotDaSala]++;
+          const d = dataPorEquipe[slotDaSala];
+          do { d.setDate(d.getDate() + 1); } while (!ehDiaUtilLocal(d));
+        }
+        const dataDaEquipe = dataPorEquipe[slotDaSala];
+
         if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
           const pool = cap.equipesAtivas;
-          const indiceNoPool = (diasUteisAgendados * nEquipes + slotDaSala) % pool.length;
+          const indiceNoPool = (diasUteisPorEquipe[slotDaSala] * nEquipes + slotDaSala) % pool.length;
           item.equipeResponsavel = pool[indiceNoPool];
         } else {
           const ordemEquipe = slotDaSala + 1;
@@ -1681,17 +1697,12 @@ async function confirmarAdicaoPredioNovo() {
 
         ordem++;
         item.ordemExecucao = ordem;
-        item.dataAgendada = formatISO(dataCursor);
-        item.diaPlanejado = NOMES_DIAS[(dataCursor.getDay() + 6) % 7];
-        const diffDias = Math.floor((dataCursor - dataInicioBase) / 86400000);
+        item.dataAgendada = formatISO(dataDaEquipe);
+        item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
+        const diffDias = Math.floor((dataDaEquipe - dataInicioBase) / 86400000);
         item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
 
-        contador++;
-        if (contador >= capacidadeDia) {
-          contador = 0;
-          diasUteisAgendados++;
-          do { dataCursor.setDate(dataCursor.getDate() + 1); } while (!ehDiaUtilLocal(dataCursor));
-        }
+        contadorPorEquipe[slotDaSala]++;
         todosNovosItens.push(item);
       });
 
@@ -2239,10 +2250,17 @@ async function gerarCronograma() {
     grupos.forEach((itensDoPredio, local) => {
       const cap = capacidades[local] || { nEquipes: 1, aparelhosDia: 2 };
       const capacidadeDia = Math.max(1, cap.nEquipes) * Math.max(1, cap.aparelhosDia);
+      const nVagas = cap.nEquipes || 1;
+      const aparelhosDia = Math.max(1, cap.aparelhosDia || 1);
 
-      let dataCursor = new Date(primeiraDataUtilGlobal);
-      let contador = 0;
-      let diasUteisAgendados = 0; // <--- A ROLETA QUE CONTA OS DIAS
+      // Uma data/contador POR EQUIPE (não um só compartilhado) -- assim
+      // o limite de "aparelhos por dia" nunca estoura pra uma equipe só
+      // porque a sala que calhou de ir pra ela tinha mais itens do que
+      // isso. Só a equipe que encheu o dia passa pro dia seguinte; as
+      // outras continuam no ritmo delas.
+      const dataPorEquipe = Array.from({ length: nVagas }, () => new Date(primeiraDataUtilGlobal));
+      const contadorPorEquipe = new Array(nVagas).fill(0);
+      const diasUteisPorEquipe = new Array(nVagas).fill(0);
       let grupoAmbienteAtual = null;
       let indiceGrupo = -1;
       let ordem = 0;
@@ -2254,14 +2272,23 @@ async function gerarCronograma() {
           indiceGrupo++;
         }
 
-      
-        const nVagas = cap.nEquipes || 1;
         const slotDaSala = indiceGrupo % nVagas; // Prende a equipe à Vaga do dia (0 ou 1)
+
+        // Uma sala com mais aparelhos do que o limite da equipe: o que
+        // não coube hoje vai pro próximo dia útil DESSA MESMA equipe
+        // (ela volta na mesma sala depois), em vez de estourar o limite.
+        if (contadorPorEquipe[slotDaSala] >= aparelhosDia) {
+          contadorPorEquipe[slotDaSala] = 0;
+          diasUteisPorEquipe[slotDaSala]++;
+          const d = dataPorEquipe[slotDaSala];
+          do { d.setDate(d.getDate() + 1); } while (!ehDiaUtil(d));
+        }
+        const dataDaEquipe = dataPorEquipe[slotDaSala];
 
         if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
             const pool = cap.equipesAtivas;
             // Avança no pool 1,2 -> 3,4 -> 5,6 conforme o dia muda
-            const indiceNoPool = (diasUteisAgendados * nVagas + slotDaSala) % pool.length;
+            const indiceNoPool = (diasUteisPorEquipe[slotDaSala] * nVagas + slotDaSala) % pool.length;
             item.equipeResponsavel = pool[indiceNoPool];
         } else {
             // Se o rodízio estiver desligado, usa o comportamento clássico
@@ -2269,13 +2296,13 @@ async function gerarCronograma() {
             const encontrada = ESTADO.equipes.find((e) => e.predio === local && e.ordem === ordemEquipe);
             item.equipeResponsavel = encontrada ? encontrada.nome : `Equipe ${ordemEquipe}`;
         }
-    
+
 
         ordem++;
         item.ordemExecucao = ordem;
-        item.dataAgendada = formatISO(dataCursor);
-        item.diaPlanejado = NOMES_DIAS[(dataCursor.getDay() + 6) % 7];
-        const diffDias = Math.floor((dataCursor - primeiraDataUtilGlobal) / 86400000);
+        item.dataAgendada = formatISO(dataDaEquipe);
+        item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
+        const diffDias = Math.floor((dataDaEquipe - primeiraDataUtilGlobal) / 86400000);
         item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
 
         const anterior = existentes[item.id];
@@ -2284,12 +2311,7 @@ async function gerarCronograma() {
           item.observacao = anterior.observacao || "";
         }
 
-        contador++;
-        if (contador >= capacidadeDia) {
-          contador = 0;
-          diasUteisAgendados++; 
-          do { dataCursor.setDate(dataCursor.getDate() + 1); } while (!ehDiaUtil(dataCursor));
-        }
+        contadorPorEquipe[slotDaSala]++;
       });
 
       const diasNecessarios = Math.ceil(itensDoPredio.length / capacidadeDia);
