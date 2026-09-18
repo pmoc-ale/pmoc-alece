@@ -100,10 +100,12 @@ function chavePemParaArrayBuffer(pem) {
   const base64 = pem
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
     .replace(/-----END PRIVATE KEY-----/, "")
-    // Ignora QUALQUER coisa que não seja um caractere válido de base64 --
-    // aspas coladas junto, "\n" digitado como texto, quebra de linha de
-    // verdade, espaço etc. Mais seguro que tentar adivinhar exatamente o
-    // que sobrou de formatação ao colar a chave no secret do Cloudflare.
+    // Precisa remover o "\n" literal (barra + a LETRA n) ANTES do filtro
+    // de baixo -- se não, a letra "n" sozinha sobra (ela é um caractere
+    // válido de base64) e embaralha a chave no meio.
+    .replace(/\\n/g, "")
+    // Só então ignora qualquer outra coisa que não seja base64 de verdade
+    // (aspas coladas junto, quebra de linha real, espaço etc.).
     .replace(/[^A-Za-z0-9+/=]/g, "");
   const binario = atob(base64);
   const bytes = new Uint8Array(binario.length);
