@@ -2161,6 +2161,7 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
      realmente usa ficavam escondidas na faixa de abas de cima. Troca:
      os atalhos aparecem embaixo, e a duplicata em cima some. */
   body.modo-trabalhador .sidenav-atalho-trabalhador { display: flex; }
+  body.modo-trabalhador .tabs .tab[data-view="hoje"],
   body.modo-trabalhador .tabs .tab[data-view="calendar"],
   body.modo-trabalhador .tabs .tab[data-view="dashboard"] {
     display: none;

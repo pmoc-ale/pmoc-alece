@@ -1030,6 +1030,7 @@ $all(".tab").forEach((btn) => {
     if (btn.dataset.view) {
       localStorage.setItem("ultimaAbaPMOC", btn.dataset.view);
     }
+    if (btn.dataset.view === "hoje") renderHojeTrabalhador();
     if (btn.dataset.view === "calendar") renderCalendar();
     if (btn.dataset.view === "ciclos") renderCiclos();
     if (btn.dataset.view === "dashboard") renderDashboard();
@@ -2687,6 +2688,7 @@ async function processarSincronizacao() {
   }
   renderCalendar();
   renderDashboard();
+  renderHojeTrabalhador();
   renderComProtecaoDeMenu("#equipamentosTable", renderEquipamentosCadastro);
   renderComProtecaoDeMenu("#condensadorasTable", renderCondensadorasCadastro);
   await sincronizarLocalizacao();
@@ -3064,8 +3066,9 @@ onAuthStateChanged(auth, async (user) => {
           inicializarApp();
           if (ESTADO.permissao === "admin") { iniciarSincronizacaoUsuarios(); iniciarSincronizacaoAuditoria(); iniciarSincronizacaoEquipes(); }
           await carregarConfigSite();
-          const abaSalva = localStorage.getItem("ultimaAbaPMOC") || "dashboard";
-          irParaAba(abaPermitida(abaSalva, ESTADO.permissao) ? abaSalva : "dashboard");
+          const abaPadrao = ESTADO.permissao === "trabalhador" ? "hoje" : "dashboard";
+          const abaSalva = localStorage.getItem("ultimaAbaPMOC") || abaPadrao;
+          irParaAba(abaPermitida(abaSalva, ESTADO.permissao) ? abaSalva : abaPadrao);
         }
   } else {
     if (overlay) overlay.hidden = false;
@@ -3106,9 +3109,14 @@ function atualizarVisibilidadeAdmin() {
     const tab = $(`.tab[data-view="${view}"]`);
     if (tab) tab.hidden = isTrabalhador;
   });
+
+  // "Hoje" é a tela de entrada só do trabalhador -- não faz sentido pra
+  // admin/padrão, que já têm o Dashboard cheio de números pra isso.
+  $all('.tab[data-view="hoje"]').forEach((tab) => { tab.hidden = !isTrabalhador; });
 }
 
 function abaPermitida(nome, permissao) {
+  if (nome === "hoje") return permissao === "trabalhador";
   if (permissao === "admin") return true;
   if (["upload", "config"].includes(nome)) return false;
   if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "condensadoras", "feriados"].includes(nome)) return false;
@@ -4388,19 +4396,13 @@ function renderDashboard() {
   }
   renderResumoAtrasos();
   renderVisaoGerencial();
-  renderHojeTrabalhador();
 }
 
-// Card "O que fazer hoje", só pro trabalhador -- é a primeira coisa que
-// ele vê ao entrar (Dashboard é a aba padrão de login), com os aparelhos
-// de hoje (e os atrasados, que também precisam de atenção) direto na
-// tela, sem precisar ir atrás no calendário inteiro.
+// Aba "Hoje", a tela de entrada do trabalhador (ver abaPadrao em
+// onAuthStateChanged) -- os aparelhos de hoje (e os atrasados, que
+// também precisam de atenção) direto na tela, sem precisar ir atrás no
+// calendário inteiro.
 function renderHojeTrabalhador() {
-  const card = $("#cardHojeTrabalhador");
-  if (!card) return;
-  if (ESTADO.permissao !== "trabalhador") { card.hidden = true; return; }
-  card.hidden = false;
-
   const hoje = formatISO(new Date());
   const itens = aplicarFiltroLocal(ESTADO.equipamentos).filter(
     (i) => i.statusPreventiva !== "Concluída" && (i.dataAgendada === hoje || estaAtrasado(i))
