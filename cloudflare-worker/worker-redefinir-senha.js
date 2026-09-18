@@ -100,12 +100,11 @@ function chavePemParaArrayBuffer(pem) {
   const base64 = pem
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
     .replace(/-----END PRIVATE KEY-----/, "")
-    // Aceita tanto quebra de linha de verdade quanto "\n" digitado como
-    // texto (dois caracteres: barra + n) -- acontece quando o valor é
-    // colado direto do arquivo .json baixado do Firebase, sem passar por
-    // um parser de JSON que converteria isso numa quebra de linha real.
-    .replace(/\\n/g, "")
-    .replace(/\s+/g, "");
+    // Ignora QUALQUER coisa que não seja um caractere válido de base64 --
+    // aspas coladas junto, "\n" digitado como texto, quebra de linha de
+    // verdade, espaço etc. Mais seguro que tentar adivinhar exatamente o
+    // que sobrou de formatação ao colar a chave no secret do Cloudflare.
+    .replace(/[^A-Za-z0-9+/=]/g, "");
   const binario = atob(base64);
   const bytes = new Uint8Array(binario.length);
   for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
