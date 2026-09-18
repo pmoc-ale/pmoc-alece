@@ -1066,8 +1066,24 @@ function locaisDisponiveis() {
 }
 
 function aplicarFiltroLocal(itens) {
-  if (ESTADO.localFiltro === "Todos") return itens;
-  return itens.filter((i) => (i.local || "SEDE") === ESTADO.localFiltro);
+  let resultado = itens;
+  if (ESTADO.localFiltro !== "Todos") {
+    resultado = resultado.filter((i) => (i.local || "SEDE") === ESTADO.localFiltro);
+  }
+  // Trabalhador com equipe definida (ver "Definir equipe" em Usuários) só
+  // vê o que é da própria equipe -- em QUALQUER tela que passe pelo
+  // filtro de prédio (Hoje, Calendário, Dashboard), já que essas são as
+  // únicas telas que um trabalhador alcança. Sem equipe definida ainda,
+  // continua vendo tudo (não quebra quem já usava o sistema antes disso
+  // existir).
+  if (ESTADO.permissao === "trabalhador" && ESTADO.meuUsuarioDoc?.equipe) {
+    const meuPredio = ESTADO.meuUsuarioDoc.predio;
+    const minhaEquipe = ESTADO.meuUsuarioDoc.equipe;
+    resultado = resultado.filter((i) =>
+      i.equipeResponsavel === minhaEquipe && (!meuPredio || (i.local || "SEDE") === meuPredio)
+    );
+  }
+  return resultado;
 }
 
 function renderSeletorLocal(containerId) {
@@ -3240,7 +3256,7 @@ function renderUsuarios() {
   $("#usuariosCount").textContent = `${usuariosVisiveis.length} conta(s)`;
 
   table.innerHTML = `<thead><tr>
-      <th>Usuário</th><th>Permissão</th><th>Criado em</th><th>Último login</th><th></th>
+      <th>Usuário</th><th>Permissão</th><th>Equipe</th><th>Criado em</th><th>Último login</th><th></th>
     </tr></thead><tbody></tbody>`;
 
   const tbody = table.querySelector("tbody");
@@ -3251,9 +3267,12 @@ function renderUsuarios() {
     // Se o usuário estiver bloqueado, aplicamos um estilo CSS sutil (riscado + cinza)
     const estiloUsuario = u.bloqueado ? 'style="text-decoration: line-through; color: var(--texto-suave);"' : '';
 
+    const equipeTexto = u.permissao !== "trabalhador" ? "-" : (u.equipe ? `${escapeHtml(u.predio || "")} — ${escapeHtml(u.equipe)}` : "Sem equipe");
+
     tr.innerHTML = `
       <td ${estiloUsuario}>${u.usuario} ${u.bloqueado ? '(Bloqueado)' : ''}</td>
       <td>${ROTULOS_PERMISSAO[u.permissao] || "Padrão"}</td>
+      <td>${equipeTexto}</td>
       <td>${u.criadoEm ? new Date(u.criadoEm).toLocaleDateString("pt-BR") : "-"}</td>
       <td>${u.ultimoLogin ? new Date(u.ultimoLogin).toLocaleString("pt-BR") : "-"}</td>`;
 
@@ -3269,6 +3288,7 @@ function renderUsuarios() {
           `<button class="menu-linha-item eq-permissao-btn" data-permissao="${p}">Mudar para ${ROTULOS_PERMISSAO[p]}</button>`
         ).join("")}
         <button class="menu-linha-item" data-acao="redefinir-senha">Redefinir senha</button>
+        ${u.permissao === "trabalhador" ? `<button class="menu-linha-item" data-acao="definir-equipe">Definir equipe</button>` : ""}
         <button class="menu-linha-item menu-linha-excluir" data-acao="excluir">Excluir conta</button>
       </div>
     </details>`;
@@ -3332,6 +3352,55 @@ function renderUsuarios() {
         toast("Erro ao redefinir senha: " + err.message);
       }
     });
+
+    // Lógica 2.6: Definir equipe (só trabalhador) -- é isso que faz "Hoje"
+    // e o Calendário mostrarem só os aparelhos daquela equipe pra essa
+    // pessoa, em vez de tudo (ver aplicarFiltroLocal). Lista as equipes
+    // que já existem DE VERDADE nos aparelhos do prédio escolhido, em vez
+    // de depender da tela de "Equipes" (que pode nem estar configurada
+    // com nomes próprios ainda).
+    if (u.permissao === "trabalhador") {
+      tdMenu.querySelector('[data-acao="definir-equipe"]').addEventListener("click", async () => {
+        const predios = ESTADO.configSite?.predios?.length
+          ? ESTADO.configSite.predios
+          : [...new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"))].sort();
+        const predioAtual = u.predio && predios.includes(u.predio) ? u.predio : (predios[0] || "SEDE");
+
+        const corpoHtml = `
+          <label class="modal-prompt-label" for="defEquipePredio">Prédio</label>
+          <select id="defEquipePredio">
+            ${predios.map((p) => `<option value="${escapeHtml(p)}" ${p === predioAtual ? "selected" : ""}>${escapeHtml(p)}</option>`).join("")}
+          </select>
+          <label class="modal-prompt-label" for="defEquipeNome" style="margin-top:10px">Equipe</label>
+          <select id="defEquipeNome"></select>
+        `;
+        const promessa = confirmarModal({ titulo: `Equipe de ${u.usuario}`, corpoHtml, textoConfirmar: "Salvar" });
+
+        const selectPredio = $("#defEquipePredio");
+        const selectEquipe = $("#defEquipeNome");
+        function atualizarOpcoesEquipe() {
+          const opcoes = [...new Set(
+            ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === selectPredio.value).map((e) => e.equipeResponsavel).filter(Boolean)
+          )].sort();
+          selectEquipe.innerHTML = opcoes.length
+            ? opcoes.map((eq) => `<option value="${escapeHtml(eq)}" ${eq === u.equipe ? "selected" : ""}>${escapeHtml(eq)}</option>`).join("")
+            : `<option value="">Nenhuma equipe encontrada nesse prédio ainda</option>`;
+        }
+        atualizarOpcoesEquipe();
+        selectPredio.addEventListener("change", atualizarOpcoesEquipe);
+
+        const ok = await promessa;
+        if (!ok || !selectEquipe.value) return;
+        try {
+          await updateDoc(doc(db, "usuarios", u.id), { predio: selectPredio.value, equipe: selectEquipe.value });
+          await registrarAuditoria("Definir equipe", `${u.usuario}: ${selectPredio.value} — ${selectEquipe.value}`);
+          toast("Equipe definida.");
+        } catch (err) {
+          console.error(err);
+          toast("Erro ao definir equipe: " + err.message);
+        }
+      });
+    }
 
     // Lógica 3: Excluir Conta
     // Não dá pra apagar de verdade o login (Firebase Auth) sem um backend
