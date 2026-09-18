@@ -3364,6 +3364,15 @@ function renderUsuarios() {
     if (u.permissao === "trabalhador") {
       tdMenu.querySelector('[data-acao="definir-equipe"]').addEventListener("click", async () => {
         const predios = [...new Set(ESTADO.equipamentos.map((e) => e.local || "SEDE"))].sort();
+        // Se o cronograma ainda não terminou de carregar (ex: acabou de
+        // entrar e foi direto pra Usuários), a lista de aparelhos ainda
+        // está vazia -- sem esse aviso, o dropdown de prédio aparecia em
+        // branco e o de equipe sempre dizia "nenhuma equipe encontrada",
+        // mesmo o prédio tendo equipe de verdade.
+        if (!predios.length) {
+          toast("O cronograma ainda está carregando -- espere um instante e tente de novo.");
+          return;
+        }
         const predioAtual = u.predio && predios.includes(u.predio) ? u.predio : (predios[0] || "SEDE");
 
         const corpoHtml = `
