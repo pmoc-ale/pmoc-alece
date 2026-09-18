@@ -1944,19 +1944,29 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 }
 .menu-linha summary::-webkit-details-marker { display: none; }
 .menu-linha summary:hover { background: var(--azul-50); }
+/* position:fixed (não mais absolute/relativo à linha da tabela) --
+   calculado em JS (ver posicionarMenuLinha) toda vez que o menu abre.
+   Sem isso, dentro de uma tabela com rolagem lateral (.table-wrap), o
+   menu ficava preso e cortado pela borda da tabela em vez de flutuar
+   por cima de tudo, como um menu de verdade. */
 .menu-linha-opcoes {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
+  position: fixed;
   background: var(--superficie);
   border: 1px solid var(--borda);
-  border-radius: var(--raio-pequeno);
+  border-top: 3px solid var(--dourado);
+  border-radius: var(--raio);
   box-shadow: var(--sombra-elevada);
-  min-width: 160px;
-  z-index: 20;
+  min-width: 180px;
+  z-index: 1200;
   display: flex;
   flex-direction: column;
   padding: 4px;
+  transform-origin: top right;
+  animation: menuLinhaAbre 0.14s ease-out;
+}
+@keyframes menuLinhaAbre {
+  from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 .menu-linha-item {
   background: none;
@@ -2175,7 +2185,6 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .table-wrap { width: 100%; overflow-x: auto; }
   table { min-width: 600px; /* Garante que a tabela role para o lado ao invés de esmagar o conteúdo */ }
   table tbody td, table thead th { padding: 8px; font-size: 12px; }
-  .menu-linha-opcoes { right: auto; left: -50px; }
   .toast { width: 90vw; bottom: 80px; }
 
   /* 7. TABELAS QUE VIRAM CARDS NO MOBILE (em vez de rolar de lado) — hoje

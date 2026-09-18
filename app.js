@@ -8059,6 +8059,48 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// Posiciona o menu "⋯" na tela (position:fixed) toda vez que ele abre --
+// sem isso, dentro de uma tabela com rolagem lateral, o menu flutuava
+// "preso" e cortado pela borda da tabela em vez de aparecer por cima de
+// tudo. O evento "toggle" de <details> não borbulha, então o listener
+// precisa estar na fase de CAPTURA (o "true" no fim) pra ainda assim
+// conseguir ver o evento descendo até o elemento que abriu.
+document.addEventListener("toggle", (e) => {
+  const det = e.target;
+  if (!(det instanceof HTMLDetailsElement) || !det.classList.contains("menu-linha") || !det.open) return;
+  const resumo = det.querySelector("summary");
+  const opcoes = det.querySelector(".menu-linha-opcoes");
+  if (!resumo || !opcoes) return;
+  const rect = resumo.getBoundingClientRect();
+  const largura = opcoes.offsetWidth || 180;
+  let esquerda = Math.min(Math.max(8, rect.right - largura), window.innerWidth - largura - 8);
+  let topo = rect.bottom + 4;
+  const altura = opcoes.scrollHeight || 0;
+  if (topo + altura > window.innerHeight - 8 && rect.top - altura - 4 > 0) {
+    topo = rect.top - altura - 4;
+  }
+  opcoes.style.left = `${esquerda}px`;
+  opcoes.style.top = `${topo}px`;
+}, true);
+
+// Fecha o menu "⋯" ao rolar (a página ou a própria tabela com rolagem
+// lateral) -- agora que ele é position:fixed, não acompanha mais o
+// scroll sozinho, então ficaria flutuando longe do botão que abriu ele.
+// "capture:true" pra pegar também o scroll de dentro de um .table-wrap,
+// que não borbulha até a janela.
+document.addEventListener("scroll", () => {
+  let fechouAlgum = false;
+  document.querySelectorAll("details.menu-linha[open]").forEach((det) => {
+    det.open = false;
+    fechouAlgum = true;
+  });
+  if (fechouAlgum && _renderesAdiados.size) {
+    const pendentes = [..._renderesAdiados];
+    _renderesAdiados.clear();
+    pendentes.forEach((fn) => fn());
+  }
+}, true);
+
 // Os re-renders automáticos (disparados por onSnapshot, quando QUALQUER
 // pessoa muda algo no sistema) reconstroem a tabela inteira via innerHTML.
 // Se um técnico está com um menu "⋯" aberto naquela tabela no momento em
