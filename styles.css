@@ -725,6 +725,16 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   border-radius: 999px;
   white-space: nowrap;
 }
+/* Pill fica na cor de "atrasado" (mesma dos badges do calendário) quando
+   tem pelo menos um item vencido no meio dos de hoje -- chama mais
+   atenção do que o azul neutro de sempre. */
+.pill.pill-atrasado { background: var(--azul-900); color: #fff; }
+
+/* Card "O que fazer hoje" (só pro trabalhador, no topo do Dashboard) --
+   a faixa dourada no topo é a mesma linguagem visual usada nos modais
+   (confirmarModal/promptModal), pra destacar como o card mais
+   importante da tela sem precisar de ícone ou emoji. */
+.card-hoje { border-top: 3px solid var(--dourado); }
 
 /* Tag de nome de coluna (ex: nos requisitos do upload de planilha) --
    neutra e discreta, diferente do .pill azul (que é usado pra contagens

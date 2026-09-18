@@ -4113,7 +4113,7 @@ function mostrarDetalheDia(iso) {
   const [ano, mes, dia] = iso.split("-");
   $("#dayDetailCard").hidden = false;
   $("#dayDetailTitle").textContent = `${dia}/${mes}/${ano} — ${itensDoDia.length} aparelho(s)`;
-  renderTabelaDetalheDia(itensDoDia, () => mostrarDetalheDia(iso));
+  renderTabelaDetalheDia("#dayDetailTable", itensDoDia, () => mostrarDetalheDia(iso));
 
   // CORREÇÃO MOBILE: Desliza a tela suavemente para baixo até a tabela
   if (window.innerWidth <= 768) {
@@ -4127,7 +4127,7 @@ function selecionarDiaBadge(iso, predio, itensPredio) {
   const [ano, mes, dia] = iso.split("-");
   $("#dayDetailCard").hidden = false;
   $("#dayDetailTitle").textContent = `${dia}/${mes}/${ano} — ${predio} (${itensPredio.length} aparelho(s))`;
-  renderTabelaDetalheDia(itensPredio, () => {
+  renderTabelaDetalheDia("#dayDetailTable", itensPredio, () => {
     const itensAtualizados = aplicarFiltroLocal(ESTADO.equipamentos)
       .filter((i) => i.dataAgendada === iso && (i.local || "SEDE") === predio);
     selecionarDiaBadge(iso, predio, itensAtualizados);
@@ -4139,8 +4139,8 @@ function selecionarDiaBadge(iso, predio, itensPredio) {
   }
 }
 
-function renderTabelaDetalheDia(itensDoDia, aoAtualizar) {
-  const table = $("#dayDetailTable");
+function renderTabelaDetalheDia(seletorTabela, itensDoDia, aoAtualizar) {
+  const table = $(seletorTabela);
   table.innerHTML = `<thead><tr><th>Patrimônio</th><th>Prédio</th><th>Setor</th><th>Ambiente</th><th>Equipe</th><th>Status</th></tr></thead><tbody></tbody>`;
   const tbody = table.querySelector("tbody");
 
@@ -4388,6 +4388,33 @@ function renderDashboard() {
   }
   renderResumoAtrasos();
   renderVisaoGerencial();
+  renderHojeTrabalhador();
+}
+
+// Card "O que fazer hoje", só pro trabalhador -- é a primeira coisa que
+// ele vê ao entrar (Dashboard é a aba padrão de login), com os aparelhos
+// de hoje (e os atrasados, que também precisam de atenção) direto na
+// tela, sem precisar ir atrás no calendário inteiro.
+function renderHojeTrabalhador() {
+  const card = $("#cardHojeTrabalhador");
+  if (!card) return;
+  if (ESTADO.permissao !== "trabalhador") { card.hidden = true; return; }
+  card.hidden = false;
+
+  const hoje = formatISO(new Date());
+  const itens = aplicarFiltroLocal(ESTADO.equipamentos).filter(
+    (i) => i.statusPreventiva !== "Concluída" && (i.dataAgendada === hoje || estaAtrasado(i))
+  );
+  itens.sort((a, b) => (estaAtrasado(b) ? 1 : 0) - (estaAtrasado(a) ? 1 : 0));
+  const temAtrasado = itens.some(estaAtrasado);
+
+  const pill = $("#hojePill");
+  pill.textContent = itens.length === 1 ? "1 aparelho" : `${itens.length} aparelhos`;
+  pill.classList.toggle("pill-atrasado", temAtrasado);
+
+  $("#hojeVazio").hidden = itens.length > 0;
+  $("#hojeTableWrap").hidden = itens.length === 0;
+  if (itens.length) renderTabelaDetalheDia("#tabelaHojeTrabalhador", itens, renderHojeTrabalhador);
 }
 
 async function registrarHistorico(item, statusAnterior, statusNovo, tipo = "Preventiva", fotoUrl = "") {

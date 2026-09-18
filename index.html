@@ -253,6 +253,16 @@
 
     <!-- VIEW 4: DASHBOARD -->
     <section class="view" id="view-dashboard">
+      <div class="card card-hoje" id="cardHojeTrabalhador" hidden>
+        <div class="card-head">
+          <h2>O que fazer hoje</h2>
+          <span class="pill" id="hojePill">0</span>
+        </div>
+        <p class="muted" id="hojeVazio" hidden>Nenhuma preventiva marcada pra hoje.</p>
+        <div class="table-wrap" id="hojeTableWrap">
+          <table id="tabelaHojeTrabalhador"></table>
+        </div>
+      </div>
       <div class="local-filtro" id="localFiltroDashboard"></div>
       <div class="ciclo-resumo" id="cicloResumo"></div>
       <div class="kpi-row" id="kpiRow"></div>
@@ -881,7 +891,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=84"></script>
+<script type="module" src="app.js?v=85"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
