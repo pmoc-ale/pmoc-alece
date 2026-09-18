@@ -78,6 +78,17 @@ service cloud.firestore {
       allow create, update: if souTrabalhador();
     }
 
+    // A regra genérica lá embaixo só deixa ADMIN escrever -- sem essa regra
+    // própria, qualquer pessoa não-admin mudando o próprio nome/usuário/
+    // senha em "Minha conta" teria o registro de auditoria negado (a ação
+    // em si funciona, só o LOG dela que sumiria, sem erro visível pra
+    // ninguém perceber). Só cria (nunca edita/apaga um log já existente);
+    // ver quem mudou o quê continua só pra admin.
+    match /auditoria/{id} {
+      allow read: if souAdmin();
+      allow create: if request.auth != null && !estouBloqueado();
+    }
+
     match /{document=**} {
       allow read: if request.auth != null && !estouBloqueado();
       allow write: if souAdmin();

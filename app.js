@@ -167,6 +167,12 @@ function estaAtrasado(item) {
 // abaixo pela do seu Worker depois de publicá-lo.
 const URL_UPLOAD_FOTO = "https://fotos.pmoc-alece-sistemas.workers.dev";
 
+// Redefinir a senha de OUTRA pessoa exige uma conta de serviço do Google
+// (só funciona num servidor) -- por isso passa por outro Worker da
+// Cloudflare, igual a foto acima. Ver cloudflare-worker/worker-redefinir-senha.js
+// pra configurar (precisa gerar uma chave uma vez só, de graça).
+const URL_REDEFINIR_SENHA = "https://redefinir-senha.pmoc-alece-sistemas.workers.dev";
+
 // Pede a localização com um prazo curto -- se o navegador/celular não tem
 // GPS, a pessoa nega a permissão, ou demora demais, segue sem coordenada
 // em vez de travar o envio da foto por causa disso (só a data/hora nunca
@@ -2850,6 +2856,7 @@ async function salvarMinhaConta() {
   if (!usuarioNovo) { erroEl.textContent = "O usuário não pode ficar em branco."; return; }
 
   const usuarioAtual = ESTADO.meuUsuarioDoc?.usuario || ESTADO.usuarioNome || "";
+  const nomeAntigo = ESTADO.meuUsuarioDoc?.nome || "";
   const usuarioMudou = normalizarTexto(usuarioNovo) !== normalizarTexto(usuarioAtual);
   const querTrocarSenha = novaSenha.length > 0;
 
@@ -2895,6 +2902,18 @@ async function salvarMinhaConta() {
     ESTADO.meuUsuarioDoc = { ...ESTADO.meuUsuarioDoc, ...campos };
     if (usuarioMudou) ESTADO.usuarioNome = usuarioNovo;
     atualizarAvatarTopbar();
+
+    // Só o LOG -- nunca a senha em si -- fica na auditoria, pra um admin
+    // conseguir ver depois "quem trocou o quê" na própria conta.
+    const mudancas = [];
+    if (nome !== nomeAntigo) mudancas.push(`nome para "${nome || "(vazio)"}"`);
+    if (usuarioMudou) mudancas.push(`usuário de "${usuarioAtual}" para "${usuarioNovo}"`);
+    if (querTrocarSenha) mudancas.push("senha");
+    if (_contaFotoArquivo) mudancas.push("foto de perfil");
+    if (mudancas.length) {
+      await registrarAuditoria("Atualizar minha conta", `Alterou ${mudancas.join(", ")}.`);
+    }
+
     toast("Conta atualizada com sucesso.");
     fecharDrawerConta();
   } catch (err) {
@@ -3195,6 +3214,7 @@ function renderUsuarios() {
         ${outrasPermissoes.map((p) =>
           `<button class="menu-linha-item eq-permissao-btn" data-permissao="${p}">Mudar para ${ROTULOS_PERMISSAO[p]}</button>`
         ).join("")}
+        <button class="menu-linha-item" data-acao="redefinir-senha">Redefinir senha</button>
         <button class="menu-linha-item menu-linha-excluir" data-acao="excluir">Excluir conta</button>
       </div>
     </details>`;
@@ -3224,6 +3244,34 @@ function renderUsuarios() {
           toast("Erro ao alterar permissão: " + err.message);
         }
       });
+    });
+
+    // Lógica 2.5: Redefinir senha (de outra pessoa, que esqueceu a atual e
+    // não tem como trocar sozinha em "Minha conta"). Passa pelo Worker
+    // dedicado (ver URL_REDEFINIR_SENHA) porque isso exige acesso de admin
+    // de verdade no Firebase Auth, que o navegador sozinho não tem.
+    tdMenu.querySelector('[data-acao="redefinir-senha"]').addEventListener("click", async () => {
+      const novaSenha = window.prompt(`Nova senha para ${u.usuario} (mínimo 6 caracteres):`);
+      if (novaSenha === null) return;
+      if (novaSenha.length < 6) {
+        toast("A nova senha precisa ter pelo menos 6 caracteres.");
+        return;
+      }
+      try {
+        const idToken = await auth.currentUser.getIdToken();
+        const resp = await fetch(URL_REDEFINIR_SENHA, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ uid: u.id, novaSenha }),
+        });
+        const dados = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
+        await registrarAuditoria("Redefinir senha", u.usuario);
+        toast(`Senha de ${u.usuario} redefinida com sucesso.`);
+      } catch (err) {
+        console.error(err);
+        toast("Erro ao redefinir senha: " + err.message);
+      }
     });
 
     // Lógica 3: Excluir Conta
