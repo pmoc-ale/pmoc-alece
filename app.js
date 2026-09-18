@@ -948,6 +948,52 @@ function confirmarModal({ titulo = "Confirmar", corpoHtml = "", textoConfirmar =
   });
 }
 
+// Substitui window.prompt() por uma janela com a cara do sistema, do
+// mesmo jeito que confirmarModal já faz com window.confirm() -- reusa a
+// mesma janela (#modalConfirmOverlay), só com um campo de texto dentro.
+// Devolve Promise<string|null> -- null quando cancela, igual o prompt()
+// nativo.
+function promptModal({ titulo = "Digite um valor", label = "", valorInicial = "", tipo = "text", textoConfirmar = "OK", textoCancelar = "Cancelar" }) {
+  return new Promise((resolve) => {
+    const overlay = $("#modalConfirmOverlay");
+    const card = overlay.querySelector(".modal-confirm-card");
+    card.classList.remove("perigo");
+    $("#modalConfirmTitulo").textContent = titulo;
+    $("#modalConfirmCorpo").innerHTML = `
+      ${label ? `<label class="modal-prompt-label" for="modalPromptInput">${escapeHtml(label)}</label>` : ""}
+      <input type="${tipo}" id="modalPromptInput" value="${escapeHtml(valorInicial)}">
+    `;
+    const input = $("#modalPromptInput");
+    const btnConfirmar = $("#modalConfirmConfirmar");
+    const btnCancelar = $("#modalConfirmCancelar");
+    btnConfirmar.textContent = textoConfirmar;
+    btnConfirmar.className = "btn primary";
+    btnCancelar.textContent = textoCancelar;
+    overlay.hidden = false;
+    input.focus();
+
+    function limpar() {
+      overlay.hidden = true;
+      btnConfirmar.removeEventListener("click", aoConfirmar);
+      btnCancelar.removeEventListener("click", aoCancelar);
+      overlay.removeEventListener("click", aoClicarFora);
+      document.removeEventListener("keydown", aoTeclar);
+    }
+    function aoConfirmar() { const valor = input.value; limpar(); resolve(valor); }
+    function aoCancelar() { limpar(); resolve(null); }
+    function aoClicarFora(ev) { if (ev.target === overlay) aoCancelar(); }
+    function aoTeclar(ev) {
+      if (ev.key === "Escape") aoCancelar();
+      if (ev.key === "Enter") { ev.preventDefault(); aoConfirmar(); }
+    }
+
+    btnConfirmar.addEventListener("click", aoConfirmar);
+    btnCancelar.addEventListener("click", aoCancelar);
+    overlay.addEventListener("click", aoClicarFora);
+    document.addEventListener("keydown", aoTeclar);
+  });
+}
+
 $all(".subtab").forEach((btn) => {
   btn.addEventListener("click", () => {
     $all(".subtab").forEach((b) => b.classList.remove("active"));
@@ -3251,7 +3297,12 @@ function renderUsuarios() {
     // dedicado (ver URL_REDEFINIR_SENHA) porque isso exige acesso de admin
     // de verdade no Firebase Auth, que o navegador sozinho não tem.
     tdMenu.querySelector('[data-acao="redefinir-senha"]').addEventListener("click", async () => {
-      const novaSenha = window.prompt(`Nova senha para ${u.usuario} (mínimo 6 caracteres):`);
+      const novaSenha = await promptModal({
+        titulo: "Redefinir senha",
+        label: `Nova senha para ${u.usuario} (mínimo 6 caracteres):`,
+        tipo: "password",
+        textoConfirmar: "Redefinir",
+      });
       if (novaSenha === null) return;
       if (novaSenha.length < 6) {
         toast("A nova senha precisa ter pelo menos 6 caracteres.");
@@ -3280,7 +3331,12 @@ function renderUsuarios() {
     // lista. Sem isso, apagar só o perfil deixava a pessoa "ressuscitar"
     // a própria conta (com permissão padrão) só de logar de novo.
     tdMenu.querySelector('[data-acao="excluir"]').addEventListener("click", async () => {
-      const ok = window.confirm(`Tem certeza que deseja excluir a conta de ${u.usuario}? Essa pessoa não vai mais conseguir acessar o sistema.`);
+      const ok = await confirmarModal({
+        titulo: "Excluir conta",
+        corpoHtml: `<p>Tem certeza que deseja excluir a conta de <strong>${escapeHtml(u.usuario)}</strong>? Essa pessoa não vai mais conseguir acessar o sistema.</p>`,
+        textoConfirmar: "Excluir conta",
+        perigo: true,
+      });
       if(!ok) return;
 
       try {

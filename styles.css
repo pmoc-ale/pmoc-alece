@@ -400,6 +400,22 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   color: var(--vermelho-texto);
 }
 
+/* Campo de texto dentro do modal, usado por promptModal() (substitui o
+   window.prompt() feio do navegador). */
+.modal-prompt-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--sp-1);
+}
+.modal-confirm-corpo input {
+  display: block;
+  width: 100%;
+}
+
 .modal-confirm-acoes {
   display: flex;
   justify-content: flex-end;
