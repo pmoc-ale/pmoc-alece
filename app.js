@@ -6547,7 +6547,7 @@ function mostrarPainelPlanta(item) {
     <div class="drawer-campo"><span class="rotulo">Capacidade</span><span class="valor">${escapeHtml(item.capacidade || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Tipo de gás</span><span class="valor">${escapeHtml(item.tipoGas || "-")}</span></div>
     <div class="drawer-campo"><span class="rotulo">Status</span><span class="valor">${estaAtrasado(item) ? "Atrasado" : escapeHtml(item.statusPreventiva || "-")}</span></div>
-    ${condensadora ? `<button class="btn ghost" id="btnVerCondensadora" style="margin-top:10px;width:100%">📍 Ver condensadora${condensadora.codigo ? " (" + escapeHtml(condensadora.codigo) + ")" : ""}</button>` : ""}
+    ${condensadora ? `<button class="btn ghost" id="btnVerCondensadora" style="margin-top:10px;width:100%">Ver condensadora${condensadora.codigo ? " (" + escapeHtml(condensadora.codigo) + ")" : ""}</button>` : ""}
     <button class="btn ghost" id="btnAbrirDrawerDaPlanta" style="margin-top:${condensadora ? "6" : "10"}px;width:100%">Ver ficha completa</button>
     ${isAdmin ? '<button class="btn ghost" id="btnRemoverMarcacaoEvap" style="margin-top:6px;width:100%;color:var(--vermelho);border-color:var(--vermelho)">Remover marcação nesta planta</button>' : ""}
   `;
@@ -7791,13 +7791,12 @@ function renderCondensadorasCadastro() {
     detalhes.innerHTML = `<summary title="Ver localização e evaporadoras vinculadas">⋯</summary>
       <div class="menu-linha-opcoes" style="min-width:220px">
         <div style="padding:6px 10px;font-size:12px;color:var(--texto-suave);border-bottom:1px solid var(--borda);margin-bottom:4px;">
-          📍 ${escapeHtml(cond.local)} — ${escapeHtml(cond.plantaNome || "planta sem nome")}
+          ${escapeHtml(cond.local)} — ${escapeHtml(cond.plantaNome || "planta sem nome")}
         </div>
         ${vinculadas.length
           ? vinculadas.map((e) => `<button class="menu-linha-item" data-ver-evap-cond="${escapeHtml(e.id)}">${escapeHtml(e.codigoPlanta || e.patrimonio || e.ambiente || "-")}</button>`).join("")
           : `<div style="padding:8px 10px;font-size:12px;color:var(--texto-suave);">Nenhuma evaporadora vinculada ainda.</div>`}
       </div>`;
-    detalhes.addEventListener("click", (e) => e.stopPropagation());
     detalhes.querySelectorAll("[data-ver-evap-cond]").forEach((btn) => {
       btn.addEventListener("click", () => {
         detalhes.open = false;
@@ -7810,7 +7809,14 @@ function renderCondensadorasCadastro() {
     tdAcoes.appendChild(detalhes);
     tr.appendChild(tdAcoes);
 
-    tr.addEventListener("click", () => {
+    tr.addEventListener("click", (e) => {
+      // Sem esse "if", clicar dentro do "⋯" (abrir o menu, ver uma
+      // evaporadora vinculada) também disparava a navegação da linha
+      // inteira -- e um "e.stopPropagation()" no "⋯" pra evitar isso
+      // impedia esse clique de chegar no listener global que fecha
+      // outros menus abertos (por isso ficavam dois "⋯" abertos ao
+      // mesmo tempo, e clicar fora não fechava nada).
+      if (e.target.closest(".menu-linha")) return;
       irParaAba("localizacao");
       irParaMarcador(cond.plantaId, cond.x, cond.y, () => mostrarPainelCondensadora(cond));
     });
