@@ -2442,13 +2442,6 @@ body.modo-trabalhador .status-select {
   background: var(--azul-700); 
 }
 
-.eq-predio-nome {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.eq-predio-nome svg { width: 17px; height: 17px; color: var(--dourado-escuro); flex-shrink: 0; }
-
 .eq-predio-titulo .badge-capacidade {
   font-family: var(--fonte-corpo);
   font-size: 11px;
