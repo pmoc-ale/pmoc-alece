@@ -2395,6 +2395,8 @@ body.modo-trabalhador .status-select {
 .subtab.active { color: var(--azul-800); border-bottom-color: var(--dourado); }
 
 /* --- TELA DE GESTÃO DE EQUIPES (MODERNO) --- */
+#subview-cfg-equipes > h2 { margin-bottom: var(--sp-2); }
+
 #equipesPorPredio {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -2439,6 +2441,13 @@ body.modo-trabalhador .status-select {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--azul-700); 
 }
+
+.eq-predio-nome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.eq-predio-nome svg { width: 17px; height: 17px; color: var(--dourado-escuro); flex-shrink: 0; }
 
 .eq-predio-titulo .badge-capacidade {
   font-family: var(--fonte-corpo);
@@ -2488,11 +2497,37 @@ body.modo-trabalhador .status-select {
   font-weight: 400;
 }
 
+/* Ícone de "pegar" ao lado do nome (visual só -- ainda não dá pra
+   arrastar de verdade pra reordenar) */
+.eq-drag-handle {
+  display: flex;
+  color: var(--borda-forte);
+  flex-shrink: 0;
+}
+.eq-drag-handle svg { width: 14px; height: 14px; }
+
+.eq-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.eq-badge-rodizio { background: var(--azul-700); color: #fff; }
+.eq-badge-fora-rodizio { background: #ea580c; color: #fff; }
+.eq-badge-rotina { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
+.eq-badge-reserva { background: var(--borda); color: var(--texto-suave); }
+
 .btn-adicionar-vaga {
   margin-top: auto;
-  align-self: flex-start;
+  align-self: stretch;
+  justify-content: center;
   font-size: 13px;
-  padding: 6px 12px;
+  padding: 8px 12px;
+  border-style: dashed;
 }
 /* --- TOOLBAR DE FILTROS E BUSCA --- */
 .toolbar-pesquisa {

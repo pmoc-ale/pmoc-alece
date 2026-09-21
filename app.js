@@ -3623,24 +3623,18 @@ function renderEquipesPorPredio() {
       if (existente) {
           if (modoRodizio) {
               badgeHtml = ativasPorNome.includes(existente.nome)
-                  // AZUL para quem está no rodízio
-                  ? '<span class="status-select" style="font-size: 10px; padding: 2px 6px; cursor:default; flex-shrink:0; white-space:nowrap; background: var(--azul-700); color: white;">No rodízio</span>'
-                  // LARANJA para quem está cadastrada mas não participa agora
-                  : '<span class="status-select" style="font-size: 10px; padding: 2px 6px; cursor:default; flex-shrink:0; white-space:nowrap; background: #ea580c; color: white;">Reserva</span>';
+                  ? '<span class="eq-badge eq-badge-rodizio">No rodízio</span>'
+                  : '<span class="eq-badge eq-badge-fora-rodizio">Reserva</span>';
           } else {
-              if (!ehAbaixoDoLimite) {
-                  // AMARELO para o modo de Rotina original
-                  badgeHtml = '<span class="status-select andamento" style="font-size: 10px; padding: 2px 6px; cursor:default; flex-shrink:0; white-space:nowrap;">Na rotina</span>';
-              } else {
-                  // CINZA CENTRALIZADO para Reserva
-                  badgeHtml = '<span class="status-select" style="font-size: 10px; padding: 2px 6px; cursor:default; flex-shrink:0; white-space:nowrap; background:var(--borda); color:var(--texto-suave); text-align:center; justify-content:center;">Reserva</span>';
-              }
+              badgeHtml = !ehAbaixoDoLimite
+                  ? '<span class="eq-badge eq-badge-rotina">Na rotina</span>'
+                  : '<span class="eq-badge eq-badge-reserva">Reserva</span>';
           }
       }
 
       linhas += `
         <div class="eq-linha">
-          <span style="color: var(--borda-forte); font-size: 14px; margin-right: 4px;" title="Ordem/Vaga ${ordem}">⋮⋮</span>
+          <span class="eq-drag-handle" title="Ordem/Vaga ${ordem}"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span>
           <input type="text" data-predio="${escapeHtml(predio)}" data-ordem="${ordem}" class="eq-nome-input"
             value="${existente ? escapeHtml(existente.nome) : ""}" placeholder="Nome da equipe ${ordem}...">
           ${badgeHtml}
@@ -3670,7 +3664,10 @@ function renderEquipesPorPredio() {
     return `
       <div class="eq-predio-card">
         <div class="eq-predio-titulo">
-          ${escapeHtml(predio)}
+          <span class="eq-predio-nome">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1"/><path d="M9 8h1M14 8h1M9 12h1M14 12h1M9 16h1M14 16h1"/></svg>
+            ${escapeHtml(predio)}
+          </span>
           <span class="badge-capacidade">${subtitulo}</span>
         </div>
         <div style="margin-bottom: 12px; display: flex; flex-direction: column; flex: 1;">
