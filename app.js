@@ -3595,7 +3595,13 @@ function renderEquipesPorPredio() {
   const predios = ESTADO.configSite.predios;
   const capacidades = (ESTADO.config && ESTADO.config.capacidades) || {};
 
-  container.innerHTML = predios.map((predio) => {
+  // Uma faixa colorida na lateral de cada card, só pra diferenciar os
+  // prédios visualmente -- sem ícone nenhum, girando entre cores que já
+  // existem no resto do sistema (não inventa cor nova).
+  const CORES_PREDIO = ["var(--azul-700)", "var(--dourado-escuro)", "var(--verde)", "var(--texto-suave)"];
+
+  container.innerHTML = predios.map((predio, indicePredio) => {
+    const corPredio = CORES_PREDIO[indicePredio % CORES_PREDIO.length];
     const cap = capacidades[predio] || { nEquipes: 2, modoRodizio: false, equipesAtivas: [] };
     const nEquipes = cap.nEquipes || 2;
     const equipesDoPredio = ESTADO.equipes.filter((e) => e.predio === predio).sort((a, b) => a.ordem - b.ordem);
@@ -3662,7 +3668,7 @@ function renderEquipesPorPredio() {
     const subtitulo = modoRodizio ? "Sistema de rodízio" : `${nEquipes} vagas por dia`;
 
     return `
-      <div class="eq-predio-card">
+      <div class="eq-predio-card" style="--eq-cor-predio: ${corPredio};">
         <div class="eq-predio-titulo">
           ${escapeHtml(predio)}
           <span class="badge-capacidade">${subtitulo}</span>
