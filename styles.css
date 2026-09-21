@@ -2395,8 +2395,6 @@ body.modo-trabalhador .status-select {
 .subtab.active { color: var(--azul-800); border-bottom-color: var(--dourado); }
 
 /* --- TELA DE GESTÃO DE EQUIPES (MODERNO) --- */
-#subview-cfg-equipes > h2 { margin-bottom: var(--sp-2); }
-
 #equipesPorPredio {
   display: grid;
   /* "auto-fit" (não "auto-fill") -- quando o último prédio fica sozinho
