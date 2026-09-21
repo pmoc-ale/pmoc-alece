@@ -1654,56 +1654,80 @@ async function confirmarAdicaoPredioNovo() {
       const dataPorEquipe = Array.from({ length: nEquipes }, () => new Date(dataInicioBase));
       const contadorPorEquipe = new Array(nEquipes).fill(0);
       const diasUteisPorEquipe = new Array(nEquipes).fill(0);
-      let grupoAmbienteAtual = null;
-      let indiceGrupo = -1;
       let ordem = 0;
 
+      // Evita colidir com um ID já existente (patrimônio repetido em outro
+      // prédio, por engano de digitação na planilha) -- sem isso, o
+      // batch.set ia SOBRESCREVER o equipamento existente, apagando o
+      // histórico/status dele. Precisa rodar antes de agrupar por sala.
       itensDoPredio.forEach((item) => {
-        // Evita colidir com um ID já existente (patrimônio repetido em
-        // outro prédio, por engano de digitação na planilha) -- sem
-        // isso, o batch.set ia SOBRESCREVER o equipamento existente,
-        // apagando o histórico/status dele.
         if (idsExistentes.has(item.id)) {
           item.id = `${item.id}_novo_${Math.random().toString(36).slice(2, 6)}`;
         }
         idsExistentes.add(item.id);
+      });
 
-        const chaveAmbiente = `${item.setor}||${item.ambiente}`;
-        if (chaveAmbiente !== grupoAmbienteAtual) {
-          grupoAmbienteAtual = chaveAmbiente;
-          indiceGrupo++;
+      // Agrupa itens consecutivos da MESMA sala (nunca divide uma sala
+      // entre equipes diferentes) e manda cada grupo pra equipe que tem
+      // MENOS aparelhos até agora -- equilibra o total de máquinas por
+      // equipe, em vez de só alternar pela ordem em que as salas aparecem
+      // na planilha (que podia deixar uma equipe com várias salas grandes
+      // seguidas e outra só com salas pequenas).
+      const gruposDeSala = [];
+      {
+        let chaveAtual = null;
+        itensDoPredio.forEach((item) => {
+          const chave = `${item.setor}||${item.ambiente}`;
+          if (chave !== chaveAtual) {
+            chaveAtual = chave;
+            gruposDeSala.push([]);
+          }
+          gruposDeSala[gruposDeSala.length - 1].push(item);
+        });
+      }
+      const totalPorEquipe = new Array(nEquipes).fill(0);
+      const slotPorGrupo = gruposDeSala.map((grupo) => {
+        let slot = 0;
+        for (let s = 1; s < nEquipes; s++) {
+          if (totalPorEquipe[s] < totalPorEquipe[slot]) slot = s;
         }
-        const slotDaSala = indiceGrupo % nEquipes;
+        totalPorEquipe[slot] += grupo.length;
+        return slot;
+      });
 
-        // Uma sala com mais aparelhos do que o limite da equipe: o que
-        // não coube hoje vai pro próximo dia útil DESSA MESMA equipe
-        // (ela volta na mesma sala depois), em vez de estourar o limite.
-        if (contadorPorEquipe[slotDaSala] >= aparelhosDia) {
-          contadorPorEquipe[slotDaSala] = 0;
-          diasUteisPorEquipe[slotDaSala]++;
-          const d = dataPorEquipe[slotDaSala];
-          do { d.setDate(d.getDate() + 1); } while (!ehDiaUtilLocal(d));
-        }
-        const dataDaEquipe = dataPorEquipe[slotDaSala];
+      gruposDeSala.forEach((grupo, indiceGrupo) => {
+        const slotDaSala = slotPorGrupo[indiceGrupo];
+        grupo.forEach((item) => {
+          // Uma sala com mais aparelhos do que o limite da equipe: o que
+          // não coube hoje vai pro próximo dia útil DESSA MESMA equipe
+          // (ela volta na mesma sala depois), em vez de estourar o limite.
+          if (contadorPorEquipe[slotDaSala] >= aparelhosDia) {
+            contadorPorEquipe[slotDaSala] = 0;
+            diasUteisPorEquipe[slotDaSala]++;
+            const d = dataPorEquipe[slotDaSala];
+            do { d.setDate(d.getDate() + 1); } while (!ehDiaUtilLocal(d));
+          }
+          const dataDaEquipe = dataPorEquipe[slotDaSala];
 
-        if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
-          const pool = cap.equipesAtivas;
-          const indiceNoPool = (diasUteisPorEquipe[slotDaSala] * nEquipes + slotDaSala) % pool.length;
-          item.equipeResponsavel = pool[indiceNoPool];
-        } else {
-          const ordemEquipe = slotDaSala + 1;
-          item.equipeResponsavel = mapaEquipeLocal.get(ordemEquipe) || `Equipe ${ordemEquipe}`;
-        }
+          if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
+            const pool = cap.equipesAtivas;
+            const indiceNoPool = (diasUteisPorEquipe[slotDaSala] * nEquipes + slotDaSala) % pool.length;
+            item.equipeResponsavel = pool[indiceNoPool];
+          } else {
+            const ordemEquipe = slotDaSala + 1;
+            item.equipeResponsavel = mapaEquipeLocal.get(ordemEquipe) || `Equipe ${ordemEquipe}`;
+          }
 
-        ordem++;
-        item.ordemExecucao = ordem;
-        item.dataAgendada = formatISO(dataDaEquipe);
-        item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
-        const diffDias = Math.floor((dataDaEquipe - dataInicioBase) / 86400000);
-        item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
+          ordem++;
+          item.ordemExecucao = ordem;
+          item.dataAgendada = formatISO(dataDaEquipe);
+          item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
+          const diffDias = Math.floor((dataDaEquipe - dataInicioBase) / 86400000);
+          item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
 
-        contadorPorEquipe[slotDaSala]++;
-        todosNovosItens.push(item);
+          contadorPorEquipe[slotDaSala]++;
+          todosNovosItens.push(item);
+        });
       });
 
       prediosAdicionados.add(local);
@@ -2261,57 +2285,77 @@ async function gerarCronograma() {
       const dataPorEquipe = Array.from({ length: nVagas }, () => new Date(primeiraDataUtilGlobal));
       const contadorPorEquipe = new Array(nVagas).fill(0);
       const diasUteisPorEquipe = new Array(nVagas).fill(0);
-      let grupoAmbienteAtual = null;
-      let indiceGrupo = -1;
       let ordem = 0;
 
-      itensDoPredio.forEach((item) => {
-        const chaveAmbiente = `${item.setor}||${item.ambiente}`;
-        if (chaveAmbiente !== grupoAmbienteAtual) {
-          grupoAmbienteAtual = chaveAmbiente;
-          indiceGrupo++;
+      // Agrupa itens consecutivos da MESMA sala (nunca divide uma sala
+      // entre equipes diferentes) e manda cada grupo pra vaga que tem
+      // MENOS aparelhos até agora -- equilibra o total de máquinas por
+      // equipe, em vez de só alternar pela ordem em que as salas aparecem
+      // na planilha (que podia deixar uma equipe com várias salas grandes
+      // seguidas e outra só com salas pequenas).
+      const gruposDeSala = [];
+      {
+        let chaveAtual = null;
+        itensDoPredio.forEach((item) => {
+          const chave = `${item.setor}||${item.ambiente}`;
+          if (chave !== chaveAtual) {
+            chaveAtual = chave;
+            gruposDeSala.push([]);
+          }
+          gruposDeSala[gruposDeSala.length - 1].push(item);
+        });
+      }
+      const totalPorVaga = new Array(nVagas).fill(0);
+      const slotPorGrupo = gruposDeSala.map((grupo) => {
+        let slot = 0;
+        for (let s = 1; s < nVagas; s++) {
+          if (totalPorVaga[s] < totalPorVaga[slot]) slot = s;
         }
+        totalPorVaga[slot] += grupo.length;
+        return slot;
+      });
 
-        const slotDaSala = indiceGrupo % nVagas; // Prende a equipe à Vaga do dia (0 ou 1)
+      gruposDeSala.forEach((grupo, indiceGrupo) => {
+        const slotDaSala = slotPorGrupo[indiceGrupo]; // Prende a equipe à Vaga do dia (0 ou 1)
+        grupo.forEach((item) => {
+          // Uma sala com mais aparelhos do que o limite da equipe: o que
+          // não coube hoje vai pro próximo dia útil DESSA MESMA equipe
+          // (ela volta na mesma sala depois), em vez de estourar o limite.
+          if (contadorPorEquipe[slotDaSala] >= aparelhosDia) {
+            contadorPorEquipe[slotDaSala] = 0;
+            diasUteisPorEquipe[slotDaSala]++;
+            const d = dataPorEquipe[slotDaSala];
+            do { d.setDate(d.getDate() + 1); } while (!ehDiaUtil(d));
+          }
+          const dataDaEquipe = dataPorEquipe[slotDaSala];
 
-        // Uma sala com mais aparelhos do que o limite da equipe: o que
-        // não coube hoje vai pro próximo dia útil DESSA MESMA equipe
-        // (ela volta na mesma sala depois), em vez de estourar o limite.
-        if (contadorPorEquipe[slotDaSala] >= aparelhosDia) {
-          contadorPorEquipe[slotDaSala] = 0;
-          diasUteisPorEquipe[slotDaSala]++;
-          const d = dataPorEquipe[slotDaSala];
-          do { d.setDate(d.getDate() + 1); } while (!ehDiaUtil(d));
-        }
-        const dataDaEquipe = dataPorEquipe[slotDaSala];
+          if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
+              const pool = cap.equipesAtivas;
+              // Avança no pool 1,2 -> 3,4 -> 5,6 conforme o dia muda
+              const indiceNoPool = (diasUteisPorEquipe[slotDaSala] * nVagas + slotDaSala) % pool.length;
+              item.equipeResponsavel = pool[indiceNoPool];
+          } else {
+              // Se o rodízio estiver desligado, usa o comportamento clássico
+              const ordemEquipe = slotDaSala + 1;
+              const encontrada = ESTADO.equipes.find((e) => e.predio === local && e.ordem === ordemEquipe);
+              item.equipeResponsavel = encontrada ? encontrada.nome : `Equipe ${ordemEquipe}`;
+          }
 
-        if (cap.modoRodizio && cap.equipesAtivas && cap.equipesAtivas.length > 0) {
-            const pool = cap.equipesAtivas;
-            // Avança no pool 1,2 -> 3,4 -> 5,6 conforme o dia muda
-            const indiceNoPool = (diasUteisPorEquipe[slotDaSala] * nVagas + slotDaSala) % pool.length;
-            item.equipeResponsavel = pool[indiceNoPool];
-        } else {
-            // Se o rodízio estiver desligado, usa o comportamento clássico
-            const ordemEquipe = slotDaSala + 1;
-            const encontrada = ESTADO.equipes.find((e) => e.predio === local && e.ordem === ordemEquipe);
-            item.equipeResponsavel = encontrada ? encontrada.nome : `Equipe ${ordemEquipe}`;
-        }
+          ordem++;
+          item.ordemExecucao = ordem;
+          item.dataAgendada = formatISO(dataDaEquipe);
+          item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
+          const diffDias = Math.floor((dataDaEquipe - primeiraDataUtilGlobal) / 86400000);
+          item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
 
+          const anterior = existentes[item.id];
+          if (anterior) {
+            item.statusPreventiva = anterior.statusPreventiva || "Pendente";
+            item.observacao = anterior.observacao || "";
+          }
 
-        ordem++;
-        item.ordemExecucao = ordem;
-        item.dataAgendada = formatISO(dataDaEquipe);
-        item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
-        const diffDias = Math.floor((dataDaEquipe - primeiraDataUtilGlobal) / 86400000);
-        item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
-
-        const anterior = existentes[item.id];
-        if (anterior) {
-          item.statusPreventiva = anterior.statusPreventiva || "Pendente";
-          item.observacao = anterior.observacao || "";
-        }
-
-        contadorPorEquipe[slotDaSala]++;
+          contadorPorEquipe[slotDaSala]++;
+        });
       });
 
       const diasNecessarios = Math.ceil(itensDoPredio.length / capacidadeDia);
