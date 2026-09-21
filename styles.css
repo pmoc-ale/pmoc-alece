@@ -2399,7 +2399,11 @@ body.modo-trabalhador .status-select {
 
 #equipesPorPredio {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* "auto-fit" (não "auto-fill") -- quando o último prédio fica sozinho
+     na linha, ele estica pra preencher o espaço todo em vez de deixar
+     aquele vão vazio do lado (que ficava esquisito), sem precisar de
+     nenhum enfeite/painel de preenchimento. */
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: var(--sp-5);
   margin-top: var(--sp-4);
 }
