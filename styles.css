@@ -1472,15 +1472,20 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .drawer-head h2 { color: #fff; font-size: 17px; }
 
 .drawer-close {
-  background: none;
+  background: rgba(255,255,255,0.12);
   border: none;
-  color: rgba(255,255,255,0.8);
+  color: #fff;
   font-size: 22px;
   line-height: 1;
-  padding: 2px 8px;
-  border-radius: var(--raio-pequeno);
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
 }
-.drawer-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.drawer-close:hover { background: rgba(255,255,255,0.22); }
 
 .drawer-body {
   flex: 1;
@@ -2142,6 +2147,10 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .body-layout { flex-direction: column; }
   .page { padding: var(--sp-4); }
   .drawer { width: 100%; max-width: 100%; }
+  /* Botão de fechar maior no celular (toque com o dedo, não com o
+     mouse) -- ele já fechava clicando fora/Escape, mas o "×" pequeno
+     de antes era fácil de não achar/acertar na tela pequena. */
+  .drawer-close { width: 44px; height: 44px; font-size: 26px; }
 }
 
 /* Escondido por padrão (desktop) -- o @media abaixo mostra em telas
