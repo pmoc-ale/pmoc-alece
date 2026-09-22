@@ -896,7 +896,14 @@ function renderChamadosOrfaos() {
     btn.style.fontSize = "12px";
     btn.style.padding = "6px 12px";
     btn.textContent = "Cadastrar equipamento";
-    btn.addEventListener("click", () => prepararCadastroDoChamado(c));
+    btn.addEventListener("click", (e) => {
+      // Evita que o clique "borbulhe" até o listener de fechar-ao-clicar-
+      // fora (ver mais abaixo): esse botão fica FORA do ".info-popover"
+      // que ele acabou de abrir, então sem isso o painel abria e fechava
+      // sozinho no mesmo clique.
+      e.stopPropagation();
+      prepararCadastroDoChamado(c);
+    });
     tdBtn.appendChild(btn);
     tr.appendChild(tdBtn);
     tbody.appendChild(tr);
@@ -5339,9 +5346,14 @@ window.addEventListener("resize", atualizarAlturaTopbar);
 // evita ter que rolar a tela de volta lá pra cima só pra achar o formulário
 // de cadastro -- pula direto pra ele. O formulário agora fica escondido
 // atrás do "⋯" (painelCadastrarEquipamento), então precisa abrir antes.
-$("#fabAdicionarEquipamento")?.addEventListener("click", () => {
+$("#fabAdicionarEquipamento")?.addEventListener("click", (e) => {
   const painel = $("#painelCadastrarEquipamento");
   if (!painel) return;
+  // Esse botão fica FORA do ".info-popover" que ele abre (não é o
+  // "summary" dele) -- sem isso, o clique "borbulhava" até o listener de
+  // fechar-ao-clicar-fora (mais abaixo) e o painel abria e fechava
+  // sozinho no mesmo clique, dando a impressão de "não acontece nada".
+  e.stopPropagation();
   // Alterna: se já está aberto, o "+" fecha em vez de só ficar sem
   // efeito -- assim ele funciona como um botão só (abre/fecha), sem
   // precisar procurar o "×" ou clicar fora pra sair.
