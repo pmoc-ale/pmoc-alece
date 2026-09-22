@@ -2205,14 +2205,21 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .sidenav-label, .sidenav-spacer { display: none !important; }
   .sidenav-item {
     flex: 1;
-    min-width: 80px;
+    min-width: 56px;
     flex-direction: column;
     justify-content: center;
-    gap: 4px;
-    font-size: 10.5px;
-    padding: 6px;
+    gap: 3px;
+    font-size: 9.5px;
+    line-height: 1.15;
+    padding: 6px 2px;
     text-align: center;
-    white-space: nowrap;
+    /* Antes era "nowrap" -- pro admin (6 itens de Gestão: Ordens de
+       serviço, Histórico, Equipamentos, Condensadoras, Localização,
+       Feriados e férias) isso forçava uma barra bem mais larga que a
+       tela, cortando o(s) último(s) item(ns) na borda mesmo rolando.
+       Deixando o texto quebrar em duas linhas, os 6 cabem juntos sem
+       precisar rolar de lado nem cortar nada. */
+    white-space: normal;
     border-left: none; /* a linha à esquerda do menu de desktop não faz sentido numa barra horizontal */
   }
   .sidenav-icon { display: block; margin: 0 auto; width: 16px; height: 4px; border-radius: 2px; } /* Deixei as bolinhas parecendo "tracinhos" de app */
