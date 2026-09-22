@@ -2258,23 +2258,24 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   /* Busca/filtros de Equipamentos: as regras de ".toolbar-pesquisa" e
      ".filtros-equipamentos" puras (usadas no desktop) têm mais peso do
      que uma classe só, então "vazavam" pro celular e desmanchavam essa
-     versão empilhada -- prefixa com ".card" pra ganhar sempre, e deixa
-     o toque mais confortável (select maior, sem caixa dentro de caixa). */
-  .card .toolbar-pesquisa { flex-direction: column; align-items: stretch; gap: 10px; }
+     versão empilhada -- prefixa com ".card" pra ganhar sempre. Os 3
+     filtros ficam 2 por linha (em vez de empilhados um embaixo do
+     outro) pra ocupar bem menos altura na tela do celular. */
+  .card .toolbar-pesquisa { flex-direction: column; align-items: stretch; gap: 8px; }
   .card .toolbar-pesquisa .search-input { width: 100%; min-width: 100%; }
   .card .toolbar-pesquisa .filtros-equipamentos {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
     width: 100%;
     background: transparent;
     padding: 0;
   }
   .card .toolbar-pesquisa .filtros-equipamentos select {
     width: 100%;
-    min-width: 100%;
-    padding: 10px 12px;
-    font-size: 14px;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 12.5px;
   }
 
   /* 5. CALENDÁRIO ULTRA-COMPACTO */
