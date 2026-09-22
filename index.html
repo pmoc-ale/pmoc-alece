@@ -353,14 +353,19 @@
     <!-- VIEW 7: HISTÓRICO (em construção) -->
     <section class="view" id="view-historico">
     <div class="card">
-        <div class="card-head">
-            <h2>Histórico de manutenção</h2>
+        <div class="card-head-historico">
+            <div>
+                <h2>Histórico de manutenção</h2>
+                <p class="muted">Registro das alterações e movimentações realizadas no sistema de manutenção.</p>
+            </div>
             <span class="pill" id="historicoCount">
                 0 registros
             </span>
         </div>
-        <div class="local-filtro" id="localFiltroHistorico"></div>
-        <input type="text" class="search-input" id="buscaHistorico" placeholder="Buscar por patrimônio, setor ou equipe...">
+        <div class="toolbar-pesquisa">
+            <div class="local-filtro" id="localFiltroHistorico"></div>
+            <input type="text" class="search-input" id="buscaHistorico" placeholder="Buscar por patrimônio, setor ou equipe...">
+        </div>
         <div id="selecaoHistorico" class="action-bar-flutuante">
           <div class="action-bar-esquerda">
             <button id="btnLimparSelecaoHistorico" class="btn-icon" title="Limpar seleção">✕</button>
@@ -901,7 +906,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=103"></script>
+<script type="module" src="app.js?v=104"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

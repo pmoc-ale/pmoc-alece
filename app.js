@@ -5110,6 +5110,23 @@ function iniciarSincronizacaoHistorico(){
   });
 }
 
+// Classifica o registro de histórico num "tipo de evento" pra mostrar como
+// badge colorido na tabela -- Cadastro (azul) e Excluído (vermelho) usam o
+// MESMO tipo salvo ("Cadastro"), só o statusNovo muda, então precisa olhar
+// os dois campos pra diferenciar.
+function classificarHistorico(h) {
+  if (h.tipo === "Atraso Reagendado" || h.tipo === "Reagendamento manual") {
+    return { rotulo: h.tipo === "Atraso Reagendado" ? "Atraso reagendado" : "Reagendamento manual", classe: "hist-reagendamento" };
+  }
+  if (h.tipo === "Cadastro" && h.statusNovo === "Excluído") {
+    return { rotulo: "Excluído", classe: "hist-excluido" };
+  }
+  if (h.tipo === "Cadastro") {
+    return { rotulo: "Cadastro", classe: "hist-cadastro" };
+  }
+  return { rotulo: h.tipo || "Preventiva", classe: "hist-preventiva" };
+}
+
 function renderHistorico(){
   const table = $("#historicoTable");
   if(!table) return;
@@ -5119,42 +5136,41 @@ function renderHistorico(){
     const alvo = normalizarBusca(`${h.patrimonio || ""} ${h.setor || ""} ${h.equipe || ""}`);
     return alvo.includes(termo);
   });
-  
+
   $("#historicoCount").textContent = `${historico.length} registros`;
-  
-  // CORREÇÃO 1: Removida a palavra "Ações" no final do cabeçalho (deixado apenas <th></th>)
+
   table.innerHTML = `<thead><tr>
       <th style="width:30px"><input type="checkbox" id="checkTodosHistorico"></th>
-      <th>Data/Hora</th><th>Patrimônio</th><th>Setor</th>
-      <th>Equipe</th><th>Usuário</th><th>Tipo</th><th>De</th><th>Para</th><th></th>
+      <th>Data e hora</th><th>Evento</th><th>Patrimônio</th><th>Setor</th>
+      <th>Equipe</th><th>Usuário</th><th>Alteração</th><th></th>
   </tr></thead><tbody></tbody>`;
-  
+
   const tbody = table.querySelector("tbody");
 
   historico.forEach(h => {
     const tr = document.createElement("tr");
-    
+
     // CORREÇÃO 2: Agora ele reconhece "Reagendamento manual" e mostra as datas corretamente
     const ehReagendamento = h.tipo === "Atraso Reagendado" || h.tipo === "Reagendamento manual";
-    
-    const colDe = ehReagendamento
-      ? `<td>${formatarDataBR(h.dataAnterior)}</td>`
-      : `<td><span class="status-select ${classeStatus(h.statusAnterior)}">${h.statusAnterior || "-"}</span></td>`;
-      
-    const colPara = ehReagendamento
-      ? `<td>${formatarDataBR(h.dataNova)}</td>`
-      : `<td><span class="status-select ${classeStatus(h.statusNovo)}">${h.statusNovo || "-"}</span></td>`;
-      
+    const evento = classificarHistorico(h);
+    const data = new Date(h.registradoEm);
+
+    const colAlteracao = ehReagendamento
+      ? `<span>${formatarDataBR(h.dataAnterior)}</span><span class="hist-seta">→</span><span>${formatarDataBR(h.dataNova)}</span>`
+      : `<span class="status-select ${classeStatus(h.statusAnterior)}">${h.statusAnterior || "-"}</span><span class="hist-seta">→</span><span class="status-select ${classeStatus(h.statusNovo)}">${h.statusNovo || "-"}</span>`;
+
     tr.innerHTML = `
         <td></td>
-        <td>${new Date(h.registradoEm).toLocaleString("pt-BR")}</td>
+        <td>
+          <div class="hist-data-principal">${data.toLocaleDateString("pt-BR")}</div>
+          <div class="hist-data-hora">${data.toLocaleTimeString("pt-BR")}</div>
+        </td>
+        <td><span class="hist-evento ${evento.classe}">${escapeHtml(evento.rotulo)}</span></td>
         <td>${escapeHtml(h.patrimonio || "-")}</td>
         <td>${escapeHtml(h.setor)}</td>
         <td>${escapeHtml(h.equipe)}</td>
         <td>${escapeHtml(h.usuario || "-")}</td>
-        <td>${h.tipo || "Preventiva"}</td>
-        ${colDe}
-        ${colPara}
+        <td><div class="hist-alteracao">${colAlteracao}</div></td>
     `;
 
     const chaveSel = `${h.cicloId}::${h.id}`;

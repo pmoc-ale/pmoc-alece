@@ -713,6 +713,51 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 }
 .card-head h2 { margin: 0; }
 
+/* Cabeçalho do Histórico: título + descrição à esquerda, contagem à
+   direita -- em vez do "N registros" solto perto do título, agora ele
+   dá mais contexto de cabeçalho de sistema (o que essa tela é), não só
+   de mockup gerado por IA. */
+.card-head-historico {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  flex-wrap: wrap;
+}
+.card-head-historico h2 { margin: 0 0 4px; }
+.card-head-historico p { margin: 0; max-width: 480px; }
+
+/* Badge do tipo de evento na tabela de Histórico (Cadastro/Reagendamento/
+   Excluído/Preventiva) -- reaproveita as MESMAS cores já usadas nos
+   pills de status (.status-select) em vez de inventar uma paleta nova,
+   pra continuar parecendo um único sistema. */
+.hist-evento {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.hist-evento.hist-cadastro { background: var(--azul-100); color: var(--azul-800); }
+.hist-evento.hist-reagendamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
+.hist-evento.hist-excluido { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
+.hist-evento.hist-preventiva { background: var(--fundo); color: var(--texto-suave); border: 1px solid var(--borda); }
+
+/* Data/hora do Histórico em duas linhas (data em destaque, hora
+   discreta embaixo) -- ocupa menos largura que "22/09/2026, 08:23:05"
+   numa linha só e dá mais peso à informação que importa primeiro. */
+.hist-data-principal { font-weight: 600; }
+.hist-data-hora { font-size: 11.5px; color: var(--texto-fraco); }
+
+/* Junta as colunas "De" e "Para" numa só com uma seta -- tanto pra
+   datas de reagendamento quanto pros pills de status. */
+.hist-alteracao { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hist-alteracao .hist-seta { color: var(--texto-fraco); font-weight: 700; }
+
 .card > h2 { margin-bottom: var(--sp-2); }
 
 /* Mesma silhueta discreta da tela de login (identidade visual da
