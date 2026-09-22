@@ -2246,8 +2246,6 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 
   /* 4. FORMULÁRIOS E TOOLBARS EM 1 COLUNA */
   .grid-form { grid-template-columns: 1fr; }
-  .filtros-equipamentos { display: flex; flex-direction: column; gap: 8px; }
-  .filtros-equipamentos select { width: 100%; min-width: 100%; }
   .capacidade-linha { grid-template-columns: 1fr; gap: 8px; }
   .kpi-row { grid-template-columns: 1fr 1fr; }
   /* Cards mais baixos no celular: com 5 cards em 2 colunas, o 5º fica
@@ -2256,8 +2254,28 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
      cortado assim que o Dashboard abre, antes de rolar a tela). */
   .kpi-card { padding: var(--sp-3) var(--sp-4); }
   .kpi-card .num { font-size: 30px; margin-bottom: 4px; }
-  .toolbar-pesquisa { flex-direction: column; align-items: stretch; }
-  .toolbar-pesquisa .search-input { min-width: 100%; width: 100%; }
+
+  /* Busca/filtros de Equipamentos: as regras de ".toolbar-pesquisa" e
+     ".filtros-equipamentos" puras (usadas no desktop) têm mais peso do
+     que uma classe só, então "vazavam" pro celular e desmanchavam essa
+     versão empilhada -- prefixa com ".card" pra ganhar sempre, e deixa
+     o toque mais confortável (select maior, sem caixa dentro de caixa). */
+  .card .toolbar-pesquisa { flex-direction: column; align-items: stretch; gap: 10px; }
+  .card .toolbar-pesquisa .search-input { width: 100%; min-width: 100%; }
+  .card .toolbar-pesquisa .filtros-equipamentos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    background: transparent;
+    padding: 0;
+  }
+  .card .toolbar-pesquisa .filtros-equipamentos select {
+    width: 100%;
+    min-width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
 
   /* 5. CALENDÁRIO ULTRA-COMPACTO */
   .cal-dow { font-size: 9px; padding: 4px 0; }
