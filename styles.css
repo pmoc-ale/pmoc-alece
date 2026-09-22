@@ -714,6 +714,27 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 .card-head h2 { margin: 0; }
 
 .card > h2 { margin-bottom: var(--sp-2); }
+
+/* Mesma silhueta discreta da tela de login (identidade visual da
+   ALECE) -- pediram uma foto de fundo pra esse card, mas achamos que
+   uma foto de banco de imagens ia destoar; isso combina com o resto
+   do sistema e já é um elemento aprovado. Opacidade bem mais baixa que
+   no login (0.06 vs 0.13) porque aqui tem campo de formulário em
+   cima, que precisa continuar fácil de ler. */
+.card-com-silhueta { position: relative; overflow: hidden; }
+.card-com-silhueta::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -30px;
+  width: 220px;
+  aspect-ratio: 500 / 610;
+  background: url("assets/ceara-silhueta.svg") no-repeat center / contain;
+  opacity: 0.06;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.card-com-silhueta > * { position: relative; }
 .card > h2 + .muted { margin-bottom: var(--sp-4); }
 
 .pill {
@@ -1990,6 +2011,43 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .menu-linha-item:hover { background: var(--azul-50); }
 .menu-linha-excluir { color: var(--vermelho-texto); }
 .menu-linha-excluir:hover { background: var(--vermelho-fundo); }
+
+/* Avatar (foto ou iniciais coloridas) na tabela de Usuários */
+.usuario-avatar, .usuario-avatar-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.usuario-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.usuario-avatar-img { object-fit: cover; }
+
+/* Botão de ícone único (lápis/lixeira) nas linhas da tabela --
+   substitui o "⋯" só onde faz sentido ter uma ação sozinha em
+   destaque (excluir), sem perder o menu com as outras opções. */
+.icone-acao-tabela {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--raio-pequeno);
+  color: var(--texto-suave);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.icone-acao-tabela svg { width: 16px; height: 16px; }
+.icone-acao-tabela:hover { background: var(--azul-50); color: var(--texto); }
+.icone-acao-tabela.icone-acao-perigo:hover { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
 
 /* Botão "⋯" discreto pra mostrar um texto informativo dentro de um
    card-head (ex: "Feriados nacionais"), sem deixar o parágrafo grande

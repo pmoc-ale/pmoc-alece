@@ -3282,28 +3282,50 @@ function renderAuditoria() {
   });
 }
 
+// Cores fixas do próprio sistema (nenhuma cor nova) só pra girar entre
+// as iniciais dos avatares -- o mesmo usuário sempre cai na mesma cor
+// (baseado no nome), não muda a cada render.
+const CORES_AVATAR = ["var(--azul-700)", "var(--dourado-escuro)", "var(--verde)", "var(--vermelho-texto)", "var(--azul-900)", "var(--amarelo-texto)"];
+function corAvatar(texto) {
+  let hash = 0;
+  for (let i = 0; i < texto.length; i++) hash = (hash * 31 + texto.charCodeAt(i)) >>> 0;
+  return CORES_AVATAR[hash % CORES_AVATAR.length];
+}
+function iniciaisUsuario(usuario) {
+  const partes = String(usuario).replace(/[._]/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return "?";
+  const primeira = partes[0][0] || "";
+  const segunda = partes.length > 1 ? partes[partes.length - 1][0] : (partes[0][1] || "");
+  return (primeira + segunda).toUpperCase();
+}
+function avatarUsuarioHtml(u) {
+  if (u.fotoUrl) return `<img src="${escapeHtml(u.fotoUrl)}" alt="" class="usuario-avatar-img">`;
+  return `<span class="usuario-avatar" style="background:${corAvatar(u.usuario || "?")}">${escapeHtml(iniciaisUsuario(u.usuario || "?"))}</span>`;
+}
+
 function renderUsuarios() {
   const table = $("#usuariosTable");
   if (!table) return;
-  
+
   const usuariosVisiveis = ESTADO.usuarios.filter((u) => !u.excluidoEm);
-  $("#usuariosCount").textContent = `${usuariosVisiveis.length} conta(s)`;
+  $("#usuariosCount").textContent = `Contas (${usuariosVisiveis.length})`;
 
   table.innerHTML = `<thead><tr>
-      <th>Usuário</th><th>Permissão</th><th>Equipe</th><th>Criado em</th><th>Último login</th><th></th>
+      <th>Avatar</th><th>Usuário</th><th>Permissão</th><th>Equipe</th><th>Criado em</th><th>Último login</th><th></th>
     </tr></thead><tbody></tbody>`;
 
   const tbody = table.querySelector("tbody");
 
   usuariosVisiveis.forEach((u) => {
     const tr = document.createElement("tr");
-    
+
     // Se o usuário estiver bloqueado, aplicamos um estilo CSS sutil (riscado + cinza)
     const estiloUsuario = u.bloqueado ? 'style="text-decoration: line-through; color: var(--texto-suave);"' : '';
 
     const equipeTexto = u.permissao !== "trabalhador" ? "-" : (u.equipe ? `${escapeHtml(u.predio || "")} — ${escapeHtml(u.equipe)}` : "Sem equipe");
 
     tr.innerHTML = `
+      <td>${avatarUsuarioHtml(u)}</td>
       <td ${estiloUsuario}>${u.usuario} ${u.bloqueado ? '(Bloqueado)' : ''}</td>
       <td>${ROTULOS_PERMISSAO[u.permissao] || "Padrão"}</td>
       <td>${equipeTexto}</td>
@@ -3315,17 +3337,24 @@ function renderUsuarios() {
     const acaoBloqueio = u.bloqueado ? "Desbloquear" : "Bloquear";
     const outrasPermissoes = Object.keys(ROTULOS_PERMISSAO).filter((p) => p !== (u.permissao || "padrao"));
 
-    tdMenu.innerHTML = `<details class="menu-linha"><summary>⋯</summary>
-      <div class="menu-linha-opcoes">
-        <button class="menu-linha-item" data-acao="bloqueio">${acaoBloqueio}</button>
-        ${outrasPermissoes.map((p) =>
-          `<button class="menu-linha-item eq-permissao-btn" data-permissao="${p}">Mudar para ${ROTULOS_PERMISSAO[p]}</button>`
-        ).join("")}
-        <button class="menu-linha-item" data-acao="redefinir-senha">Redefinir senha</button>
-        ${u.permissao === "trabalhador" ? `<button class="menu-linha-item" data-acao="definir-equipe">Definir equipe</button>` : ""}
-        <button class="menu-linha-item menu-linha-excluir" data-acao="excluir">Excluir conta</button>
-      </div>
-    </details>`;
+    tdMenu.innerHTML = `<div style="display:flex; align-items:center; justify-content:flex-end; gap:2px;">
+      <details class="menu-linha">
+        <summary class="icone-acao-tabela" title="Editar conta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16.5 4.5a1.5 1.5 0 0 1 2 0l1 1a1.5 1.5 0 0 1 0 2L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/></svg>
+        </summary>
+        <div class="menu-linha-opcoes">
+          <button class="menu-linha-item" data-acao="bloqueio">${acaoBloqueio}</button>
+          ${outrasPermissoes.map((p) =>
+            `<button class="menu-linha-item eq-permissao-btn" data-permissao="${p}">Mudar para ${ROTULOS_PERMISSAO[p]}</button>`
+          ).join("")}
+          <button class="menu-linha-item" data-acao="redefinir-senha">Redefinir senha</button>
+          ${u.permissao === "trabalhador" ? `<button class="menu-linha-item" data-acao="definir-equipe">Definir equipe</button>` : ""}
+        </div>
+      </details>
+      <button class="icone-acao-tabela icone-acao-perigo" data-acao="excluir" title="Excluir conta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
+    </div>`;
 
     // Lógica 1: Bloquear / Desbloquear
     tdMenu.querySelector('[data-acao="bloqueio"]').addEventListener("click", async () => {
