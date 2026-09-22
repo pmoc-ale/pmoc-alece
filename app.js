@@ -5320,6 +5320,21 @@ if (btnAdicionarEquipamento) {
 }
 ligarSeletorDeArquivo("eqFotoInput", "btnEqFotoEscolher", "eqFotoNome", "Nenhuma selecionada");
 
+// Mede a altura de VERDADE da topbar (ela pode ter 1 ou 2 linhas,
+// dependendo da largura da tela/conta) e guarda numa variável CSS --
+// usado pra posicionar painéis fixos no celular (ver
+// .info-popover-painel-formulario) sem ficar escondido atrás dela,
+// sem precisar chutar um número fixo que quebra toda vez que ela muda
+// de altura.
+function atualizarAlturaTopbar() {
+  const topbar = document.querySelector(".topbar");
+  if (topbar) {
+    document.documentElement.style.setProperty("--altura-topbar", `${Math.ceil(topbar.getBoundingClientRect().height)}px`);
+  }
+}
+atualizarAlturaTopbar();
+window.addEventListener("resize", atualizarAlturaTopbar);
+
 // Botão flutuante (mobile): quando a lista de equipamentos já está longa,
 // evita ter que rolar a tela de volta lá pra cima só pra achar o formulário
 // de cadastro -- pula direto pra ele. O formulário agora fica escondido
@@ -5327,12 +5342,12 @@ ligarSeletorDeArquivo("eqFotoInput", "btnEqFotoEscolher", "eqFotoNome", "Nenhuma
 $("#fabAdicionarEquipamento")?.addEventListener("click", () => {
   const painel = $("#painelCadastrarEquipamento");
   if (painel) painel.open = true;
+  atualizarAlturaTopbar();
   // Rolava até o campo Patrimônio (scrollIntoView com block:"start"
   // manda o alvo pro topo bem da tela) -- só que a topbar é "sticky" e
   // fica por cima, cobrindo o título "Cadastro de equipamentos" (e às
-  // vezes até o próprio campo). Rola até o título em vez do campo, e o
-  // "scroll-margin-top" dele (ver CSS) garante um respiro por baixo da
-  // topbar. "preventScroll" no foco evita que o navegador role de novo
+  // vezes até o próprio campo). Rola até o título em vez do campo.
+  // "preventScroll" no foco evita que o navegador role de novo
   // sozinho e desfaça esse ajuste.
   $("#painelCadastrarEquipamentoTitulo")?.scrollIntoView({ behavior: "smooth", block: "start" });
   $("#eqPatrimonio")?.focus({ preventScroll: true });

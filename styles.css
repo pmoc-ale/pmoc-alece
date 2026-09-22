@@ -2103,24 +2103,22 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 
 /* Em tela estreita, "right: 0" (herdado de .info-popover-painel) corta o
    formulário pra fora da tela, já que o "⋯" que abre fica perto da borda
-   direita do card -- vira um painel fixo, centralizado na tela, em vez de
-   um dropdown ancorado no botão. */
+   direita do card -- vira um painel fixo, ancorado logo abaixo da
+   topbar, em vez de um dropdown ancorado no botão.
+   "--altura-topbar" é medida de VERDADE em JS (ver atualizarAlturaTopbar)
+   -- ela pode ter 1 ou 2 linhas dependendo da largura da tela, então um
+   número fixo chutado aqui sempre acabava errado (o painel cobria ou
+   ficava embaixo da topbar). O "px" no var()/calc() é só um valor de
+   reserva pro instante antes do JS medir a primeira vez. */
 @media (max-width: 768px) {
   .info-popover-painel-formulario {
     position: fixed;
     left: 12px;
     right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
+    top: calc(var(--altura-topbar, 96px) + 10px);
     width: auto;
     max-width: none;
-    /* O formulário de cadastro tem bastante campo -- com
-       "calc(100vh - 100px)" ele quase sempre bate nesse teto, e
-       centralizado (top:50%) isso empurrava o topo do painel (com o
-       título "Cadastro de equipamentos") pra debaixo da topbar, que é
-       "sticky" e fica sempre por cima. "-200px" garante uma folga boa
-       tanto em cima (embaixo da topbar) quanto embaixo. */
-    max-height: calc(100vh - 200px);
+    max-height: calc(100vh - var(--altura-topbar, 96px) - 30px);
   }
 }
 
