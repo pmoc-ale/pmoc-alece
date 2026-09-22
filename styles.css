@@ -1186,6 +1186,11 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
   color: var(--texto-suave);
 }
 
+/* Envolve os badges do dia -- "contents" no desktop não muda nada no
+   layout de hoje (os badges continuam filhos "diretos" pro CSS abaixo);
+   no celular (ver media query) isso vira uma fileira de bolinhas. */
+.cal-day-badges { display: contents; }
+
 .cal-day-badge {
   font-size: 10.5px;
   font-weight: 600;
@@ -2212,6 +2217,13 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   }
   .sidenav-icon { display: block; margin: 0 auto; width: 16px; height: 4px; border-radius: 2px; } /* Deixei as bolinhas parecendo "tracinhos" de app */
   #btnSair, #btnApagarCronograma { margin-top: 0 !important; }
+  /* No celular a barra de baixo já vem cheia (Hoje/Calendário/Dashboard/
+     Localização pro trabalhador, mais itens de Gestão pro admin) -- o
+     "Sair" sempre acabava sendo o item cortado na borda. Ele continua
+     funcionando pelo menu de perfil lá em cima (que só "clica" nesse
+     mesmo botão por trás, ver #btnSairTopbar) -- só esconde a duplicata
+     daqui de baixo, que não tem espaço sobrando. */
+  #btnSair { display: none; }
 
   /* Trabalhador só enxerga Calendário/Dashboard — sem isso, a barra
      inferior (o menu "estilo app", o mais fácil de alcançar com o
@@ -2219,11 +2231,11 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
      realmente usa ficavam escondidas na faixa de abas de cima. Troca:
      os atalhos aparecem embaixo, e a duplicata em cima some. */
   body.modo-trabalhador .sidenav-atalho-trabalhador { display: flex; }
-  body.modo-trabalhador .tabs .tab[data-view="hoje"],
-  body.modo-trabalhador .tabs .tab[data-view="calendar"],
-  body.modo-trabalhador .tabs .tab[data-view="dashboard"] {
-    display: none;
-  }
+  /* Pro trabalhador, TODA aba dessa faixa de cima já está escondida
+     (essas três por essa regra, Levantamento/Cronograma por já não
+     serem admin) -- sem esconder a faixa inteira, sobrava um vão vazio
+     no cabeçalho (reservado pra abas que nunca aparecem nesse papel). */
+  body.modo-trabalhador .tabs { display: none; }
 
   /* 4. FORMULÁRIOS E TOOLBARS EM 1 COLUNA */
   .grid-form { grid-template-columns: 1fr; }
@@ -2251,9 +2263,23 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .calendar-nav { justify-content: center; }
   .calendar-nav h2 { min-width: 0; font-size: 14px; }
   .cal-day-num { font-size: 11px; }
-  .cal-day-badge { padding: 4px 2px; justify-content: center; flex-wrap: wrap; }
-  .badge-predio { display: none; } /* Esconde o nome do prédio no celular pra não explodir a tela */
-  .badge-contagem { font-size: 9.5px; margin: 0 auto; text-align: center; white-space: normal; line-height: 1.1; }
+  /* No mês inteiro, o texto do badge ("SEDE -- 4 pendentes") não cabe
+     numa célula de 7 colunas no celular -- vira uma bolinha colorida
+     (a cor já diz "atrasado"/"pendente"/etc.), e tocar no dia continua
+     abrindo os detalhes embaixo do calendário, como já funcionava. */
+  .cal-day-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 2px; }
+  .cal-day-badge {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    min-height: 8px;
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
+    font-size: 0;
+    line-height: 0;
+    overflow: hidden;
+  }
   .cal-badge-tooltip { display: none !important; }
 
   /* 6. AJUSTES EM TABELAS PARA NÃO QUEBRAREM A TELA */

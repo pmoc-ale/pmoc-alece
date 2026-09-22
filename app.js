@@ -1025,7 +1025,14 @@ $all(".tab").forEach((btn) => {
     // foi clicado) -- necessário porque Calendário/Dashboard agora têm um
     // atalho duplicado na barra inferior pro trabalhador, e os dois
     // precisam mostrar o estado "ativo" em sincronia.
-    $all(`.tab[data-view="${btn.dataset.view}"]`).forEach((b) => b.classList.add("active"));
+    $all(`.tab[data-view="${btn.dataset.view}"]`).forEach((b) => {
+      b.classList.add("active");
+      // No celular, a faixa de abas/menu de baixo rola de lado -- sem
+      // isso, a aba que acabou de ficar ativa podia sobrar bem na borda
+      // (cortada visualmente pelo esfumaçado dos cantos, ver CSS), em
+      // vez de aparecer inteira e confortável de ler.
+      b.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    });
     $(`#view-${btn.dataset.view}`).classList.add("active");
     if (btn.dataset.view) {
       localStorage.setItem("ultimaAbaPMOC", btn.dataset.view);
@@ -4100,18 +4107,26 @@ function construirCelulaDia(iso, hojeISO, porData, datasVazias) {
   num.textContent = parseInt(iso.slice(8, 10), 10);
   el.appendChild(num);
 
+  // Agrupa os badges do dia num wrapper próprio -- no celular (ver CSS)
+  // isso vira uma fileira de bolinhas coloridas em vez do texto inteiro
+  // espremido na célula; no desktop "display:contents" não muda nada
+  // no layout de hoje.
+  const badgesWrap = document.createElement("div");
+  badgesWrap.className = "cal-day-badges";
+  el.appendChild(badgesWrap);
+
   if (ehDiaVazio) {
     const tag = document.createElement("div");
     tag.className = "cal-day-badge gap";
     tag.textContent = "Sem agenda";
-    el.appendChild(tag);
+    badgesWrap.appendChild(tag);
   }
 
   if (feriadoDoDia) {
     const tag = document.createElement("div");
     tag.className = "cal-day-badge holiday";
     tag.textContent = feriadoDoDia.label || (feriadoDoDia.tipo === "feriado" ? "Feriado" : "Férias");
-    el.appendChild(tag);
+    badgesWrap.appendChild(tag);
   }
 
   if (itensDoDia.length) {
@@ -4146,7 +4161,7 @@ function construirCelulaDia(iso, hojeISO, porData, datasVazias) {
         ocultarTooltipCalendario();
         selecionarDiaBadge(iso, predio, itensPredio);
       });
-      el.appendChild(badge);
+      badgesWrap.appendChild(badge);
     });
 
     el.addEventListener("click", () => selecionarDia(iso));
