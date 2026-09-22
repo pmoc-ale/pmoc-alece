@@ -2090,6 +2090,34 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 }
 .info-popover-painel p { margin: 0; }
 
+/* Botão de fechar (× no canto) -- injetado em todo ".info-popover-painel"
+   via JS (ver ligarFechoDosPopovers). Sem isso, no celular esse painel
+   vira um cartão fixo cobrindo boa parte da tela (ver
+   .info-popover-painel-formulario) e o "⋯" que abriu ele fica coberto
+   por baixo do próprio painel -- sem um jeito claro de fechar.
+   Fica DENTRO do padding (não "pra fora" da borda) porque a variante
+   de formulário tem "overflow-y:auto" -- um filho posicionado fora dos
+   limites do painel ficaria cortado por esse scroll interno. */
+.info-popover-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  color: var(--texto-suave);
+  font-size: 16px;
+  line-height: 1;
+  box-shadow: var(--sombra);
+  cursor: pointer;
+}
+.info-popover-close:hover { background: var(--azul-50); color: var(--texto); }
+
 /* Variante maior do popover "⋯", pra caber um formulário inteiro (ex:
    cadastro manual de equipamento) em vez de só um texto curto. */
 .info-popover-painel-formulario {

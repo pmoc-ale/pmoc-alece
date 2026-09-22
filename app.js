@@ -8272,6 +8272,39 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// Mesma ideia acima, mas pra ".info-popover" (usado no "⋯" de Cadastro
+// de equipamentos e nos avisos de Feriados) -- esses NUNCA tinham fechado
+// ao clicar fora. No celular, o de Cadastro de equipamentos vira um
+// cartão fixo cobrindo boa parte da tela (ver .info-popover-painel-
+// formulario), tampando o próprio "⋯" que abriu ele -- sem clicar fora
+// nem um botão de fechar dedicado (ver ligarFechoDosPopovers), não
+// tinha como sair.
+document.addEventListener("click", (e) => {
+  document.querySelectorAll("details.info-popover[open]").forEach((det) => {
+    if (!det.contains(e.target)) det.open = false;
+  });
+});
+
+// Injeta um "×" em cada painel de ".info-popover" (ver CSS
+// .info-popover-close) -- complementa o "clicar fora" acima com um
+// botão sempre visível e fácil de tocar.
+function ligarFechoDosPopovers() {
+  document.querySelectorAll(".info-popover-painel").forEach((painel) => {
+    if (painel.querySelector(".info-popover-close")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "info-popover-close";
+    btn.setAttribute("aria-label", "Fechar");
+    btn.textContent = "×";
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      painel.closest("details.info-popover").open = false;
+    });
+    painel.prepend(btn);
+  });
+}
+ligarFechoDosPopovers();
+
 // Posiciona o menu "⋯" na tela (position:fixed) toda vez que ele abre --
 // sem isso, dentro de uma tabela com rolagem lateral, o menu flutuava
 // "preso" e cortado pela borda da tabela em vez de aparecer por cima de
