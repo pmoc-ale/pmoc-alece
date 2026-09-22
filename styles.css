@@ -2243,6 +2243,12 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   /* 5. CALENDÁRIO ULTRA-COMPACTO */
   .cal-dow { font-size: 9px; padding: 4px 0; }
   .cal-day { min-height: 50px; padding: 2px; }
+  /* No desktop, o "min-width:190px" do h2 (ver regra acima) já dava
+     esse respiro simétrico dos dois lados; no celular ele soma até
+     ficar maior que a tela, então tira o min-width -- mas sem algo no
+     lugar, o grupo "‹ Mês › " inteiro fica junto na ESQUERDA da faixa
+     (a faixa toda que centraliza, não o texto dentro dela). */
+  .calendar-nav { justify-content: center; }
   .calendar-nav h2 { min-width: 0; font-size: 14px; }
   .cal-day-num { font-size: 11px; }
   .cal-day-badge { padding: 4px 2px; justify-content: center; flex-wrap: wrap; }
