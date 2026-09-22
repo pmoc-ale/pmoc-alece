@@ -712,12 +712,14 @@
 
     <!-- VIEW 10: CONFIGURAÇÕES -->
     <section class="view" id="view-config-site">
-      <div class="subtabs" style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--borda)">
-        <button class="subtab active" data-subview="cfg-geral">Sistema</button>
-        <button class="subtab" data-subview="cfg-usuarios">Usuários</button>
-        <button class="subtab" data-subview="cfg-auditoria">Auditoria</button>
-        <button class="subtab" data-subview="cfg-equipes">Equipes</button>
-        <button class="subtab" data-subview="cfg-avancado" style="color: var(--vermelho);">Apagar o Cronograma</button>
+      <div class="subtabs-linha">
+        <div class="subtabs">
+          <button class="subtab active" data-subview="cfg-geral">Sistema</button>
+          <button class="subtab" data-subview="cfg-usuarios">Usuários</button>
+          <button class="subtab" data-subview="cfg-auditoria">Auditoria</button>
+          <button class="subtab" data-subview="cfg-equipes">Equipes</button>
+        </div>
+        <button class="subtab subtab-perigo" data-subview="cfg-avancado">Apagar o Cronograma</button>
       </div>
 
       <div class="subview active" id="subview-cfg-geral">
