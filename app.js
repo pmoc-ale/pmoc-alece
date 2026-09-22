@@ -5341,7 +5341,15 @@ window.addEventListener("resize", atualizarAlturaTopbar);
 // atrás do "⋯" (painelCadastrarEquipamento), então precisa abrir antes.
 $("#fabAdicionarEquipamento")?.addEventListener("click", () => {
   const painel = $("#painelCadastrarEquipamento");
-  if (painel) painel.open = true;
+  if (!painel) return;
+  // Alterna: se já está aberto, o "+" fecha em vez de só ficar sem
+  // efeito -- assim ele funciona como um botão só (abre/fecha), sem
+  // precisar procurar o "×" ou clicar fora pra sair.
+  if (painel.open) {
+    painel.open = false;
+    return;
+  }
+  painel.open = true;
   atualizarAlturaTopbar();
   // Rolava até o campo Patrimônio (scrollIntoView com block:"start"
   // manda o alvo pro topo bem da tela) -- só que a topbar é "sticky" e
