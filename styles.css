@@ -2114,7 +2114,13 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     transform: translateY(-50%);
     width: auto;
     max-width: none;
-    max-height: calc(100vh - 100px);
+    /* O formulário de cadastro tem bastante campo -- com
+       "calc(100vh - 100px)" ele quase sempre bate nesse teto, e
+       centralizado (top:50%) isso empurrava o topo do painel (com o
+       título "Cadastro de equipamentos") pra debaixo da topbar, que é
+       "sticky" e fica sempre por cima. "-200px" garante uma folga boa
+       tanto em cima (embaixo da topbar) quanto embaixo. */
+    max-height: calc(100vh - 200px);
   }
 }
 

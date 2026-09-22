@@ -5327,8 +5327,15 @@ ligarSeletorDeArquivo("eqFotoInput", "btnEqFotoEscolher", "eqFotoNome", "Nenhuma
 $("#fabAdicionarEquipamento")?.addEventListener("click", () => {
   const painel = $("#painelCadastrarEquipamento");
   if (painel) painel.open = true;
-  $("#eqPatrimonio")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  $("#eqPatrimonio")?.focus();
+  // Rolava até o campo Patrimônio (scrollIntoView com block:"start"
+  // manda o alvo pro topo bem da tela) -- só que a topbar é "sticky" e
+  // fica por cima, cobrindo o título "Cadastro de equipamentos" (e às
+  // vezes até o próprio campo). Rola até o título em vez do campo, e o
+  // "scroll-margin-top" dele (ver CSS) garante um respiro por baixo da
+  // topbar. "preventScroll" no foco evita que o navegador role de novo
+  // sozinho e desfaça esse ajuste.
+  $("#painelCadastrarEquipamentoTitulo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  $("#eqPatrimonio")?.focus({ preventScroll: true });
 });
 
 $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
