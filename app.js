@@ -173,6 +173,32 @@ const URL_UPLOAD_FOTO = "https://fotos.pmoc-alece-sistemas.workers.dev";
 // pra configurar (precisa gerar uma chave uma vez só, de graça).
 const URL_REDEFINIR_SENHA = "https://redefinir-senha.pmoc-alece-sistemas.workers.dev";
 
+// Perguntas de segurança pra recuperação de senha sem precisar de admin
+// (ver "Minha conta" pra cadastrar, e "Esqueci minha senha" pra usar). Uma
+// lista fechada em vez de pergunta livre pra evitar erro de digitação na
+// hora de recuperar (a pessoa escolhe de novo a MESMA da lista, só digita
+// a resposta) -- ver abrirModalRecuperarSenha().
+const PERGUNTAS_SEGURANCA = [
+  "Nome da sua mãe",
+  "Cidade onde você nasceu",
+  "Nome do seu primeiro animal de estimação",
+  "Nome da primeira escola em que você estudou",
+  "Seu prato de comida favorito",
+  "Apelido de infância",
+];
+
+// Nunca guarda a resposta em texto puro no Firestore -- só o hash (SHA-256
+// de cima da mesma normalização de normalizarBusca(), sem maiúscula/
+// minúscula, espaço nas pontas ou acento, pra "São Paulo" e "sao paulo"
+// contarem como a mesma resposta). O Worker de autosserviço
+// (worker-redefinir-senha.js) faz o MESMO cálculo pra conferir -- se um
+// mudar sem o outro, ninguém mais consegue recuperar a senha.
+async function hashRespostaSeguranca(resposta) {
+  const bytes = new TextEncoder().encode(normalizarBusca(resposta));
+  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // Pede a localização com um prazo curto -- se o navegador/celular não tem
 // GPS, a pessoa nega a permissão, ou demora demais, segue sem coordenada
 // em vez de travar o envio da foto por causa disso (só a data/hora nunca
@@ -2833,8 +2859,93 @@ $("#btnMostrarSenha")?.addEventListener("click", () => {
 });
 
 $("#btnEsqueciSenha")?.addEventListener("click", () => {
-  toast("Ainda não tem recuperação automática -- peça pra quem administra o sistema pra te ajudar com a senha.");
+  abrirModalRecuperarSenha();
 });
+
+// Recuperação de senha sem precisar de admin -- só funciona pra quem já
+// cadastrou uma pergunta de segurança em "Minha conta" (ver
+// salvarMinhaConta). Reaproveita o mesmo modal genérico do promptModal()
+// (overlay/card já existentes), só que com vários campos em vez de um só,
+// por isso não usa a função promptModal diretamente.
+function abrirModalRecuperarSenha() {
+  const overlay = $("#modalConfirmOverlay");
+  const card = overlay.querySelector(".modal-confirm-card");
+  card.classList.remove("perigo");
+  $("#modalConfirmTitulo").textContent = "Recuperar senha";
+  $("#modalConfirmCorpo").innerHTML = `
+    <p class="muted" style="margin-top:0">Responda a pergunta de segurança que você cadastrou em "Minha conta" pra definir uma senha nova sozinho(a), sem precisar de admin.</p>
+    <label class="modal-prompt-label" for="recUsuario">Usuário</label>
+    <input type="text" id="recUsuario" placeholder="ex: joana.feira" autocomplete="username">
+    <label class="modal-prompt-label" for="recPergunta" style="margin-top:10px">Pergunta de segurança</label>
+    <select id="recPergunta">
+      <option value="">Selecione...</option>
+      ${PERGUNTAS_SEGURANCA.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("")}
+    </select>
+    <label class="modal-prompt-label" for="recResposta" style="margin-top:10px">Resposta</label>
+    <input type="text" id="recResposta" autocomplete="off">
+    <label class="modal-prompt-label" for="recNovaSenha" style="margin-top:10px">Nova senha (mínimo 6 caracteres)</label>
+    <input type="password" id="recNovaSenha" autocomplete="new-password">
+    <label class="modal-prompt-label" for="recConfirmarSenha" style="margin-top:10px">Confirmar nova senha</label>
+    <input type="password" id="recConfirmarSenha" autocomplete="new-password">
+    <p class="muted" id="recErro" style="color:var(--vermelho); min-height:18px; margin-top:8px"></p>
+  `;
+  const btnConfirmar = $("#modalConfirmConfirmar");
+  const btnCancelar = $("#modalConfirmCancelar");
+  const textoOriginalBtn = "Redefinir senha";
+  btnConfirmar.textContent = textoOriginalBtn;
+  btnConfirmar.className = "btn primary";
+  btnCancelar.textContent = "Cancelar";
+  overlay.hidden = false;
+  $("#recUsuario").focus();
+
+  function limpar() {
+    overlay.hidden = true;
+    btnConfirmar.removeEventListener("click", aoConfirmar);
+    btnCancelar.removeEventListener("click", aoCancelar);
+    overlay.removeEventListener("click", aoClicarFora);
+    document.removeEventListener("keydown", aoTeclar);
+  }
+  function aoCancelar() { limpar(); }
+  function aoClicarFora(ev) { if (ev.target === overlay) aoCancelar(); }
+  function aoTeclar(ev) { if (ev.key === "Escape") aoCancelar(); }
+
+  async function aoConfirmar() {
+    const erroEl = $("#recErro");
+    erroEl.textContent = "";
+    const usuario = $("#recUsuario").value.trim();
+    const pergunta = $("#recPergunta").value;
+    const resposta = $("#recResposta").value;
+    const novaSenha = $("#recNovaSenha").value;
+    const confirmarSenha = $("#recConfirmarSenha").value;
+    if (!usuario || !pergunta || !resposta) { erroEl.textContent = "Preencha usuário, pergunta e resposta."; return; }
+    if (novaSenha.length < 6) { erroEl.textContent = "A nova senha precisa ter pelo menos 6 caracteres."; return; }
+    if (novaSenha !== confirmarSenha) { erroEl.textContent = "A confirmação não bate com a nova senha."; return; }
+
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = "Confirmando...";
+    try {
+      const resp = await fetch(URL_REDEFINIR_SENHA, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modo: "autoservico", usuario, pergunta, resposta, novaSenha }),
+      });
+      const dados = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
+      toast("Senha redefinida! Já pode entrar com a senha nova.");
+      limpar();
+    } catch (err) {
+      erroEl.textContent = err.message;
+    } finally {
+      btnConfirmar.disabled = false;
+      btnConfirmar.textContent = textoOriginalBtn;
+    }
+  }
+
+  btnConfirmar.addEventListener("click", aoConfirmar);
+  btnCancelar.addEventListener("click", aoCancelar);
+  overlay.addEventListener("click", aoClicarFora);
+  document.addEventListener("keydown", aoTeclar);
+}
 
 $("#btnAuthCriarConta")?.addEventListener("click", () => {
   modoCadastro = !modoCadastro;
@@ -2908,6 +3019,17 @@ function abrirDrawerConta() {
   $("#contaSenhaAtual").value = "";
   $("#contaNovaSenha").value = "";
   $("#contaConfirmarSenha").value = "";
+  const seletorPergunta = $("#contaPerguntaSeguranca");
+  if (seletorPergunta) {
+    seletorPergunta.innerHTML = `<option value="">Selecione...</option>${PERGUNTAS_SEGURANCA.map(
+      (p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`
+    ).join("")}`;
+    seletorPergunta.value = dados.perguntaSeguranca || "";
+  }
+  // A resposta nunca volta pro campo (só o hash fica guardado, e nem
+  // seria pra mostrar de volta mesmo se desse) -- fica em branco, e
+  // salvarMinhaConta() só mexe nela se a pessoa digitar algo novo.
+  $("#contaRespostaSeguranca").value = "";
   $("#contaErro").textContent = "";
   _contaFotoArquivo = null;
   $("#contaAvatarPreview").innerHTML = dados.fotoUrl
@@ -2964,8 +3086,18 @@ async function salvarMinhaConta() {
   const senhaAtual = $("#contaSenhaAtual").value;
   const novaSenha = $("#contaNovaSenha").value;
   const confirmarSenha = $("#contaConfirmarSenha").value;
+  const perguntaSeguranca = $("#contaPerguntaSeguranca").value;
+  const respostaSeguranca = $("#contaRespostaSeguranca").value.trim();
 
   if (!usuarioNovo) { erroEl.textContent = "O usuário não pode ficar em branco."; return; }
+  // Resposta em branco = "manter a atual" (ver abrirDrawerConta, esse
+  // campo nunca vem preenchido de volta) -- só valida quando a pessoa
+  // decidiu mexer numa das duas partes da pergunta de segurança.
+  if (respostaSeguranca && !perguntaSeguranca) { erroEl.textContent = "Escolha uma pergunta de segurança pra ir com essa resposta."; return; }
+  if (perguntaSeguranca && !respostaSeguranca && !ESTADO.meuUsuarioDoc?.respostaSegurancaHash) {
+    erroEl.textContent = "Digite uma resposta pra essa pergunta de segurança.";
+    return;
+  }
 
   const usuarioAtual = ESTADO.meuUsuarioDoc?.usuario || ESTADO.usuarioNome || "";
   const nomeAntigo = ESTADO.meuUsuarioDoc?.nome || "";
@@ -3009,6 +3141,12 @@ async function salvarMinhaConta() {
     const campos = { nome };
     if (usuarioMudou) campos.usuario = usuarioNovo;
     if (fotoUrl) campos.fotoUrl = fotoUrl;
+    if (respostaSeguranca) {
+      // Só grava se digitou uma resposta nova -- em branco significa
+      // "manter a atual" (ver validação acima), então nem entra aqui.
+      campos.perguntaSeguranca = perguntaSeguranca;
+      campos.respostaSegurancaHash = await hashRespostaSeguranca(respostaSeguranca);
+    }
     await updateDoc(doc(db, "usuarios", auth.currentUser.uid), campos);
 
     ESTADO.meuUsuarioDoc = { ...ESTADO.meuUsuarioDoc, ...campos };
@@ -3021,6 +3159,7 @@ async function salvarMinhaConta() {
     if (nome !== nomeAntigo) mudancas.push(`nome para "${nome || "(vazio)"}"`);
     if (usuarioMudou) mudancas.push(`usuário de "${usuarioAtual}" para "${usuarioNovo}"`);
     if (querTrocarSenha) mudancas.push("senha");
+    if (respostaSeguranca) mudancas.push("pergunta de segurança");
     if (_contaFotoArquivo) mudancas.push("foto de perfil");
     if (mudancas.length) {
       await registrarAuditoria("Atualizar minha conta", `Alterou ${mudancas.join(", ")}.`);

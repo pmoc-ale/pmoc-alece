@@ -1,14 +1,19 @@
-// Worker Cloudflare — deixa um ADMIN redefinir a senha de outra pessoa
-// (ex: alguém esqueceu a senha e não lembra a atual pra trocar sozinho em
-// "Minha conta").
+// Worker Cloudflare — duas formas de redefinir a senha de uma conta:
+//
+// 1. ADMIN redefine a senha de outra pessoa (tela Usuários, "⋯" >
+//    Redefinir senha) -- precisa estar logado como admin.
+// 2. AUTOSSERVIÇO: a própria pessoa, ainda deslogada (esqueceu a senha),
+//    respondendo a pergunta de segurança que ela mesma cadastrou em
+//    "Minha conta" -- ver botão "Esqueci minha senha" na tela de login.
 //
 // Por que isso precisa de um Worker: o Firebase (do jeito que o PMOC usa,
-// só no navegador) só deixa a PRÓPRIA pessoa trocar sua senha -- ninguém
-// consegue trocar a senha de outra conta com o SDK normal, nem sendo
-// admin. Pra isso é preciso uma "conta de serviço" do Google (bem
-// diferente de uma conta de usuário do PMOC), que só funciona em um
-// servidor -- e como o PMOC não tem servidor próprio, esse Worker faz
-// esse papel, do mesmo jeito que o worker.js já faz pra assinar as fotos.
+// só no navegador) só deixa a PRÓPRIA pessoa trocar sua senha, e só
+// estando logada -- ninguém consegue trocar a senha de outra conta com o
+// SDK normal, nem sendo admin, e muito menos deslogado. Pra isso é
+// preciso uma "conta de serviço" do Google (bem diferente de uma conta de
+// usuário do PMOC), que só funciona em um servidor -- e como o PMOC não
+// tem servidor próprio, esse Worker faz esse papel, do mesmo jeito que o
+// worker.js já faz pra assinar as fotos.
 //
 // Isso NÃO precisa de plano pago nenhum (nem do Firebase, nem do Google
 // Cloud, nem do Cloudflare) -- só de gerar uma chave, uma vez.
@@ -36,6 +41,12 @@
 //      GOOGLE_SA_PRIVATE_KEY
 //      FIREBASE_WEB_API_KEY   (o mesmo já usado no worker.js)
 //      FIREBASE_PROJECT_ID    (idem, = "pcm-alece")
+//
+// A conta de serviço já baixada no passo 1 também é usada agora pra LER
+// a coleção "usuarios" inteira (autosserviço precisa achar a conta pelo
+// usuário digitado, sem estar logado) -- o papel padrão que o Firebase dá
+// a essa conta ("Firebase Admin SDK Administrator Service Agent") já
+// inclui isso, não precisa configurar nada a mais no Google Cloud.
 //
 // ORIGEM_PERMITIDA: troque se o PMOC mudar de endereço de novo, pra só
 // esse site poder chamar isso.
@@ -123,7 +134,10 @@ async function obterTokenDeAcessoGoogle(env) {
   const cabecalho = { alg: "RS256", typ: "JWT" };
   const carga = {
     iss: env.GOOGLE_SA_EMAIL,
-    scope: "https://www.googleapis.com/auth/identitytoolkit",
+    // Os dois escopos juntos num token só: identitytoolkit pra trocar a
+    // senha, datastore pra achar a conta pelo usuário digitado (autosserviço,
+    // ver buscarUsuarioPorNomeDeUsuario) sem precisar de outro JWT.
+    scope: "https://www.googleapis.com/auth/identitytoolkit https://www.googleapis.com/auth/datastore",
     aud: "https://oauth2.googleapis.com/token",
     iat: agora,
     exp: agora + 3600,
@@ -150,6 +164,98 @@ async function obterTokenDeAcessoGoogle(env) {
   return dados.access_token;
 }
 
+// MESMA normalização usada no app (ver hashRespostaSeguranca em app.js) --
+// se uma virar diferente da outra, a resposta certa nunca vai bater.
+// Tira maiúscula/minúscula, espaço nas pontas e acento (NFD + remove os
+// caracteres de acentuação que sobram), pra "São Paulo" e "sao paulo"
+// contarem como a mesma resposta.
+function normalizarResposta(resposta) {
+  return resposta.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+async function hashResposta(resposta) {
+  const bytes = new TextEncoder().encode(normalizarResposta(resposta));
+  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Acha o documento de "usuarios" pelo campo "usuario" (não pelo UID, que a
+// pessoa não sabe de cor) -- só dá pra fazer isso com o token da CONTA DE
+// SERVIÇO (acesso de admin), porque a regra do Firestore exige estar
+// logado pra ler essa coleção, e quem esqueceu a senha não está.
+async function buscarUsuarioPorNomeDeUsuario(usuario, tokenDeAcesso, env) {
+  const resp = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenDeAcesso}` },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: "usuarios" }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: "usuario" },
+              op: "EQUAL",
+              value: { stringValue: usuario },
+            },
+          },
+          limit: 1,
+        },
+      }),
+    }
+  );
+  if (!resp.ok) return null;
+  const linhas = await resp.json();
+  const encontrada = linhas.find((l) => l.document);
+  if (!encontrada) return null;
+  const nomeDocumento = encontrada.document.name; // .../documents/usuarios/{uid}
+  const uid = nomeDocumento.slice(nomeDocumento.lastIndexOf("/") + 1);
+  const campos = encontrada.document.fields || {};
+  return {
+    uid,
+    bloqueado: campos.bloqueado?.booleanValue === true,
+    perguntaSeguranca: campos.perguntaSeguranca?.stringValue || "",
+    respostaSegurancaHash: campos.respostaSegurancaHash?.stringValue || "",
+  };
+}
+
+// Mensagem igual pro usuário errado E pra resposta errada -- de propósito,
+// pra ninguém conseguir descobrir se um nome de usuário existe só de ir
+// testando aqui.
+const ERRO_AUTOSSERVICO = "Não foi possível confirmar usuário, pergunta e resposta. Confira e tente de novo.";
+
+async function tratarAutosservico(corpo, env) {
+  const usuario = String(corpo.usuario || "").trim().toLowerCase();
+  const pergunta = String(corpo.pergunta || "");
+  const resposta = String(corpo.resposta || "");
+  const novaSenha = String(corpo.novaSenha || "");
+  if (!usuario || !pergunta || !resposta) return respostaJson({ erro: "Preencha usuário, pergunta e resposta." }, 400);
+  if (novaSenha.length < 6) return respostaJson({ erro: "A nova senha precisa ter pelo menos 6 caracteres." }, 400);
+
+  try {
+    const tokenDeAcesso = await obterTokenDeAcessoGoogle(env);
+    const conta = await buscarUsuarioPorNomeDeUsuario(usuario, tokenDeAcesso, env);
+    if (!conta) return respostaJson({ erro: ERRO_AUTOSSERVICO }, 401);
+    if (conta.bloqueado) return respostaJson({ erro: "Essa conta está bloqueada. Fale com quem administra o sistema." }, 403);
+    if (!conta.perguntaSeguranca || !conta.respostaSegurancaHash) {
+      return respostaJson({ erro: "Essa conta ainda não tem pergunta de segurança cadastrada. Peça pra quem administra o sistema redefinir sua senha." }, 401);
+    }
+    const respostaBate = pergunta === conta.perguntaSeguranca && (await hashResposta(resposta)) === conta.respostaSegurancaHash;
+    if (!respostaBate) return respostaJson({ erro: ERRO_AUTOSSERVICO }, 401);
+
+    const resp = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenDeAcesso}` },
+      body: JSON.stringify({ localId: conta.uid, password: novaSenha, returnSecureToken: false }),
+    });
+    const dados = await resp.json();
+    if (!resp.ok) return respostaJson({ erro: dados.error?.message || "Falha ao redefinir a senha." }, 500);
+    return respostaJson({ ok: true });
+  } catch (err) {
+    return respostaJson({ erro: "Erro interno: " + err.message }, 500);
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -157,6 +263,21 @@ export default {
     }
     if (request.method !== "POST") {
       return respostaJson({ erro: "Método não permitido." }, 405);
+    }
+
+    let corpo;
+    try {
+      corpo = await request.json();
+    } catch {
+      return respostaJson({ erro: "Corpo da requisição inválido." }, 400);
+    }
+
+    // Autosserviço (tela de login, "Esqueci minha senha") -- de propósito
+    // SEM exigir Authorization: quem esqueceu a senha, por definição, não
+    // está logado. A identidade é confirmada pela pergunta de segurança
+    // dentro de tratarAutosservico, não por um token.
+    if (corpo.modo === "autoservico") {
+      return tratarAutosservico(corpo, env);
     }
 
     const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
@@ -168,12 +289,6 @@ export default {
     const ehAdmin = await souAdminDeVerdade(resultadoLogin.uid, idToken, env);
     if (!ehAdmin) return respostaJson({ erro: "Só administradores podem redefinir a senha de outra pessoa." }, 403);
 
-    let corpo;
-    try {
-      corpo = await request.json();
-    } catch {
-      return respostaJson({ erro: "Corpo da requisição inválido." }, 400);
-    }
     const uidAlvo = String(corpo.uid || "");
     const novaSenha = String(corpo.novaSenha || "");
     if (!uidAlvo) return respostaJson({ erro: "Faltou dizer de quem é a conta." }, 400);

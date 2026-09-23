@@ -887,6 +887,10 @@
     <label>Senha atual<input type="password" id="contaSenhaAtual" placeholder="Só necessária pra trocar usuário/senha"></label>
     <label>Nova senha (opcional)<input type="password" id="contaNovaSenha" placeholder="Deixe em branco pra manter a mesma"></label>
     <label>Confirmar nova senha<input type="password" id="contaConfirmarSenha"></label>
+
+    <p class="muted" style="margin-top:var(--sp-4)">Cadastre uma pergunta de segurança pra conseguir redefinir sua própria senha sozinho(a) se esquecer, sem precisar de admin (botão "Esqueci minha senha" na tela de login).</p>
+    <label>Pergunta de segurança<select id="contaPerguntaSeguranca"></select></label>
+    <label>Resposta<input type="text" id="contaRespostaSeguranca" placeholder="Deixe em branco pra manter a atual" autocomplete="off"></label>
     <p class="muted" id="contaErro" style="color:var(--vermelho); min-height:18px"></p>
     <button class="btn primary" id="btnSalvarConta" style="width:100%; margin-top:6px">Salvar alterações</button>
   </div>
@@ -906,7 +910,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=104"></script>
+<script type="module" src="app.js?v=105"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
