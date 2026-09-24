@@ -9364,8 +9364,13 @@ async function montarPlanilhaOrganizada(itens) {
   });
 
   r += 1;
+  // Agrupa por setorPCM -- o título tinha ficado "por prioridade" por
+  // engano (copiado de outra tabela), mas quem lê é "Categoria" com os
+  // nomes de setor ("1 - Presidência", "5 - Plenário" etc.), não a
+  // prioridade numérica de cada equipamento (essa é outra coluna, em
+  // "prioridadeSetor", que nem entra nessa contagem).
   const contagemSetor = [...contarPor(itens, "setorPCM").entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-  escreverTabelaContagem(ws1, 1, r, "Equipamentos por prioridade", contagemSetor);
+  escreverTabelaContagem(ws1, 1, r, "Equipamentos por setor", contagemSetor);
 
   ws1.getColumn(1).width = 48;
   ws1.getColumn(2).width = 20;
@@ -9418,7 +9423,7 @@ async function montarPlanilhaOrganizada(itens) {
   const contagemPiso = [...contarPor(itens, "pisoPCM").entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([v, qtd]) => [rotuloPiso(v), qtd]);
-  const [, uSetor] = escreverTabelaContagem(ws3, 1, r3, "Equipamentos por prioridade", contagemSetor);
+  const [, uSetor] = escreverTabelaContagem(ws3, 1, r3, "Equipamentos por setor", contagemSetor);
   let proxima = uSetor + 3;
   const [, uPiso] = escreverTabelaContagem(ws3, 1, proxima, "Equipamentos por andar", contagemPiso);
 
