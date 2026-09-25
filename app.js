@@ -9503,21 +9503,6 @@ if (btnExportarPDF) {
   });
 }
 
-const btnExportarPMOC = $("#btnExportarPMOC");
-if (btnExportarPMOC) {
-  btnExportarPMOC.addEventListener("click", () => {
-    if (!ESTADO.equipamentos.length) {
-      toast("Gere o cronograma primeiro.");
-      return;
-    }
-    if (!ESTADO.configSite.responsavelTecnico) {
-      toast("Preencha o responsável técnico em Configurações > Sistema antes de gerar esse relatório.");
-    }
-    toast("Gerando relatório PMOC...");
-    baixarRelatorioAnexoI(ESTADO.equipamentos, ESTADO.ordens, ESTADO.configSite, numeroDoCiclo(ESTADO.cicloAtual));
-  });
-}
-
 const btnApagarCronograma = $("#btnApagarCronograma");
 if (btnApagarCronograma) {
   btnApagarCronograma.addEventListener("click", apagarCronograma);
