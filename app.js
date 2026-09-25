@@ -173,6 +173,14 @@ const URL_UPLOAD_FOTO = "https://fotos.pmoc-alece-sistemas.workers.dev";
 // pra configurar (precisa gerar uma chave uma vez só, de graça).
 const URL_REDEFINIR_SENHA = "https://redefinir-senha.pmoc-alece-sistemas.workers.dev";
 
+// Chave PÚBLICA do "VAPID" -- identifica o PMOC ALECE pros serviços de push
+// do navegador (Google/Mozilla/etc.) na hora de ativar o aviso de atraso
+// direto no computador (ver ativarNotificacoesPush). É pública de propósito
+// (só a privada, que fica só no Worker que manda os avisos, é secreta) --
+// ver cloudflare-worker/worker-aviso-atrasados.js pra configurar o par
+// completo.
+const VAPID_PUBLIC_KEY = "BNJNQftBQZx_C21HrBitwkgEZRB4DTTbT75wRJEu48966Tb2tQ7BuSW7rBZaFmAKSlE9_qG5qd07rRQ6I-41dio";
+
 // Perguntas de segurança pra recuperação de senha sem precisar de admin
 // (ver "Minha conta" pra cadastrar, e "Esqueci minha senha" pra usar). Uma
 // lista fechada em vez de pergunta livre pra evitar erro de digitação na
@@ -3037,6 +3045,7 @@ function abrirDrawerConta() {
     : ICONE_AVATAR_PADRAO;
   $("#drawerConta").hidden = false;
   $("#drawerContaOverlay").hidden = false;
+  atualizarStatusPush();
 }
 
 function fecharDrawerConta() {
@@ -3052,6 +3061,104 @@ $("#drawerContaFechar")?.addEventListener("click", fecharDrawerConta);
 $("#drawerContaOverlay")?.addEventListener("click", fecharDrawerConta);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("#drawerConta")?.hidden) fecharDrawerConta();
+});
+
+// ------------------------------------------------------------------
+// Aviso de atraso direto no computador (Web Push) -- funciona mesmo com
+// o navegador fechado, porque quem manda é o Worker
+// worker-aviso-atrasados.js (o mesmo que já manda o e-mail diário), não
+// o app.js. Aqui só cuida de pedir permissão e guardar a "inscrição" no
+// Firestore; o Worker lê essas inscrições na hora de avisar.
+// ------------------------------------------------------------------
+
+// A applicationServerKey do pushManager.subscribe() precisa ser um
+// Uint8Array, não a string base64url -- conversão padrão (a mesma usada
+// em praticamente todo tutorial de Web Push).
+function urlBase64ParaUint8Array(base64url) {
+  const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
+  const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const bruto = atob(base64);
+  return Uint8Array.from([...bruto].map((c) => c.charCodeAt(0)));
+}
+
+async function assinaturaPushAtual() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  const registro = await navigator.serviceWorker.ready;
+  return registro.pushManager.getSubscription();
+}
+
+async function atualizarStatusPush() {
+  const btn = $("#btnTogglePush");
+  const status = $("#pushStatus");
+  if (!btn || !status) return;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    btn.hidden = true;
+    status.textContent = "Esse navegador não suporta esse tipo de aviso.";
+    return;
+  }
+  const assinatura = await assinaturaPushAtual();
+  if (assinatura) {
+    btn.textContent = "Desativar avisos neste computador";
+    status.textContent = "Ativado neste computador.";
+  } else {
+    btn.textContent = "Ativar avisos de atraso neste computador";
+    status.textContent = "";
+  }
+}
+
+async function ativarNotificacoesPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    toast("Esse navegador não suporta esse tipo de aviso.");
+    return;
+  }
+  const permissao = await Notification.requestPermission();
+  if (permissao !== "granted") {
+    toast("Permissão de notificação negada -- não dá pra ativar sem ela.");
+    return;
+  }
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    const assinatura = await registro.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ParaUint8Array(VAPID_PUBLIC_KEY),
+    });
+    const json = assinatura.toJSON();
+    await setDoc(doc(db, "pushSubscriptions", auth.currentUser.uid), {
+      endpoint: json.endpoint,
+      keys: json.keys,
+      usuario: ESTADO.usuarioNome || "",
+      atualizadoEm: new Date().toISOString(),
+    });
+    toast("Avisos ativados neste computador.");
+  } catch (err) {
+    console.error(err);
+    toast("Não consegui ativar: " + err.message);
+  } finally {
+    atualizarStatusPush();
+  }
+}
+
+async function desativarNotificacoesPush() {
+  try {
+    const assinatura = await assinaturaPushAtual();
+    if (assinatura) await assinatura.unsubscribe();
+    if (auth.currentUser) await deleteDoc(doc(db, "pushSubscriptions", auth.currentUser.uid)).catch(() => {});
+    toast("Avisos desativados neste computador.");
+  } catch (err) {
+    console.error(err);
+    toast("Não consegui desativar: " + err.message);
+  } finally {
+    atualizarStatusPush();
+  }
+}
+
+$("#btnTogglePush")?.addEventListener("click", async () => {
+  const btn = $("#btnTogglePush");
+  btn.disabled = true;
+  const assinatura = await assinaturaPushAtual();
+  if (assinatura) await desativarNotificacoesPush();
+  else await ativarNotificacoesPush();
+  btn.disabled = false;
 });
 
 $("#btnContaFotoEscolher")?.addEventListener("click", (e) => {

@@ -890,6 +890,11 @@
     <p class="muted" style="margin-top:var(--sp-4)">Cadastre uma pergunta de segurança pra conseguir redefinir sua própria senha sozinho(a) se esquecer, sem precisar de admin (botão "Esqueci minha senha" na tela de login).</p>
     <label>Pergunta de segurança<select id="contaPerguntaSeguranca"></select></label>
     <label>Resposta<input type="text" id="contaRespostaSeguranca" placeholder="Deixe em branco pra manter a atual" autocomplete="off"></label>
+
+    <p class="muted" style="margin-top:var(--sp-4)">Receba um aviso direto neste computador quando tiver aparelho atrasado -- chega mesmo com o navegador fechado.</p>
+    <button type="button" class="btn secondary" id="btnTogglePush" style="width:100%">Ativar avisos de atraso neste computador</button>
+    <p class="muted" id="pushStatus" style="min-height:18px"></p>
+
     <p class="muted" id="contaErro" style="color:var(--vermelho); min-height:18px"></p>
     <button class="btn primary" id="btnSalvarConta" style="width:100%; margin-top:6px">Salvar alterações</button>
   </div>
@@ -909,7 +914,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=108"></script>
+<script type="module" src="app.js?v=109"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

@@ -6,7 +6,7 @@
 // acontece sozinho -- toda vez que tem sinal, o site busca a versão nova
 // na rede antes de qualquer cache, ver estratégia "rede primeiro" abaixo
 // -- isso aqui só limpa versões antigas que sobraram no aparelho).
-const CACHE_VERSAO = "pmoc-alece-v56";
+const CACHE_VERSAO = "pmoc-alece-v57";
 
 // SEM os "?v=NN" de cache-busting -- index.html/app.js mudam esse número
 // toda vez que o código muda, e escrever o número aqui de novo (fácil de
@@ -121,4 +121,40 @@ self.addEventListener("fetch", (event) => {
   // externo etc.) passa direto, sem mexer -- não é essencial pro
   // técnico continuar marcando preventiva numa sala sem sinal, e mexer
   // nelas só aumentaria o risco sem necessidade.
+});
+
+// Notificação push de aparelho atrasado (ver ativarNotificacoesPush em
+// app.js e o envio no Worker de avisos) -- chega aqui mesmo com o site
+// fechado, porque quem entrega é o navegador/sistema operacional, não a
+// aba. Se o payload não vier em JSON por algum motivo, mostra um aviso
+// genérico em vez de deixar a notificação sumir sem aparecer nada.
+self.addEventListener("push", (event) => {
+  let dados = { titulo: "PMOC ALECE", corpo: "Você tem aparelho atrasado." };
+  try {
+    if (event.data) dados = { ...dados, ...event.data.json() };
+  } catch (err) {
+    console.warn("Notificação push com payload inesperado:", err);
+  }
+  event.waitUntil(
+    self.registration.showNotification(dados.titulo, {
+      body: dados.corpo,
+      icon: "./assets/icon-192.png",
+      badge: "./assets/icon-192.png",
+      tag: "pmoc-atrasados",
+    })
+  );
+});
+
+// Clicar na notificação foca uma aba já aberta do sistema em vez de abrir
+// uma segunda -- só abre uma nova se não tiver nenhuma.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window" }).then((janelas) => {
+      for (const janela of janelas) {
+        if (janela.url.includes(self.location.origin) && "focus" in janela) return janela.focus();
+      }
+      return self.clients.openWindow("./");
+    })
+  );
 });

@@ -78,6 +78,16 @@ service cloud.firestore {
       allow create, update: if souTrabalhador();
     }
 
+    // Inscrição de notificação push do navegador (ver ativarNotificacoesPush
+    // em app.js) -- um documento por pessoa (id = o próprio uid), só ela
+    // pode criar/atualizar/apagar a própria. A leitura já cai na regra
+    // genérica lá embaixo (qualquer autenticado não bloqueado) -- é assim
+    // que o Worker de avisos (que loga como um usuário "trabalhador" comum,
+    // não como admin) consegue ler todas as inscrições pra mandar os avisos.
+    match /pushSubscriptions/{uid} {
+      allow create, update, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
     // A regra genérica lá embaixo só deixa ADMIN escrever -- sem essa regra
     // própria, qualquer pessoa não-admin mudando o próprio nome/usuário/
     // senha em "Minha conta" teria o registro de auditoria negado (a ação
