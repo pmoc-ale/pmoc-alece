@@ -5553,7 +5553,7 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Dados Técnicos");
-    sheet.views = [{ showGridLines: false, state: "frozen", ySplit: 2 }];
+    sheet.views = [{ showGridLines: false, state: "frozen", ySplit: 7 }];
 
     // Definindo as colunas
     sheet.columns = [
@@ -5582,18 +5582,26 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
       { key: "evapFio", width: 16 },
     ];
 
-    // LINHA 1: Super-Cabeçalhos (Mesclados)
-    sheet.mergeCells('A1:G1');
-    sheet.mergeCells('H1:N1');
-    sheet.mergeCells('O1:T1');
+    // Mesmo cabeçalho institucional das outras planilhas (Baixar planilha)
+    // e dos relatórios em PDF -- ocupa as linhas 1-5, por isso o
+    // super-cabeçalho "DADOS GERAIS DA MÁQUINA" abaixo começa na linha 6
+    // agora (antes começava direto na 1, sem cabeçalho nenhum -- esse era
+    // o único dos 4 exports do sistema sem essa identificação).
+    const logoId = registrarLogoAlece(workbook);
+    adicionarCabecalho(sheet, 20, logoId);
 
-    const r1 = sheet.getRow(1);
+    // LINHA 6: Super-Cabeçalhos (Mesclados)
+    sheet.mergeCells('A6:G6');
+    sheet.mergeCells('H6:N6');
+    sheet.mergeCells('O6:T6');
+
+    const r1 = sheet.getRow(6);
     r1.height = 25;
     r1.getCell(1).value = "DADOS GERAIS DA MÁQUINA";
     r1.getCell(8).value = "UNIDADE EXTERNA (CONDENSADORA)";
     r1.getCell(15).value = "UNIDADE INTERNA (EVAPORADORA)";
 
-    // Estilo da Linha 1
+    // Estilo da Linha 6
     r1.eachCell((cell, colNumber) => {
       cell.font = { name: "Arial", bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
       cell.alignment = { horizontal: "center", vertical: "middle" };
@@ -5603,8 +5611,8 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: cor } };
     });
 
-    // LINHA 2: Cabeçalhos reais
-    const r2 = sheet.getRow(2);
+    // LINHA 7: Cabeçalhos reais
+    const r2 = sheet.getRow(7);
     r2.height = 20;
     r2.values = [
       "Patrimônio", "Setor", "Ambiente", "Prédio", "Tipo de Gás", "Informante", "Preenchido em",
@@ -9127,9 +9135,14 @@ const FONT_NAME = "Arial";
 const COR_HEADER = "FF1F4E78";
 const COR_BANDA = "FFEEF3F8";
 const COR_BORDA = "FFBFBFBF";
+// Mesmo texto usado no cabeçalho dos relatórios em PDF (ver
+// cabecalhoOficialHtml em utils/pdfGenerator.js) -- os 4 exports do sistema
+// (2 planilhas .xlsx + 2 PDFs) têm que parecer do MESMO sistema, não 4
+// documentos desencontrados. "PCM ALCE"/"Sistema de Planejamento..." era o
+// nome antigo do projeto, de antes de virar "PMOC ALECE" -- só sobrou aqui.
 const NOME_ORGAO = "ASSEMBLEIA LEGISLATIVA DO ESTADO DO CEARÁ";
-const NOME_SISTEMA = "Sistema de Planejamento da Manutenção Preventiva";
-const NOME_MARCA = "PCM ALCE";
+const NOME_SISTEMA = "Sistema de Gestão de Manutenção Preventiva";
+const NOME_MARCA = "PMOC ALECE";
 
 function colLetra(n) {
   let s = "";
@@ -9153,7 +9166,11 @@ function normalizarStatusPreventiva(valor) {
   return "Pendente";
 }
 
-function adicionarCabecalho(ws, ultimaColuna) {
+// "logoId" vem de workbook.addImage() -- registrado UMA VEZ só (ver
+// registrarLogoAlece) e reaproveitado em toda aba, em vez de embutir o PNG
+// de novo a cada chamada (deixaria o arquivo maior à toa). Sem "logoId"
+// (undefined), só não desenha o logo -- o resto do cabeçalho continua igual.
+function adicionarCabecalho(ws, ultimaColuna, logoId) {
   ultimaColuna = Math.max(ultimaColuna, 2);
   const linhas = [
     [NOME_ORGAO, 13, true],
@@ -9173,7 +9190,19 @@ function adicionarCabecalho(ws, ultimaColuna) {
     cell.alignment = { horizontal: "center", vertical: "middle" };
     ws.getRow(linha).height = linha === 3 ? 30 : 24;
   });
+  if (logoId !== undefined) {
+    // Ancorado como imagem "flutuante" por cima do canto do banner (não
+    // numa célula) -- fica com o mesmo brasão de verdade que já aparece
+    // nos relatórios em PDF, em vez de só texto.
+    ws.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 62, height: 27.5 } });
+  }
   return 5;
+}
+
+// Registra o logo da ALECE uma vez por pasta de trabalho -- reaproveita o
+// MESMO base64 já usado nas etiquetas de QR code (ver LOGO_ALECE_BASE64).
+function registrarLogoAlece(workbook) {
+  return workbook.addImage({ base64: LOGO_ALECE_BASE64, extension: "png" });
 }
 
 function calcularKpis(itens) {
@@ -9306,6 +9335,7 @@ function rotuloPiso(v) {
 async function montarPlanilhaOrganizada(itens) {
   const kpis = calcularKpis(itens);
   const workbook = new ExcelJS.Workbook();
+  const logoId = registrarLogoAlece(workbook);
 
   const colunas = [
     ["patrimonio", "Patrimônio"], ["setor", "Setor"], ["ambiente", "Ambiente"],
@@ -9330,7 +9360,7 @@ async function montarPlanilhaOrganizada(itens) {
 
   const ws1 = workbook.addWorksheet("Resumo", { properties: { tabColor: { argb: "FF1F4E78" } } });
   ws1.views = [{ showGridLines: false }];
-  let r = adicionarCabecalho(ws1, 2);
+  let r = adicionarCabecalho(ws1, 2, logoId);
   ws1.getCell(r, 1).value = `Gerado em ${new Date().toLocaleString("pt-BR")}`;
   ws1.getCell(r, 1).font = { name: FONT_NAME, italic: true, size: 10, color: { argb: "FF808080" } };
   r += 2;
@@ -9379,7 +9409,7 @@ async function montarPlanilhaOrganizada(itens) {
   const ws2 = workbook.addWorksheet("Cronograma", { properties: { tabColor: { argb: "FF2E8B7F" } } });
   ws2.views = [{ showGridLines: false, state: "frozen", ySplit: primeiraLinhaDados - 1 }];
 
-  adicionarCabecalho(ws2, colunas.length);
+  adicionarCabecalho(ws2, colunas.length, logoId);
   ws2.getRow(linhaCabecalhoTabela).height = 30;
   colunas.forEach(([, rotulo], i) => {
     const cell = ws2.getCell(linhaCabecalhoTabela, i + 1);
@@ -9416,7 +9446,7 @@ async function montarPlanilhaOrganizada(itens) {
 
   const ws3 = workbook.addWorksheet("Dashboard", { properties: { tabColor: { argb: "FFC9A34E" } } });
   ws3.views = [{ showGridLines: false }];
-  let r3 = adicionarCabecalho(ws3, 15);
+  let r3 = adicionarCabecalho(ws3, 15, logoId);
   r3 = escreverKpis(ws3, r3, kpis, referencias);
   r3 += 1;
 
@@ -9449,7 +9479,7 @@ $("#btnExport").addEventListener("click", async () => {
     const a = document.createElement("a");
     const agora = new Date();
     a.href = url;
-    a.download = `PCM_ALCE_${agora.getFullYear()}_${String(agora.getMonth() + 1).padStart(2, "0")}.xlsx`;
+    a.download = `PMOC_ALECE_${agora.getFullYear()}_${String(agora.getMonth() + 1).padStart(2, "0")}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
