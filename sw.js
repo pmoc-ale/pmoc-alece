@@ -6,7 +6,7 @@
 // acontece sozinho -- toda vez que tem sinal, o site busca a versão nova
 // na rede antes de qualquer cache, ver estratégia "rede primeiro" abaixo
 // -- isso aqui só limpa versões antigas que sobraram no aparelho).
-const CACHE_VERSAO = "pmoc-alece-v57";
+const CACHE_VERSAO = "pmoc-alece-v58";
 
 // SEM os "?v=NN" de cache-busting -- index.html/app.js mudam esse número
 // toda vez que o código muda, e escrever o número aqui de novo (fácil de
@@ -26,6 +26,7 @@ const ARQUIVOS_ESSENCIAIS = [
   "./manifest.json",
   "./assets/icon-192.png",
   "./assets/icon-512.png",
+  "./assets/icon-notificacao.png",
 ];
 
 // Guarda/acha no cache pelo CAMINHO só, sem a "?v=NN" -- assim uma
@@ -129,7 +130,7 @@ self.addEventListener("fetch", (event) => {
 // aba. Se o payload não vier em JSON por algum motivo, mostra um aviso
 // genérico em vez de deixar a notificação sumir sem aparecer nada.
 self.addEventListener("push", (event) => {
-  let dados = { titulo: "PMOC ALECE", corpo: "Você tem aparelho atrasado." };
+  let dados = { titulo: "PMOC ALECE", corpo: "Você tem um aparelho atrasado." };
   try {
     if (event.data) dados = { ...dados, ...event.data.json() };
   } catch (err) {
@@ -138,8 +139,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(dados.titulo, {
       body: dados.corpo,
-      icon: "./assets/icon-192.png",
-      badge: "./assets/icon-192.png",
+      icon: "./assets/icon-notificacao.png",
+      badge: "./assets/icon-notificacao.png",
       tag: "pmoc-atrasados",
     })
   );

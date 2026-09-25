@@ -295,7 +295,13 @@ async function enviarNotificacoesPush(atrasados, idToken, env) {
   const inscricoes = await listarColecao("pushSubscriptions", idToken, env);
   if (!inscricoes.length) return { enviadas: 0, motivo: "Ninguém ativou avisos push ainda." };
 
-  const payload = { titulo: "PMOC ALECE", corpo: `${atrasados.length} aparelho(s) atrasado(s) hoje.` };
+  const payload = {
+    titulo: "PMOC ALECE",
+    corpo:
+      atrasados.length === 1
+        ? "1 aparelho está atrasado hoje."
+        : `${atrasados.length} aparelhos estão atrasados hoje.`,
+  };
   let enviadas = 0;
   for (const inscricao of inscricoes) {
     try {
