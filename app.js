@@ -2408,6 +2408,13 @@ async function gerarCronograma() {
     return;
   }
 
+  // Cadastrar sem agendar: não precisa de data de início nem capacidade
+  // ainda, então nem passa pelas checagens/cálculo de datas abaixo.
+  if ($("#chkCadastrarSemAgendar")?.checked) {
+    await gerarCronogramaSemAgendar();
+    return;
+  }
+
   const diasSemana = Math.min(7, Math.max(1, parseInt($("#diasSemana")?.value, 10) || 5));
   const dataInicioStr = $("#dataInicio")?.value;
   if (!dataInicioStr) {
@@ -2558,6 +2565,82 @@ async function gerarCronograma() {
     iniciarSincronizacao();
     toast(`Cronograma gerado e salvo! (${itens.length} itens)`);
     irParaAba("calendar");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao salvar no Firebase: " + err.message);
+  } finally {
+    $("#btnGerar").disabled = false;
+  }
+}
+
+// Versão do gerarCronograma() para quem só quer subir a planilha e decidir
+// capacidade/data de início depois (ver checkbox "Só cadastrar agora, sem
+// agendar ainda" no launchpad) -- cria o ciclo e salva os equipamentos
+// normalmente, mas sem calcular data/equipe pra nenhum deles, marcando
+// aguardandoAgendamento pra eles ficarem de fora do cronograma/dashboard até
+// alguém passar pela tela de capacidade de verdade (ver
+// atualizarBannerAguardandoAgendamento e confirmarAdicaoPredioNovo).
+async function gerarCronogramaSemAgendar() {
+  $("#btnGerar").disabled = true;
+  try {
+    const diasSemana = Math.min(7, Math.max(1, parseInt($("#diasSemana")?.value, 10) || 5));
+    const dataInicioStr = $("#dataInicio")?.value || formatISO(new Date());
+    const capacidades = lerCapacidadesDaTela();
+
+    const existentes = {};
+    const manuaisPreservados = [];
+    ESTADO.equipamentos.forEach((dados) => {
+      existentes[dados.id] = dados;
+      if (dados.origem === "manual") manuaisPreservados.push({ ...dados });
+    });
+
+    toast("Apagando ciclos anteriores...");
+    await registrarAuditoria(
+      "Gerar cronograma",
+      `Novo levantamento com ${ESTADO.itensCarregados.length} itens cadastrados sem agendar (apagou ciclos anteriores)`
+    );
+    await apagarTodosOsCiclos();
+
+    const cicloRef = doc(collection(db, "ciclos"));
+    ESTADO.cicloAtual = cicloRef.id;
+    await setDoc(cicloRef, {
+      criadoEm: new Date().toISOString(),
+      dataInicio: dataInicioStr,
+      status: "Ativo"
+    });
+    ESTADO.config = { diasSemana, dataInicio: dataInicioStr, capacidades };
+    await setDoc(doc(db, "config", "cronograma"), ESTADO.config);
+
+    const itensPlanilha = ESTADO.itensCarregados.map((i) => ({ ...i }));
+    const itens = [...itensPlanilha, ...manuaisPreservados];
+    itens.forEach((item) => {
+      item.ordemExecucao = 0;
+      item.equipeResponsavel = "";
+      item.dataAgendada = "";
+      item.diaPlanejado = "";
+      item.semanaPlanejada = "";
+      item.aguardandoAgendamento = true;
+      const anterior = existentes[item.id];
+      if (anterior) {
+        item.statusPreventiva = anterior.statusPreventiva || "Pendente";
+        item.observacao = anterior.observacao || "";
+      }
+    });
+
+    toast("Salvando...");
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < itens.length; inicio += TAMANHO_LOTE) {
+      const pedaco = itens.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((item) => batch.set(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), item));
+      await batch.commit();
+      toast(`Salvando... ${Math.min(inicio + TAMANHO_LOTE, itens.length)}/${itens.length}`);
+    }
+
+    iniciarSincronizacao();
+    if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
+    toast(`Cadastrado! ${itens.length} equipamento(s) -- ainda sem agendamento.`);
+    irParaAba("equipamentos");
   } catch (err) {
     console.error(err);
     toast("Erro ao salvar no Firebase: " + err.message);
