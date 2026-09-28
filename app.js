@@ -1236,6 +1236,67 @@ function atualizarBannerAtrasados() {
   banner.hidden = false;
   if (btnCal) btnCal.hidden = true;
 }
+
+// ------------------------------------------------------------------
+// Aviso de equipamento cadastrado "sem agendar ainda" (ver checkbox em
+// confirmarAdicaoPredioNovo/cadastrarPredioNovoSemAgendar) -- avisa que
+// tem aparelho já no sistema mas fora do cronograma, e deixa entrar no
+// mesmo fluxo de "adicionar prédio" pra decidir capacidade/data agora.
+// ------------------------------------------------------------------
+const btnFecharAlertaAguardandoAgendamento = $("#fecharAlertaAguardandoAgendamento");
+if (btnFecharAlertaAguardandoAgendamento) {
+  btnFecharAlertaAguardandoAgendamento.addEventListener("click", () => {
+    const banner = $("#alertaAguardandoAgendamento");
+    if (banner) banner.dataset.fechado = formatISO(new Date());
+    atualizarBannerAguardandoAgendamento();
+  });
+}
+
+function equipamentosAguardandoAgendamento() {
+  return ESTADO.equipamentos.filter((e) => e.aguardandoAgendamento);
+}
+
+function atualizarBannerAguardandoAgendamento() {
+  const banner = $("#alertaAguardandoAgendamento");
+  const btnBanner = $("#btnAgendarAguardando");
+  if (!banner) return;
+
+  // Cadastrar sem agendar é uma ação de admin (mesma tela que "Gerar
+  // Cronograma"), então o aviso/botão só aparece pra quem pode agir.
+  const pendentes = ESTADO.permissao === "admin" ? equipamentosAguardandoAgendamento() : [];
+  if (!pendentes.length) {
+    banner.hidden = true;
+    return;
+  }
+
+  const jaFechadoHoje = banner.dataset.fechado === formatISO(new Date());
+  if (jaFechadoHoje) {
+    banner.hidden = true;
+    return;
+  }
+
+  const predios = [...new Set(pendentes.map((e) => e.local || "SEDE"))];
+  const txt = $("#alertaAguardandoAgendamentoTexto");
+  if (txt) {
+    txt.textContent = pendentes.length === 1
+      ? `1 aparelho está cadastrado mas ainda não entrou no cronograma (${predios.join(", ")}).`
+      : `${pendentes.length} aparelhos estão cadastrados mas ainda não entraram no cronograma (${predios.join(", ")}).`;
+  }
+  banner.hidden = false;
+  if (btnBanner) btnBanner.hidden = false;
+}
+
+$("#btnAgendarAguardando")?.addEventListener("click", () => {
+  const pendentes = equipamentosAguardandoAgendamento();
+  if (!pendentes.length) return;
+  ESTADO.modoAdicionarPredio = true;
+  ESTADO.itensParaAdicionarPredio = pendentes;
+  if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
+  irParaAba("config");
+  const campoDataInicio = $("#dataInicio");
+  if (campoDataInicio && !campoDataInicio.value) campoDataInicio.value = formatISO(new Date());
+});
+
 // ------------------------------------------------------------------
 // Aviso de dias vazios no cronograma (aparece só na aba Calendário)
 // ------------------------------------------------------------------
@@ -1453,6 +1514,7 @@ function processarArquivo(file) {
             if (resultado.erro) { toast(resultado.erro); return; }
             ESTADO.modoAdicionarPredio = true;
             ESTADO.itensParaAdicionarPredio = resultado.itens;
+            if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
             irParaAba("config");
             const hojeUtil = $("#dataInicio");
             if (hojeUtil && !hojeUtil.value) hojeUtil.value = formatISO(new Date());
@@ -1640,6 +1702,11 @@ async function confirmarAdicaoPredioNovo() {
     return;
   }
 
+  if ($("#chkCadastrarSemAgendar")?.checked) {
+    await cadastrarPredioNovoSemAgendar(itensDaPlanilha);
+    return;
+  }
+
   const dataInicioStr = $("#dataInicio")?.value;
   if (!dataInicioStr) {
     toast("Escolha a data de início.");
@@ -1664,7 +1731,16 @@ async function confirmarAdicaoPredioNovo() {
 
   $("#btnGerar").disabled = true;
   try {
-    const idsExistentes = new Set(ESTADO.equipamentos.map((e) => e.id));
+    // Exclui os PRÓPRIOS itens sendo agendados agora do conjunto de
+    // "colisão" -- sem isso, reagendar um item que já existe (ver botão
+    // "Agendar agora", que reusa esse mesmo fluxo pra dar data a quem
+    // ficou "aguardando agendamento") sempre batia como colisão contra
+    // si mesmo e gerava um ID novo, duplicando o documento no Firestore
+    // em vez de só atualizar a data dele.
+    const idsDosItensDeAgora = new Set(itensDaPlanilha.map((i) => i.id));
+    const idsExistentes = new Set(
+      ESTADO.equipamentos.filter((e) => !idsDosItensDeAgora.has(e.id)).map((e) => e.id)
+    );
     const todosNovosItens = [];
     const resumo = [];
     const prediosAdicionados = new Set();
@@ -1764,6 +1840,9 @@ async function confirmarAdicaoPredioNovo() {
         item.diaPlanejado = NOMES_DIAS[(dataDaEquipe.getDay() + 6) % 7];
         const diffDias = Math.floor((dataDaEquipe - dataInicioBase) / 86400000);
         item.semanaPlanejada = `Semana ${Math.floor(diffDias / 7) + 1}`;
+        // Limpa a flag de "aguardando agendamento" (se tinha) -- item já
+        // ganhou data/equipe de verdade agora.
+        item.aguardandoAgendamento = false;
 
         contadorPorEquipe[slotDaSala]++;
         todosNovosItens.push(item);
@@ -1813,6 +1892,81 @@ async function confirmarAdicaoPredioNovo() {
   } catch (err) {
     console.error(err);
     toast("Erro ao adicionar: " + err.message);
+  } finally {
+    $("#btnGerar").disabled = false;
+  }
+}
+
+// Salva o(s) prédio(s) novo(s) no cadastro SEM calcular data/equipe --
+// pra quem quer só registrar as máquinas agora e decidir a capacidade e
+// o cronograma depois (ver checkbox "Só cadastrar agora" na tela de
+// Cronograma). Fica marcado com aguardandoAgendamento=true, some do
+// Hoje/Calendário (sem dataAgendada, não bate em nenhum dos dois) e
+// aparece no aviso "X aparelhos aguardando agendamento" -- o botão
+// "Agendar agora" desse aviso volta pra cá com esses MESMOS itens e usa
+// confirmarAdicaoPredioNovo() de verdade (a versão que agenda), já que
+// itensParaAdicionarPredio guarda os objetos por referência.
+async function cadastrarPredioNovoSemAgendar(itensDaPlanilha) {
+  $("#btnGerar").disabled = true;
+  try {
+    const idsDosItensDeAgora = new Set(itensDaPlanilha.map((i) => i.id));
+    const idsExistentes = new Set(
+      ESTADO.equipamentos.filter((e) => !idsDosItensDeAgora.has(e.id)).map((e) => e.id)
+    );
+    const prediosAdicionados = new Set();
+
+    itensDaPlanilha.forEach((item) => {
+      if (idsExistentes.has(item.id)) {
+        item.id = `${item.id}_novo_${Math.random().toString(36).slice(2, 6)}`;
+      }
+      idsExistentes.add(item.id);
+      item.ordemExecucao = 0;
+      item.equipeResponsavel = "";
+      item.dataAgendada = "";
+      item.diaPlanejado = "";
+      item.semanaPlanejada = "";
+      item.aguardandoAgendamento = true;
+      prediosAdicionados.add(item.local || "SEDE");
+    });
+
+    // Mesmo motivo do fluxo que agenda: sem isso o prédio novo não
+    // aparece nos seletores de "Prédio" (cadastro manual, planta de CAD,
+    // Equipes) até alguém decidir agendar.
+    const prediosNaListaMestre = new Set((ESTADO.configSite && ESTADO.configSite.predios) || []);
+    const prediosParaRegistrar = [...prediosAdicionados].filter((l) => !prediosNaListaMestre.has(l));
+    if (prediosParaRegistrar.length) {
+      const novaConfigSite = { ...(ESTADO.configSite || {}), predios: [...prediosNaListaMestre, ...prediosParaRegistrar] };
+      await setDoc(doc(db, "config", "site"), novaConfigSite);
+      ESTADO.configSite = novaConfigSite;
+    }
+
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < itensDaPlanilha.length; inicio += TAMANHO_LOTE) {
+      const pedaco = itensDaPlanilha.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((item) => batch.set(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), item));
+      await batch.commit();
+    }
+    // Some direto no array local (sem esperar o listener do Firebase) --
+    // é o que faz o aviso "aguardando agendamento" aparecer na hora.
+    ESTADO.equipamentos.push(...itensDaPlanilha);
+
+    await registrarAuditoria(
+      "Cadastrar prédio sem agendar",
+      `${[...prediosAdicionados].join(", ")} -- ${itensDaPlanilha.length} equipamento(s) cadastrado(s), aguardando agendamento`
+    );
+
+    toast(`Cadastrado! ${itensDaPlanilha.length} equipamento(s) em ${[...prediosAdicionados].join(", ")} -- ainda sem agendamento.`);
+
+    ESTADO.modoAdicionarPredio = false;
+    ESTADO.itensParaAdicionarPredio = null;
+    if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
+    atualizarVisualModoAdicionarPredio();
+    atualizarBannerAguardandoAgendamento();
+    irParaAba("equipamentos");
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao cadastrar: " + err.message);
   } finally {
     $("#btnGerar").disabled = false;
   }
@@ -2444,6 +2598,12 @@ async function reagendarTudo(permitirRecuo = false) {
 
   const porPredio = new Map();
   ESTADO.equipamentos.forEach((e) => {
+    // "Aguardando agendamento" é justamente quem NÃO quer entrar no
+    // cronograma ainda (ver cadastrarPredioNovoSemAgendar) -- sem esse
+    // filtro, qualquer chamada de reagendarTudo() por outro motivo
+    // (ex: botão "Reagendar Agora" dos atrasados) ia agendar esses
+    // itens de sopetão, sem passar pela tela de capacidade.
+    if (e.aguardandoAgendamento) return;
     const local = e.local || "SEDE";
     if (!porPredio.has(local)) porPredio.set(local, []);
     porPredio.get(local).push(e);
@@ -2798,6 +2958,7 @@ async function processarSincronizacao() {
   renderComProtecaoDeMenu("#condensadorasTable", renderCondensadorasCadastro);
   await sincronizarLocalizacao();
   atualizarBannerAtrasados();
+  atualizarBannerAguardandoAgendamento();
   atualizarAlertaDiasVazios();
   renderCiclos();
   verificarFechamentoCiclo();
@@ -4665,7 +4826,10 @@ function renderVisaoGerencial() {
   const elEquipe = $("#visaoPorEquipe");
   if (!elPredio || !elDias || !elEquipe) return;
 
-  const itens = ESTADO.equipamentos;
+  // Equipamento "aguardando agendamento" ainda não faz parte do
+  // cronograma de verdade -- contar ele aqui inflava o total e derrubava
+  // a % de conclusão de um prédio que nem começou a rodar ainda.
+  const itens = ESTADO.equipamentos.filter((i) => !i.aguardandoAgendamento);
 
   // --- Por prédio ---
   const gruposPredio = new Map();
@@ -4792,7 +4956,10 @@ function renderResumoAtrasos() {
 
 function renderDashboard() {
   // O aplicarFiltroLocal já garante que os números mudem quando você clica no filtro lá em cima
-  const itens = aplicarFiltroLocal(ESTADO.equipamentos);
+  // -- e tira quem está "aguardando agendamento" (cadastrado, mas ainda
+  // fora do cronograma), senão inflava o total e derrubava a % de
+  // execução do ciclo por causa de aparelho que nem começou a rodar.
+  const itens = aplicarFiltroLocal(ESTADO.equipamentos).filter((i) => !i.aguardandoAgendamento);
   const total = itens.length;
   const concluidas = itens.filter((i) => i.statusPreventiva === "Concluída").length;
   const andamento = itens.filter((i) => i.statusPreventiva === "Em andamento").length;
@@ -8425,6 +8592,7 @@ function renderEquipamentosCadastro() {
     }
     if (statusFiltro) {
       if (statusFiltro === "Atrasado") { if (!estaAtrasado(item)) return false; }
+      else if (statusFiltro === "Aguardando") { if (!item.aguardandoAgendamento) return false; }
       else if (item.statusPreventiva !== statusFiltro) return false;
     }
     if (setorPCMFiltro && item.setorPCM !== setorPCMFiltro) return false;
@@ -8464,9 +8632,11 @@ function renderEquipamentosCadastro() {
       <td data-label="Prédio">${escapeHtml(item.local || "SEDE")}</td>
       <td data-label="Setor PCM">${item.setorPCM}</td>
       <td data-label="Status">
-        ${estaAtrasado(item)
-          ? '<span class="status-select atrasado" style="cursor:default">Atrasado</span>'
-          : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}
+        ${item.aguardandoAgendamento
+          ? '<span class="status-select aguardando" style="cursor:default" title="Cadastrado, mas ainda não entrou no cronograma">Aguardando agendamento</span>'
+          : estaAtrasado(item)
+            ? '<span class="status-select atrasado" style="cursor:default">Atrasado</span>'
+            : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}
       </td>
       <td data-label="Origem">${item.origem === "manual" ? "Manual" : "Planilha"}</td>
       <td data-label="Marca/Modelo/Cap." style="font-size:12px">${dadosTecnicos}</td>

@@ -1155,7 +1155,11 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
 .status-select.pendente { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
 .status-select.andamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
 .status-select.concluido { background: var(--verde-fundo); color: var(--verde-texto); }
-.status-select.atrasado { background: var(--verde-900); color: #fff; }
+/* Literal (não a variável de marca) de propósito -- "concluido" já é
+   verde, "atrasado" precisa continuar visualmente diferente dele (ver
+   mesmo raciocínio em CORES_STATUS_MARCADOR no app.js). */
+.status-select.aguardando { background: var(--dourado-tint); color: var(--dourado-escuro); }
+.status-select.atrasado { background: #10263D; color: #fff; }
 
 /* Filtro por prédio (pills) */
 .local-filtro {
@@ -1302,7 +1306,7 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
 .cal-day-badge.pendente { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
 .cal-day-badge.andamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
 .cal-day-badge.concluido { background: var(--verde-fundo); color: var(--verde-texto); }
-.cal-day-badge.atrasado { background: var(--verde-900); color: #fff; }
+.cal-day-badge.atrasado { background: #10263D; color: #fff; } /* literal de propósito, ver .status-select.atrasado */
 .cal-day-badge.holiday { background: var(--dourado); color: #fff; }
 .cal-day-badge.gap { background: var(--vermelho-fundo); color: var(--vermelho-texto); border: 1px dashed var(--vermelho); cursor: default; }
 

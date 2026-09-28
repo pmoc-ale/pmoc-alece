@@ -99,6 +99,15 @@
   <button class="alert-banner-close" id="fecharAlertaAtrasados" aria-label="Fechar aviso">×</button>
 </div>
 
+<div class="alert-banner" id="alertaAguardandoAgendamento" hidden style="background:var(--dourado-tint);color:var(--dourado-escuro);border-bottom-color:var(--dourado);">
+  <span class="alert-banner-icon"></span>
+  <span class="alert-banner-text" id="alertaAguardandoAgendamentoTexto"></span>
+  <button id="btnAgendarAguardando" class="btn primary" style="margin-left: 15px; font-size: 12px; padding: 4px 12px;">
+    Agendar agora
+  </button>
+  <button class="alert-banner-close" id="fecharAlertaAguardandoAgendamento" aria-label="Fechar aviso">×</button>
+</div>
+
 <div class="body-layout">
   <nav class="sidenav">
     <button class="tab sidenav-item sidenav-atalho-trabalhador" data-view="hoje">
@@ -184,9 +193,15 @@
 
     <!-- VIEW 2: CONFIG / CRONOGRAMA -->
     <section class="view" id="view-config">
-      <div class="alert-banner" id="avisoModoAdicionarPredio" hidden style="margin-bottom:12px">
-        <span class="alert-banner-icon"></span>
-        <span class="alert-banner-text" id="avisoModoAdicionarPredioTexto"></span>
+      <div class="alert-banner" id="avisoModoAdicionarPredio" hidden style="margin-bottom:12px; flex-direction:column; align-items:flex-start; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="alert-banner-icon"></span>
+          <span class="alert-banner-text" id="avisoModoAdicionarPredioTexto"></span>
+        </div>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:normal; cursor:pointer;">
+          <input type="checkbox" id="chkCadastrarSemAgendar">
+          Só cadastrar agora, sem agendar ainda -- decido a capacidade e o cronograma depois
+        </label>
       </div>
       <div class="card">
         <h2>Parâmetros Iniciais</h2>
@@ -449,6 +464,7 @@
               <option value="Em andamento">Em andamento</option>
               <option value="Concluída">Concluída</option>
               <option value="Atrasado">Atrasado</option>
+              <option value="Aguardando">Aguardando agendamento</option>
             </select>
             <select id="filtroSetorPCM">
               <option value="">Categoria: todas</option>
@@ -914,7 +930,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=112"></script>
+<script type="module" src="app.js?v=113"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
