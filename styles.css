@@ -2843,10 +2843,47 @@ body.modo-trabalhador .status-select {
   transform: translateY(-2px);
 }
 
+/* Fica colado no botão (em vez de solto no texto da esquerda) porque é
+   uma opção DESSE botão: muda o que "Gerar Cronograma" faz ao clicar. */
+.launchpad-acao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.launchpad-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: normal;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  text-align: right;
+  max-width: 220px;
+}
+
+.launchpad-checkbox input {
+  accent-color: var(--dourado);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
-  .launchpad-card { 
-    flex-direction: column; 
-    align-items: stretch; 
-    text-align: center; 
+  .launchpad-card {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .launchpad-acao {
+    align-items: center;
+  }
+  .launchpad-checkbox {
+    max-width: none;
+    text-align: center;
   }
 }

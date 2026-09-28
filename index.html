@@ -231,15 +231,17 @@
         <div class="launchpad-texto">
           <h3 id="launchpadTitulo">Pronto para processar?</h3>
           <p id="launchpadAviso">Ao clicar em gerar, o sistema calculará as rotas e datas de todos os equipamentos com base nas regras acima. <strong>Isso reescreverá o cronograma atual.</strong></p>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:normal; cursor:pointer; margin-top:6px;">
+          <div id="resumoCapacidade" class="launchpad-resumo"></div>
+        </div>
+        <div class="launchpad-acao">
+          <label class="launchpad-checkbox" for="chkCadastrarSemAgendar">
             <input type="checkbox" id="chkCadastrarSemAgendar">
             Só cadastrar agora, sem agendar ainda -- decido a capacidade e o cronograma depois
           </label>
-          <div id="resumoCapacidade" class="launchpad-resumo"></div>
+          <button class="btn primary" id="btnGerar" style="background: var(--dourado); color: var(--verde-900); padding: 12px 24px; font-size: 15px; flex-shrink: 0;">
+            Gerar Cronograma
+          </button>
         </div>
-        <button class="btn primary" id="btnGerar" style="background: var(--dourado); color: var(--verde-900); padding: 12px 24px; font-size: 15px; flex-shrink: 0;">
-          Gerar Cronograma
-        </button>
       </div>
     </section>
 
