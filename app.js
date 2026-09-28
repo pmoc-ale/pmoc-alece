@@ -1195,6 +1195,7 @@ if (btnFecharAlertaAtrasados) {
 
 function atualizarBannerAtrasados() {
   const banner = $("#alertaAtrasados");
+  const btnBanner = $("#btnReagendarAtrasados");
   const btnCal = $("#btnReagendarCalendario");
   if (!banner) return;
 
@@ -1206,6 +1207,12 @@ function atualizarBannerAtrasados() {
     return;
   }
 
+  // Reagendar em massa mexe no cronograma inteiro -- ação só de admin,
+  // mesma regra que já valia pro botão do Calendário (ver btnCal logo
+  // abaixo), mas que faltava aqui no botão de dentro do próprio aviso.
+  const podeReagendar = ESTADO.permissao === "admin";
+  if (btnBanner) btnBanner.hidden = !podeReagendar;
+
   const jaFechadoHoje = banner.dataset.fechado === formatISO(new Date());
 
   if (jaFechadoHoje) {
@@ -1214,7 +1221,7 @@ function atualizarBannerAtrasados() {
     // escrita, e esse botão não era coberto pelo travamento visual do
     // modo padrão/trabalhador por não ser um .btn.primary).
     banner.hidden = true;
-    if (btnCal) btnCal.hidden = ESTADO.permissao !== "admin";
+    if (btnCal) btnCal.hidden = !podeReagendar;
     return;
   }
 
