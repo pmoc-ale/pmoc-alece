@@ -24,7 +24,7 @@ const SILHUETA_CEARA_PATH_D = "M 0.0,68.0 L 11.4,43.4 L 19.0,36.5 L 17.1,22.4 L 
 
 function marcaDaguaCearaHtml() {
   return `<svg class="marca-dagua-ceara" viewBox="0 0 500.0 610.1" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="${SILHUETA_CEARA_PATH_D}" fill="#10263D"/>
+    <path d="${SILHUETA_CEARA_PATH_D}" fill="#0B3D24"/>
   </svg>`;
 }
 
@@ -74,9 +74,9 @@ function cssCabecalhoOficial() {
     }
     .cabecalho-brasao { width: 46px; height: auto; flex-shrink: 0; position: relative; }
     .cabecalho-texto { position: relative; }
-    .cabecalho-orgao { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: #10263D; }
+    .cabecalho-orgao { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; color: #0B3D24; }
     .cabecalho-sistema { font-size: 9.5px; color: #5B6B7A; margin-top: 2px; }
-    .cabecalho-titulo { font-size: 15px; font-weight: 700; color: #10263D; text-transform: uppercase; margin-top: 6px; }
+    .cabecalho-titulo { font-size: 15px; font-weight: 700; color: #0B3D24; text-transform: uppercase; margin-top: 6px; }
   `;
 }
 
@@ -146,7 +146,7 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
           color: #5B6B7A;
           margin: -10px 0 20px;
         }
-        .meta-emissao strong { color: #10263D; }
+        .meta-emissao strong { color: #0B3D24; }
 
         /* KPI / RESUMO: Display Table ao invés de Flexbox */
         .summary-box {
@@ -176,7 +176,7 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
         .summary-value {
           font-size: 20px;
           font-weight: bold;
-          color: #10263D;
+          color: #0B3D24;
         }
 
         /* TÍTULOS DE SEÇÃO */
@@ -184,7 +184,7 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
           font-size: 13px;
           font-weight: bold;
           text-transform: uppercase;
-          color: #10263D;
+          color: #0B3D24;
           border-bottom: 1px solid #d2d6de;
           padding-bottom: 5px;
           margin: 30px 0 15px 0;
@@ -199,8 +199,8 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
           table-layout: fixed; /* Impede que colunas longas espremam as curtas */
         }
         th {
-          background-color: #EEF3F8;
-          color: #10263D;
+          background-color: #E3F3E9;
+          color: #0B3D24;
           font-weight: bold;
           text-transform: uppercase;
           font-size: 10px;

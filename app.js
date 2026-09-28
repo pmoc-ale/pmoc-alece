@@ -3552,7 +3552,7 @@ function renderAuditoria() {
 // Cores fixas do próprio sistema (nenhuma cor nova) só pra girar entre
 // as iniciais dos avatares -- o mesmo usuário sempre cai na mesma cor
 // (baseado no nome), não muda a cada render.
-const CORES_AVATAR = ["var(--azul-700)", "var(--dourado-escuro)", "var(--verde)", "var(--vermelho-texto)", "var(--azul-900)", "var(--amarelo-texto)"];
+const CORES_AVATAR = ["var(--teal)", "var(--dourado-escuro)", "var(--verde)", "var(--vermelho-texto)", "var(--azul-claro)", "var(--amarelo-texto)"];
 function corAvatar(texto) {
   let hash = 0;
   for (let i = 0; i < texto.length; i++) hash = (hash * 31 + texto.charCodeAt(i)) >>> 0;
@@ -3894,7 +3894,7 @@ function renderEquipesPorPredio() {
   // Uma faixa colorida na lateral de cada card, só pra diferenciar os
   // prédios visualmente -- sem ícone nenhum, girando entre cores que já
   // existem no resto do sistema (não inventa cor nova).
-  const CORES_PREDIO = ["var(--azul-700)", "var(--dourado-escuro)", "var(--verde)", "var(--texto-suave)"];
+  const CORES_PREDIO = ["var(--teal)", "var(--dourado-escuro)", "var(--verde)", "var(--texto-suave)"];
 
   container.innerHTML = predios.map((predio, indicePredio) => {
     const corPredio = CORES_PREDIO[indicePredio % CORES_PREDIO.length];
@@ -4167,7 +4167,7 @@ function renderCapacidadesPorPredio() {
             </div>`;
 
             painelAvancado = `
-              <div style="width:100%; margin-top:12px; padding:12px; background:var(--azul-50); border:1px solid var(--borda); border-radius:var(--raio-pequeno);">
+              <div style="width:100%; margin-top:12px; padding:12px; background:var(--verde-50); border:1px solid var(--borda); border-radius:var(--raio-pequeno);">
                 <span style="font-size:11px; color:var(--texto-suave); font-weight:600; text-transform:uppercase;">
                   Equipes que participam do revezamento:
                 </span>
@@ -5734,7 +5734,7 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
     r1.eachCell((cell, colNumber) => {
       cell.font = { name: "Arial", bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
       cell.alignment = { horizontal: "center", vertical: "middle" };
-      let cor = "FF1F4E78"; // Azul padrão para Geral
+      let cor = "FF008241"; // Verde padrão para Geral
       if (colNumber >= 8 && colNumber <= 14) cor = "FF9C6500"; // Amarelo/Dourado escuro
       if (colNumber >= 15 && colNumber <= 20) cor = "FF375623"; // Verde escuro
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: cor } };
@@ -5759,7 +5759,7 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
         left: { style: "thin", color: { argb: "FFBFBFBF" } },
         right: { style: "thin", color: { argb: "FFBFBFBF" } }
       };
-      let cor = "FFEEF3F8"; // Fundo claro Geral
+      let cor = "FFE3F3E9"; // Fundo claro Geral
       if (colNumber >= 8 && colNumber <= 14) cor = "FFFFE699"; // Fundo claro Condensadora
       if (colNumber >= 15 && colNumber <= 20) cor = "FFC6E0B4"; // Fundo claro Evaporadora
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: cor } };
@@ -6029,6 +6029,10 @@ const CORES_STATUS_MARCADOR = {
   pendente: "#C00000",
   andamento: "#9C6500",
   concluido: "#375623",
+  // Mantido literal (não é a variável de marca) de propósito: "concluido"
+  // já é verde, então "atrasado" precisa continuar visualmente diferente
+  // dele na planta -- não faz sentido os dois virarem tons de verde
+  // depois do rebrand.
   atrasado: "#10263D",
 };
 
@@ -8133,7 +8137,7 @@ function abrirJanelaDeEtiquetas(etiquetasHtml) {
       body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 16px; }
       .grade { display: grid; grid-template-columns: repeat(auto-fit, 205px); justify-content: center; gap: 10px; max-width: 645px; margin: 0 auto; }
       .etiqueta { width: 205px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; padding: 6px 6px 7px; display: flex; flex-direction: column; gap: 5px; break-inside: avoid; }
-      .etiqueta-topo { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #10263D; text-align: center; }
+      .etiqueta-topo { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #0B3D24; text-align: center; }
       .etiqueta-corpo { display: flex; align-items: center; gap: 5px; }
       .etiqueta-marca { display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; width: 56px; }
       .etiqueta-divisor { width: 1px; align-self: stretch; background: #ddd; flex-shrink: 0; }
@@ -9295,8 +9299,8 @@ function renderFeriados() {
 }
 
 const FONT_NAME = "Arial";
-const COR_HEADER = "FF1F4E78";
-const COR_BANDA = "FFEEF3F8";
+const COR_HEADER = "FF008241";
+const COR_BANDA = "FFE3F3E9";
 const COR_BORDA = "FFBFBFBF";
 // Mesmo texto usado no cabeçalho dos relatórios em PDF (ver
 // cabecalhoOficialHtml em utils/pdfGenerator.js) -- os 4 exports do sistema
@@ -9397,7 +9401,7 @@ function formulasStatus(referencias) {
 function escreverKpis(ws, linhaInicio, kpis, referencias) {
   const formulas = formulasStatus(referencias);
   const cartoes = [
-    ["Equipamentos", formulas ? formulas.total : kpis.total, "FF1F4E78"],
+    ["Equipamentos", formulas ? formulas.total : kpis.total, "FF008241"],
     ["Concluídas", formulas ? formulas.concluidas : kpis.concluidas, "FF548235"],
     ["Em andamento", formulas ? formulas.andamento : kpis.andamento, "FFBF8F00"],
     ["Pendentes", formulas ? formulas.pendentes : kpis.pendentes, "FFC00000"],
@@ -9437,10 +9441,10 @@ function escreverKpis(ws, linhaInicio, kpis, referencias) {
   const linhaExec = linhaLabel + 2;
   const cellLabelExec = ws.getCell(linhaExec, 1);
   cellLabelExec.value = "Execução:";
-  cellLabelExec.font = { name: FONT_NAME, size: 13, bold: true, color: { argb: "FF1F4E78" } };
+  cellLabelExec.font = { name: FONT_NAME, size: 13, bold: true, color: { argb: "FF008241" } };
   const cellValExec = ws.getCell(linhaExec, 2);
   cellValExec.value = formulas ? { formula: formulas.execucao } : kpis.execucaoPct / 100;
-  cellValExec.font = { name: FONT_NAME, size: 13, bold: true, color: { argb: "FF1F4E78" } };
+  cellValExec.font = { name: FONT_NAME, size: 13, bold: true, color: { argb: "FF008241" } };
   cellValExec.numFmt = "0.0%";
 
   return linhaExec + 2;
@@ -9521,7 +9525,7 @@ async function montarPlanilhaOrganizada(itens) {
   };
   const formulasResumo = formulasStatus(referencias);
 
-  const ws1 = workbook.addWorksheet("Resumo", { properties: { tabColor: { argb: "FF1F4E78" } } });
+  const ws1 = workbook.addWorksheet("Resumo", { properties: { tabColor: { argb: "FF008241" } } });
   ws1.views = [{ showGridLines: false }];
   let r = adicionarCabecalho(ws1, 2, logoId);
   ws1.getCell(r, 1).value = `Gerado em ${new Date().toLocaleString("pt-BR")}`;
@@ -9545,7 +9549,7 @@ async function montarPlanilhaOrganizada(itens) {
     lc.border = bordaFina();
     const c = ws1.getCell(r, 2);
     c.value = val;
-    c.font = { name: FONT_NAME, size: 12, bold: true, color: { argb: "FF1F4E78" } };
+    c.font = { name: FONT_NAME, size: 12, bold: true, color: { argb: "FF008241" } };
     c.alignment = { horizontal: "center" };
     c.border = bordaFina();
     if (i % 2 === 0) {
@@ -9906,7 +9910,7 @@ function gerarPDFPMOC(ordem) {
   const checklistFeito = new Set(ordem.checklist || []);
   const nota = Number(ordem.avaliacaoEstrelas) || 0;
   const estrelasHtml = [1, 2, 3, 4, 5]
-    .map((n) => `<span style="color:${n <= nota ? "#163A5B" : "#DCE3EA"}">★</span>`)
+    .map((n) => `<span style="color:${n <= nota ? "#0F5A33" : "#DCE3EA"}">★</span>`)
     .join("");
 
   const htmlDoc = `

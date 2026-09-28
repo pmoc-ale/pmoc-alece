@@ -107,7 +107,7 @@ function montarEmailHtml(atrasados, hojeFormatado) {
   const secoes = Object.keys(porPredio).sort().map((predio) => `
     <h3 style="margin:16px 0 6px;font-size:14px;">${predio} (${porPredio[predio].length})</h3>
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:#10263D;color:#fff;">
+      <thead><tr style="background:#0B3D24;color:#fff;">
         <th style="padding:6px 8px;text-align:left;">Patrimônio</th>
         <th style="padding:6px 8px;text-align:left;">Ambiente</th>
         <th style="padding:6px 8px;text-align:left;">Equipe</th>
@@ -125,7 +125,7 @@ function montarEmailHtml(atrasados, hojeFormatado) {
     </table>`).join("");
   return `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
-      <h2 style="color:#10263D;">PMOC ALECE — ${atrasados.length} aparelho(s) atrasado(s)</h2>
+      <h2 style="color:#0B3D24;">PMOC ALECE — ${atrasados.length} aparelho(s) atrasado(s)</h2>
       <p style="color:#555;font-size:13px;">Resumo gerado automaticamente em ${hojeFormatado}.</p>
       ${secoes}
     </div>`;
