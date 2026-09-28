@@ -746,6 +746,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 .hist-evento.hist-reagendamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
 .hist-evento.hist-excluido { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
 .hist-evento.hist-preventiva { background: var(--fundo); color: var(--texto-suave); border: 1px solid var(--borda); }
+.hist-evento.hist-correcao { background: var(--dourado-tint); color: var(--dourado-escuro); }
 
 /* Data/hora do Histórico em duas linhas (data em destaque, hora
    discreta embaixo) -- ocupa menos largura que "22/09/2026, 08:23:05"

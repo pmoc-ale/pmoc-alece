@@ -4558,7 +4558,7 @@ function selecionarDiaBadge(iso, predio, itensPredio) {
 
 function renderTabelaDetalheDia(seletorTabela, itensDoDia, aoAtualizar) {
   const table = $(seletorTabela);
-  table.innerHTML = `<thead><tr><th>Patrimônio</th><th>Prédio</th><th>Setor</th><th>Ambiente</th><th>Equipe</th><th>Status</th></tr></thead><tbody></tbody>`;
+  table.innerHTML = `<thead><tr><th>Patrimônio</th><th>Prédio</th><th>Setor</th><th>Ambiente</th><th>Equipe</th><th>Status</th><th></th></tr></thead><tbody></tbody>`;
   const tbody = table.querySelector("tbody");
 
   itensDoDia.forEach((item) => {
@@ -4633,6 +4633,15 @@ function renderTabelaDetalheDia(seletorTabela, itensDoDia, aoAtualizar) {
 
     tdStatus.appendChild(select);
     tr.appendChild(tdStatus);
+
+    // Abre a ficha do aparelho -- é por aqui que o trabalhador chega na
+    // opção de corrigir Marca/Modelo/Patrimônio/Tag/Capacidade/Gás caso
+    // estejam errados (ver "restrito" em abrirDrawerEquipamento).
+    const tdAcao = document.createElement("td");
+    tdAcao.innerHTML = `<button class="btn ghost" type="button" style="white-space:nowrap">Corrigir dados</button>`;
+    tdAcao.querySelector("button").addEventListener("click", () => abrirDrawerEquipamento(item.id));
+    tr.appendChild(tdAcao);
+
     tbody.appendChild(tr);
   });
 }
@@ -5369,6 +5378,12 @@ function classificarHistorico(h) {
   }
   if (h.tipo === "Cadastro") {
     return { rotulo: "Cadastro", classe: "hist-cadastro" };
+  }
+  // Correção de dados técnicos feita por um trabalhador direto no
+  // aparelho (ver "restrito" em abrirDrawerEquipamento) -- rótulo próprio
+  // pra dar pra distinguir de uma edição feita por admin.
+  if (h.tipo === "Correção") {
+    return { rotulo: "Correção", classe: "hist-correcao" };
   }
   return { rotulo: h.tipo || "Preventiva", classe: "hist-preventiva" };
 }
@@ -8702,6 +8717,12 @@ async function abrirDrawerEquipamento(id) {
 
   $("#drawerTitulo").textContent = item.patrimonio ? `Patrimônio ${item.patrimonio}` : item.ambiente;
 
+  // Trabalhador só corrige os dados técnicos que dá pra conferir olhando o
+  // aparelho de perto (Marca, Modelo, Patrimônio, Tag, Capacidade, Gás) --
+  // Setor/Ambiente/Prédio (localização) e Reagendar/Excluir continuam só
+  // pra admin, pra não bagunçar o cronograma sem querer.
+  const restrito = ESTADO.permissao === "trabalhador";
+
   $("#drawerCorpo").innerHTML = `
     <details class="drawer-secao" open>
       <summary>Situação</summary>
@@ -8778,10 +8799,12 @@ async function abrirDrawerEquipamento(id) {
       ` : '<div class="drawer-campo"><span class="rotulo">Status</span><span class="valor">Ainda não preenchido</span></div>'}
     </details>
 
-    <details class="drawer-secao drawer-form">
-      <summary>Editar cadastro</summary>
+    <details class="drawer-secao drawer-form" ${restrito ? "open" : ""}>
+      <summary>${restrito ? "Corrigir informações do aparelho" : "Editar cadastro"}</summary>
+      ${restrito ? `<p class="muted" style="margin-top:0">Viu que algum desses dados está errado? Corrija aqui -- fica registrado no Histórico com seu nome.</p>` : ""}
       <label>Patrimônio<input type="text" id="drawerPatrimonio" value="${escapeHtml(item.patrimonio || "")}"></label>
       <label>Tag<input type="text" id="drawerTag" value="${escapeHtml(item.tag || "")}" placeholder="Vem da planilha, se tiver"></label>
+      ${restrito ? "" : `
       <label>Setor<input type="text" id="drawerSetor" value="${escapeHtml(item.setor || "")}"></label>
       <label>Ambiente<input type="text" id="drawerAmbiente" value="${escapeHtml(item.ambiente || "")}"></label>
       <label>Prédio
@@ -8789,7 +8812,7 @@ async function abrirDrawerEquipamento(id) {
           ${ESTADO.configSite.predios.map((l) =>
             `<option value="${escapeHtml(l)}" ${(item.local || ESTADO.configSite.predios[0]) === l ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}
         </select>
-      </label>
+      </label>`}
       <label>Marca<input type="text" id="drawerMarca" value="${escapeHtml(item.marca || "")}" placeholder="Vem da planilha, se tiver"></label>
       <label>Modelo<input type="text" id="drawerModelo" value="${escapeHtml(item.modelo || "")}" placeholder="Vem da planilha, se tiver"></label>
       <label>Capacidade<input type="text" id="drawerCapacidade" value="${escapeHtml(item.capacidade || "")}" placeholder="Vem da planilha, se tiver"></label>
@@ -8800,10 +8823,11 @@ async function abrirDrawerEquipamento(id) {
           <option value="Outro" ${item.tipoGas && !GASES_REFRIGERANTES.includes(item.tipoGas) ? "selected" : ""}>Outro</option>
         </select>
       </label>
+      ${restrito ? "" : `
       <label>Observações (ex: contato da sala, restrições de horário...)<input type="text" id="drawerObservacao" value="${escapeHtml(item.observacao || "")}" placeholder="Ex: falar com Fulano, ramal 1234"></label>
-      <label>Código na planta (ex: E2/C4)<input type="text" id="drawerCodigoPlanta" value="${escapeHtml(item.codigoPlanta || "")}" placeholder="Ex: E2/C4"></label>
+      <label>Código na planta (ex: E2/C4)<input type="text" id="drawerCodigoPlanta" value="${escapeHtml(item.codigoPlanta || "")}" placeholder="Ex: E2/C4"></label>`}
       <div class="drawer-acoes">
-        <button class="btn primary" id="drawerSalvarCadastro">Salvar cadastro</button>
+        <button class="btn primary" id="drawerSalvarCadastro">${restrito ? "Salvar correção" : "Salvar cadastro"}</button>
       </div>
       <label>Foto do equipamento<input type="file" accept="image/*" capture="environment" id="drawerFotoInput"></label>
       <div class="drawer-acoes">
@@ -8811,6 +8835,7 @@ async function abrirDrawerEquipamento(id) {
       </div>
     </details>
 
+    ${restrito ? "" : `
     <details class="drawer-secao drawer-form">
       <summary>Reagendar</summary>
       <label>Nova data da preventiva<input type="date" id="drawerNovaData" value="${item.dataAgendada || ""}"></label>
@@ -8824,19 +8849,43 @@ async function abrirDrawerEquipamento(id) {
       <div class="drawer-acoes">
         <button class="btn ghost" id="drawerExcluir" style="color:var(--vermelho);border-color:var(--vermelho)">Excluir equipamento</button>
       </div>
-    </details>
+    </details>`}
   `;
 
   $("#drawerSalvarCadastro").addEventListener("click", async () => {
     const patrimonio = $("#drawerPatrimonio").value.trim();
     const tag = $("#drawerTag")?.value.trim() || "";
-    const setor = $("#drawerSetor").value.trim();
-    const ambiente = $("#drawerAmbiente").value.trim();
-    const local = $("#drawerLocal").value;
     const marca = $("#drawerMarca").value.trim();
     const modelo = $("#drawerModelo").value.trim();
     const capacidade = $("#drawerCapacidade").value.trim();
     const tipoGas = $("#drawerTipoGas")?.value || "";
+
+    // Trabalhador só mexe nos dados técnicos (ver "restrito" acima) -- o
+    // formulário nem mostra Setor/Ambiente/Prédio/Observações/Código na
+    // planta pra ele, então não toca nesses campos no banco, e o registro
+    // no Histórico usa um tipo próprio ("Correção") pra dar pra distinguir
+    // de uma edição feita por admin.
+    if (restrito) {
+      try {
+        await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
+          patrimonio, tag, marca, modelo, capacidade, tipoGas,
+        });
+        await registrarHistorico(
+          { id, patrimonio, setor: item.setor, ambiente: item.ambiente, local: item.local, equipeResponsavel: item.equipeResponsavel },
+          "-", "Editado", "Correção"
+        );
+        toast("Correção salva -- registrada no Histórico.");
+        fecharDrawer();
+      } catch (err) {
+        console.error(err);
+        toast("Erro ao salvar: " + err.message);
+      }
+      return;
+    }
+
+    const setor = $("#drawerSetor").value.trim();
+    const ambiente = $("#drawerAmbiente").value.trim();
+    const local = $("#drawerLocal").value;
     const observacao = $("#drawerObservacao")?.value.trim() || "";
     const codigoPlanta = $("#drawerCodigoPlanta")?.value.trim() || "";
     if (!setor || !ambiente) {
@@ -8902,7 +8951,7 @@ async function abrirDrawerEquipamento(id) {
     }
   });
 
-  $("#drawerSalvarData").addEventListener("click", async () => {
+  $("#drawerSalvarData")?.addEventListener("click", async () => {
     const novaData = $("#drawerNovaData").value;
     if (!novaData) {
       toast("Escolha uma data.");
@@ -8963,7 +9012,7 @@ async function abrirDrawerEquipamento(id) {
     }
   });
 
-  $("#drawerExcluir").addEventListener("click", async () => {
+  $("#drawerExcluir")?.addEventListener("click", async () => {
     const ok = window.confirm(`Remover "${item.patrimonio || item.ambiente}"? Essa ação não pode ser desfeita.`);
     if (!ok) return;
     try {
