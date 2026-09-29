@@ -1258,8 +1258,8 @@ function equipamentosAguardandoAgendamento() {
 
 function atualizarBannerAguardandoAgendamento() {
   const banner = $("#alertaAguardandoAgendamento");
-  const btnBanner = $("#btnAgendarAguardando");
-  if (!banner) return;
+  const lista = $("#alertaAguardandoAgendamentoLista");
+  if (!banner || !lista) return;
 
   // Cadastrar sem agendar é uma ação de admin (mesma tela que "Gerar
   // Cronograma"), então o aviso/botão só aparece pra quem pode agir.
@@ -1275,19 +1275,35 @@ function atualizarBannerAguardandoAgendamento() {
     return;
   }
 
-  const predios = [...new Set(pendentes.map((e) => e.local || "SEDE"))];
-  const txt = $("#alertaAguardandoAgendamentoTexto");
-  if (txt) {
-    txt.textContent = pendentes.length === 1
-      ? `1 aparelho está cadastrado mas ainda não entrou no cronograma (${predios.join(", ")}).`
-      : `${pendentes.length} aparelhos estão cadastrados mas ainda não entraram no cronograma (${predios.join(", ")}).`;
-  }
+  // Uma linha (com o próprio botão) POR PRÉDIO -- e não um botão só pra
+  // tudo -- porque agendar exige escolher UMA data de início, e prédios
+  // diferentes podem precisar começar em dias bem diferentes. Um botão
+  // único obrigaria a mesma data pra todo mundo aguardando, mesmo que
+  // tenham vindo de cadastros/planilhas separadas.
+  const porPredio = new Map();
+  pendentes.forEach((e) => {
+    const local = e.local || "SEDE";
+    if (!porPredio.has(local)) porPredio.set(local, []);
+    porPredio.get(local).push(e);
+  });
+
+  lista.innerHTML = [...porPredio.entries()].map(([local, itens]) => `
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span>${escapeHtml(local)}: ${itens.length} aparelho${itens.length === 1 ? "" : "s"} aguardando agendamento</span>
+      <button type="button" class="btn primary btn-agendar-predio-aguardando" data-local="${escapeHtml(local)}" style="font-size: 12px; padding: 4px 12px;">
+        Agendar agora
+      </button>
+    </div>
+  `).join("");
+
   banner.hidden = false;
-  if (btnBanner) btnBanner.hidden = false;
 }
 
-$("#btnAgendarAguardando")?.addEventListener("click", () => {
-  const pendentes = equipamentosAguardandoAgendamento();
+$("#alertaAguardandoAgendamentoLista")?.addEventListener("click", (ev) => {
+  const btn = ev.target.closest(".btn-agendar-predio-aguardando");
+  if (!btn) return;
+  const local = btn.dataset.local;
+  const pendentes = equipamentosAguardandoAgendamento().filter((e) => (e.local || "SEDE") === local);
   if (!pendentes.length) return;
   ESTADO.modoAdicionarPredio = true;
   ESTADO.itensParaAdicionarPredio = pendentes;
