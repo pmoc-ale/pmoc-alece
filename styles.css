@@ -92,6 +92,37 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Silhueta do Ceará bem discreta, fixa no canto -- mesma forma usada
+   como marca d'água nos PDFs (ver marcaDaguaCearaHtml em
+   utils/pdfGenerator.js), só que aqui atrás de tudo, quase
+   imperceptível, pra dar uma cara de "identidade" sem chamar atenção
+   nem atrapalhar a leitura de nada por cima. Usa mask (não
+   background-image) pra poder colorir a silhueta, já que o SVG
+   original é branco. */
+.fundo-decorativo {
+  position: fixed;
+  right: -70px;
+  bottom: -50px;
+  width: 420px;
+  height: 512px;
+  background-color: var(--verde-700);
+  opacity: 0.05;
+  -webkit-mask-image: url("assets/ceara-silhueta.svg");
+  mask-image: url("assets/ceara-silhueta.svg");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: bottom right;
+  mask-position: bottom right;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .fundo-decorativo { width: 260px; height: 317px; right: -50px; bottom: -30px; }
+}
+
 h1, h2, h3 {
   font-family: var(--fonte-display);
   color: var(--verde-900);
