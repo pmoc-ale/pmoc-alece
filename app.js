@@ -1628,8 +1628,14 @@ function linhasParaItens(rows) {
   const contagemPorPatrimonio = {};
 
   const itens = rows.map((row, idx) => {
-    const setor = row[colSetor];
-    const ambiente = row[colAmbiente];
+    // String(x ?? "") em vez de só row[colSetor] -- uma célula em
+    // branco que a planilha não chegou nem a preencher (não achou nada
+    // pra herdar de linha anterior, célula mesclada ou não) vira
+    // `undefined` aqui, e o Firestore recusa `undefined` em campo
+    // nenhum (batch.set() inteiro falha, travando o cadastro de TODOS
+    // os itens do lote, não só desse). String vazia é um valor válido.
+    const setor = String(row[colSetor] ?? "").trim();
+    const ambiente = String(row[colAmbiente] ?? "").trim();
 
     // Limpador de valores (Transforma "X" e "-" em vazio)
     const limparValor = (v) => {
@@ -1669,7 +1675,7 @@ function linhasParaItens(rows) {
       tipoGas,
       setor, ambiente,
       local: row.__local || "SEDE",
-      statusCondicao: colStatus ? row[colStatus] : "",
+      statusCondicao: colStatus ? String(row[colStatus] ?? "") : "",
       setorPCM,
       prioridadeSetor: PRIORIDADE[setorPCM] || 7,
       pisoPCM: descobrirPiso(setor),
