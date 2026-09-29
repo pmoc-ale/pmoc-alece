@@ -234,10 +234,9 @@
           <div id="resumoCapacidade" class="launchpad-resumo"></div>
         </div>
         <div class="launchpad-acao">
-          <label class="launchpad-checkbox" for="chkCadastrarSemAgendar">
-            <input type="checkbox" id="chkCadastrarSemAgendar">
-            Só cadastrar agora, sem agendar ainda -- decido a capacidade e o cronograma depois
-          </label>
+          <button class="btn launchpad-btn-secundario" id="btnCadastrarSemAgendar" type="button">
+            Só cadastrar, sem agendar ainda
+          </button>
           <button class="btn primary" id="btnGerar" style="background: var(--dourado); color: var(--verde-900); padding: 12px 24px; font-size: 15px; flex-shrink: 0;">
             Gerar Cronograma
           </button>
@@ -930,7 +929,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=114"></script>
+<script type="module" src="app.js?v=115"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

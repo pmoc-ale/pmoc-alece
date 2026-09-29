@@ -1291,7 +1291,6 @@ $("#btnAgendarAguardando")?.addEventListener("click", () => {
   if (!pendentes.length) return;
   ESTADO.modoAdicionarPredio = true;
   ESTADO.itensParaAdicionarPredio = pendentes;
-  if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
   irParaAba("config");
   const campoDataInicio = $("#dataInicio");
   if (campoDataInicio && !campoDataInicio.value) campoDataInicio.value = formatISO(new Date());
@@ -1514,7 +1513,6 @@ function processarArquivo(file) {
             if (resultado.erro) { toast(resultado.erro); return; }
             ESTADO.modoAdicionarPredio = true;
             ESTADO.itensParaAdicionarPredio = resultado.itens;
-            if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
             irParaAba("config");
             const hojeUtil = $("#dataInicio");
             if (hojeUtil && !hojeUtil.value) hojeUtil.value = formatISO(new Date());
@@ -1699,11 +1697,6 @@ async function confirmarAdicaoPredioNovo() {
   const itensDaPlanilha = ESTADO.itensParaAdicionarPredio;
   if (!itensDaPlanilha || !itensDaPlanilha.length) {
     toast("Nada pra adicionar -- volte na aba Levantamento e suba a planilha do prédio novo.");
-    return;
-  }
-
-  if ($("#chkCadastrarSemAgendar")?.checked) {
-    await cadastrarPredioNovoSemAgendar(itensDaPlanilha);
     return;
   }
 
@@ -1908,6 +1901,7 @@ async function confirmarAdicaoPredioNovo() {
 // itensParaAdicionarPredio guarda os objetos por referência.
 async function cadastrarPredioNovoSemAgendar(itensDaPlanilha) {
   $("#btnGerar").disabled = true;
+  if ($("#btnCadastrarSemAgendar")) $("#btnCadastrarSemAgendar").disabled = true;
   try {
     const idsDosItensDeAgora = new Set(itensDaPlanilha.map((i) => i.id));
     const idsExistentes = new Set(
@@ -1960,7 +1954,6 @@ async function cadastrarPredioNovoSemAgendar(itensDaPlanilha) {
 
     ESTADO.modoAdicionarPredio = false;
     ESTADO.itensParaAdicionarPredio = null;
-    if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
     atualizarVisualModoAdicionarPredio();
     atualizarBannerAguardandoAgendamento();
     irParaAba("equipamentos");
@@ -1969,6 +1962,7 @@ async function cadastrarPredioNovoSemAgendar(itensDaPlanilha) {
     toast("Erro ao cadastrar: " + err.message);
   } finally {
     $("#btnGerar").disabled = false;
+    if ($("#btnCadastrarSemAgendar")) $("#btnCadastrarSemAgendar").disabled = false;
   }
 }
 
@@ -2340,6 +2334,19 @@ $("#btnGerar").addEventListener("click", () => {
   else gerarCronograma();
 });
 
+$("#btnCadastrarSemAgendar")?.addEventListener("click", () => {
+  if (ESTADO.modoAdicionarPredio) {
+    const itensDaPlanilha = ESTADO.itensParaAdicionarPredio;
+    if (!itensDaPlanilha || !itensDaPlanilha.length) {
+      toast("Nada pra adicionar -- volte na aba Levantamento e suba a planilha do prédio novo.");
+      return;
+    }
+    cadastrarPredioNovoSemAgendar(itensDaPlanilha);
+  } else {
+    gerarCronogramaSemAgendar();
+  }
+});
+
 $("#btnDesfazerPlanilha")?.addEventListener("click", desfazerUltimaAtualizacaoPlanilha);
 
 // Domingo de Páscoa de um ano (algoritmo Gregoriano/Meeus -- o mesmo usado
@@ -2405,13 +2412,6 @@ async function gerarCronograma() {
   if (!ESTADO.itensCarregados.length) {
     toast("Envie e classifique um levantamento primeiro.");
     irParaAba("upload");
-    return;
-  }
-
-  // Cadastrar sem agendar: não precisa de data de início nem capacidade
-  // ainda, então nem passa pelas checagens/cálculo de datas abaixo.
-  if ($("#chkCadastrarSemAgendar")?.checked) {
-    await gerarCronogramaSemAgendar();
     return;
   }
 
@@ -2574,14 +2574,20 @@ async function gerarCronograma() {
 }
 
 // Versão do gerarCronograma() para quem só quer subir a planilha e decidir
-// capacidade/data de início depois (ver checkbox "Só cadastrar agora, sem
-// agendar ainda" no launchpad) -- cria o ciclo e salva os equipamentos
+// capacidade/data de início depois (botão "Só cadastrar, sem agendar
+// ainda" no launchpad) -- cria o ciclo e salva os equipamentos
 // normalmente, mas sem calcular data/equipe pra nenhum deles, marcando
 // aguardandoAgendamento pra eles ficarem de fora do cronograma/dashboard até
 // alguém passar pela tela de capacidade de verdade (ver
 // atualizarBannerAguardandoAgendamento e confirmarAdicaoPredioNovo).
 async function gerarCronogramaSemAgendar() {
+  if (!ESTADO.itensCarregados.length) {
+    toast("Envie e classifique um levantamento primeiro.");
+    irParaAba("upload");
+    return;
+  }
   $("#btnGerar").disabled = true;
+  if ($("#btnCadastrarSemAgendar")) $("#btnCadastrarSemAgendar").disabled = true;
   try {
     const diasSemana = Math.min(7, Math.max(1, parseInt($("#diasSemana")?.value, 10) || 5));
     const dataInicioStr = $("#dataInicio")?.value || formatISO(new Date());
@@ -2638,7 +2644,6 @@ async function gerarCronogramaSemAgendar() {
     }
 
     iniciarSincronizacao();
-    if ($("#chkCadastrarSemAgendar")) $("#chkCadastrarSemAgendar").checked = false;
     toast(`Cadastrado! ${itens.length} equipamento(s) -- ainda sem agendamento.`);
     irParaAba("equipamentos");
   } catch (err) {
@@ -2646,6 +2651,7 @@ async function gerarCronogramaSemAgendar() {
     toast("Erro ao salvar no Firebase: " + err.message);
   } finally {
     $("#btnGerar").disabled = false;
+    if ($("#btnCadastrarSemAgendar")) $("#btnCadastrarSemAgendar").disabled = false;
   }
 }
 
