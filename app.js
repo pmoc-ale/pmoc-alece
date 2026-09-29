@@ -1288,9 +1288,9 @@ function atualizarBannerAguardandoAgendamento() {
   });
 
   lista.innerHTML = [...porPredio.entries()].map(([local, itens]) => `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+    <div style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;">
       <span>${escapeHtml(local)}: ${itens.length} aparelho${itens.length === 1 ? "" : "s"} aguardando agendamento</span>
-      <button type="button" class="btn primary btn-agendar-predio-aguardando" data-local="${escapeHtml(local)}" style="font-size: 12px; padding: 4px 12px; flex-shrink: 0;">
+      <button type="button" class="btn primary btn-agendar-predio-aguardando" data-local="${escapeHtml(local)}" style="font-size: 12px; padding: 4px 12px;">
         Agendar agora
       </button>
     </div>
