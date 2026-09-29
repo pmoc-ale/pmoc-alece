@@ -630,7 +630,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   position: fixed;
   top: calc(var(--altura-topbar, 100px) + 12px);
   right: 20px;
-  z-index: 60;
+  z-index: 150; /* acima da .topbar (101), senão ela cobre o aviso */
   display: flex;
   flex-direction: column;
   gap: 10px;
