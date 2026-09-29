@@ -6350,7 +6350,13 @@ async function renderLocalizacao() {
   if (!ESTADO.plantas.length) {
     if (semPlantas) semPlantas.hidden = false;
     if (area) area.hidden = true;
-    if (painelUpload) painelUpload.hidden = !isAdmin;
+    // Só fecha à força pra quem não é admin -- pra admin, deixa o
+    // formulário de envio do jeito que a pessoa deixou (fechado até
+    // clicar em "Enviar planta", ver #btnMostrarUploadPlantaVazio),
+    // em vez de reabrir sozinho toda vez que a tela re-renderiza.
+    if (painelUpload && !isAdmin) painelUpload.hidden = true;
+    const btnVazio = $("#btnMostrarUploadPlantaVazio");
+    if (btnVazio) btnVazio.hidden = !isAdmin;
     if (isAdmin) renderUploadPlanta();
     return;
   }
@@ -8230,6 +8236,11 @@ function renderUploadPlanta() {
 ligarSeletorDeArquivo("uploadPlantaArquivo", "btnUploadPlantaEscolher", "uploadPlantaNome", "Nenhum arquivo selecionado");
 
 $("#btnMostrarUploadPlanta")?.addEventListener("click", () => {
+  const painel = $("#painelUploadPlanta");
+  if (painel) painel.hidden = !painel.hidden;
+});
+
+$("#btnMostrarUploadPlantaVazio")?.addEventListener("click", () => {
   const painel = $("#painelUploadPlanta");
   if (painel) painel.hidden = !painel.hidden;
 });

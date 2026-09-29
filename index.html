@@ -553,7 +553,8 @@
     <section class="view" id="view-localizacao">
       <div class="card" id="plantaSemPlantas" hidden>
         <h2>Localização na planta</h2>
-        <p class="muted">Nenhuma planta cadastrada ainda. Um admin pode enviar o desenho exportado do AutoCAD (.dwf ou .dwfx) abaixo.</p>
+        <p class="muted">Nenhuma planta cadastrada ainda. Um admin pode enviar o desenho exportado do AutoCAD (.dwf ou .dwfx).</p>
+        <button class="btn primary" id="btnMostrarUploadPlantaVazio" hidden style="margin-top:10px;">Enviar planta</button>
       </div>
       <div class="card" id="painelUploadPlanta" hidden>
         <h2>Enviar planta (.dwf / .dwfx)</h2>
@@ -586,9 +587,9 @@
         <div class="card-head" style="align-items:center;">
           <h2>Localização na planta</h2>
           <div style="display:flex; align-items:center; gap:10px;">
-            <select id="plantaSeletor"></select>
+            <select id="plantaSeletor" class="plantaSeletor-compacto"></select>
             <button class="btn ghost" id="btnMostrarUploadPlanta" hidden style="font-size:12.5px;padding:6px 14px;">+ Nova planta</button>
-            <button class="btn ghost" id="btnExcluirPlanta" hidden style="font-size:12.5px;padding:6px 14px;color:var(--vermelho);border-color:var(--vermelho);">Excluir esta planta</button>
+            <button class="btn danger-inverted" id="btnExcluirPlanta" hidden style="font-size:12.5px;padding:6px 14px;">Excluir esta planta</button>
           </div>
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
@@ -936,7 +937,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=120"></script>
+<script type="module" src="app.js?v=121"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

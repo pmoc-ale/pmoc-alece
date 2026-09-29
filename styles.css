@@ -1004,6 +1004,17 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   letter-spacing: 0.03em;
 }
 
+/* Junto de botões (ex: seletor de planta ao lado de "+ Nova planta" /
+   "Excluir esta planta") -- mesma altura/padding dos botões vizinhos,
+   senão o select (regra padrão logo abaixo, pensada pra formulário
+   empilhado) fica com um tamanho bem diferente e "torto" do lado deles. */
+.plantaSeletor-compacto {
+  width: auto !important;
+  margin-top: 0 !important;
+  padding: 6px 14px !important;
+  font-size: 12.5px !important;
+}
+
 .grid-form input, .grid-form select,
 .card input[type="text"], .card input[type="date"],
 .card input[type="number"], .card input[type="password"], .card select {
