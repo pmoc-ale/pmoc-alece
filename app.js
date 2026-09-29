@@ -3051,10 +3051,16 @@ let _processandoSincronizacao = false;
 let _sincronizacaoPendente = false;
 
 async function processarSincronizacao() {
-  if (!ESTADO.calYear && ESTADO.equipamentos.length) {
-    const primeira = new Date(ESTADO.equipamentos[0].dataAgendada + "T12:00:00Z");
-    ESTADO.calYear = primeira.getFullYear();
-    ESTADO.calMonth = primeira.getMonth();
+  // ESTADO.equipamentos[0] pode ser um item "aguardando agendamento"
+  // (sem dataAgendada ainda) -- usa o primeiro que já tem data mesmo,
+  // senão vira "Invalid Date" (NaN) e o calendário quebra o título.
+  if (!ESTADO.calYear) {
+    const primeiroAgendado = ESTADO.equipamentos.find((e) => e.dataAgendada);
+    if (primeiroAgendado) {
+      const primeira = new Date(primeiroAgendado.dataAgendada + "T12:00:00Z");
+      ESTADO.calYear = primeira.getFullYear();
+      ESTADO.calMonth = primeira.getMonth();
+    }
   }
   renderCalendar();
   renderDashboard();
@@ -4563,7 +4569,7 @@ $("#calendarModo")?.addEventListener("click", (e) => {
 });
 
 function mudarMes(delta) {
-  if (ESTADO.calMonth === null) { ESTADO.calMonth = new Date().getMonth(); ESTADO.calYear = new Date().getFullYear(); }
+  if (ESTADO.calMonth === null || Number.isNaN(ESTADO.calMonth) || Number.isNaN(ESTADO.calYear)) { ESTADO.calMonth = new Date().getMonth(); ESTADO.calYear = new Date().getFullYear(); }
   ESTADO.calMonth += delta;
   if (ESTADO.calMonth < 0) { ESTADO.calMonth = 11; ESTADO.calYear--; }
   if (ESTADO.calMonth > 11) { ESTADO.calMonth = 0; ESTADO.calYear++; }
@@ -4705,7 +4711,7 @@ function renderCalendar() {
 function renderCalendarMes() {
   const grid = $("#calendarGrid");
   grid.hidden = false;
-  if (ESTADO.calMonth === null) {
+  if (ESTADO.calMonth === null || Number.isNaN(ESTADO.calMonth) || Number.isNaN(ESTADO.calYear)) {
     const hoje = new Date();
     ESTADO.calYear = hoje.getFullYear();
     ESTADO.calMonth = hoje.getMonth();
