@@ -285,10 +285,22 @@ async function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
 // fixa do equipamento. Separado de enviarFoto/enviarFotoOuEnfileirar
 // (abaixo) porque é a parte que precisa mesmo de internet -- a fila
 // offline reusa exatamente essa função pra reenviar mais tarde.
+// Sem limite de tempo aqui, um sinal fraco (não caído de vez, só lento)
+// deixava o fetch pendurado pra sempre -- a tela de concluir preventiva
+// ficava travada em "Enviando foto..." sem nunca cair na fila offline,
+// que só entra em ação quando o envio REJEITA, não quando ele só
+// demora. 20s é tempo de sobra pra uma rede ruim mas viva; passado
+// isso, trata como falha de rede igual uma queda de sinal de verdade.
+function fetchComLimiteDeTempo(url, opcoes) {
+  const controlador = new AbortController();
+  const tempoEsgotado = setTimeout(() => controlador.abort(), 20000);
+  return fetch(url, { ...opcoes, signal: controlador.signal }).finally(() => clearTimeout(tempoEsgotado));
+}
+
 async function enviarBlobParaCloudinary(blobComprimido, destino) {
   const idToken = await auth.currentUser.getIdToken();
 
-  const respAssinatura = await fetch(URL_UPLOAD_FOTO, {
+  const respAssinatura = await fetchComLimiteDeTempo(URL_UPLOAD_FOTO, {
     method: "POST",
     headers: { Authorization: "Bearer " + idToken, "Content-Type": "application/json" },
     body: JSON.stringify(destino || {}),
@@ -308,7 +320,7 @@ async function enviarBlobParaCloudinary(blobComprimido, destino) {
   if (assinatura.publicId) formData.append("public_id", assinatura.publicId);
   if (assinatura.overwrite) formData.append("overwrite", assinatura.overwrite);
 
-  const respUpload = await fetch(`https://api.cloudinary.com/v1_1/${assinatura.cloudName}/image/upload`, {
+  const respUpload = await fetchComLimiteDeTempo(`https://api.cloudinary.com/v1_1/${assinatura.cloudName}/image/upload`, {
     method: "POST",
     body: formData,
   });
@@ -3836,7 +3848,10 @@ function renderAuditoria() {
 // Cores fixas do próprio sistema (nenhuma cor nova) só pra girar entre
 // as iniciais dos avatares -- o mesmo usuário sempre cai na mesma cor
 // (baseado no nome), não muda a cada render.
-const CORES_AVATAR = ["var(--teal)", "var(--dourado-escuro)", "var(--verde)", "var(--vermelho-texto)", "var(--azul-claro)", "var(--amarelo-texto)"];
+// --teal/--azul-claro (não os "-escuro") são claros demais pra ficarem
+// legíveis com o texto branco das iniciais em cima -- ver --teal-escuro/
+// --azul-escuro em styles.css.
+const CORES_AVATAR = ["var(--teal-escuro)", "var(--dourado-escuro)", "var(--verde)", "var(--vermelho-texto)", "var(--azul-escuro)", "var(--amarelo-texto)"];
 function corAvatar(texto) {
   let hash = 0;
   for (let i = 0; i < texto.length; i++) hash = (hash * 31 + texto.charCodeAt(i)) >>> 0;
@@ -4929,6 +4944,7 @@ function renderTabelaDetalheDia(seletorTabela, itensDoDia, aoAtualizar) {
     // opção de corrigir Marca/Modelo/Patrimônio/Tag/Capacidade/Gás caso
     // estejam errados (ver "restrito" em abrirDrawerEquipamento).
     const tdAcao = document.createElement("td");
+    tdAcao.dataset.label = "Ações";
     tdAcao.innerHTML = `<button class="btn ghost" type="button" style="white-space:nowrap">Corrigir dados</button>`;
     tdAcao.querySelector("button").addEventListener("click", () => abrirDrawerEquipamento(item.id));
     tr.appendChild(tdAcao);

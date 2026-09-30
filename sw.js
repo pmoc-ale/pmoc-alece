@@ -6,7 +6,7 @@
 // acontece sozinho -- toda vez que tem sinal, o site busca a versão nova
 // na rede antes de qualquer cache, ver estratégia "rede primeiro" abaixo
 // -- isso aqui só limpa versões antigas que sobraram no aparelho).
-const CACHE_VERSAO = "pmoc-alece-v76";
+const CACHE_VERSAO = "pmoc-alece-v77";
 
 // SEM os "?v=NN" de cache-busting -- index.html/app.js mudam esse número
 // toda vez que o código muda, e escrever o número aqui de novo (fácil de
@@ -57,9 +57,26 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((chaves) =>
-      Promise.all(chaves.filter((c) => c !== CACHE_VERSAO).map((c) => caches.delete(c)))
-    )
+    (async () => {
+      // Só apaga as versões antigas do cache se a nova já tiver os dois
+      // arquivos mais essenciais (sem eles o app nem abre) -- com sinal
+      // ruim bem na hora de um deploy, dava pra "instalar" uma versão
+      // nova pela metade (ver o addEventListener("install") acima, que
+      // deliberadamente segue em frente mesmo se ALGUM arquivo falhar) e
+      // depois apagar a versão antiga, que era a única cópia offline que
+      // funcionava de verdade. Assim, nesse caso raro, as versões
+      // antigas ficam guardadas por enquanto (só uns KB a mais) até uma
+      // próxima ativação, com tudo certo, limpar de vez.
+      const cacheNovo = await caches.open(CACHE_VERSAO);
+      const [temIndex, temAppJs] = await Promise.all([
+        cacheNovo.match("./index.html"),
+        cacheNovo.match("./app.js"),
+      ]);
+      if (temIndex && temAppJs) {
+        const chaves = await caches.keys();
+        await Promise.all(chaves.filter((c) => c !== CACHE_VERSAO).map((c) => caches.delete(c)));
+      }
+    })()
   );
   self.clients.claim();
 });
@@ -99,7 +116,16 @@ self.addEventListener("fetch", (event) => {
           return resp;
         })
         .catch(() =>
-          caches.match(chave).then((resp) => resp || caches.match("./index.html"))
+          caches.match(chave).then((resp) => {
+            if (resp) return resp;
+            // O "index.html de reserva" só faz sentido pra navegação (abrir
+            // a página em si) -- servir o HTML dele como se fosse a
+            // resposta de um <script src="app.js"> ou <link rel="stylesheet">
+            // faz o navegador tentar interpretar HTML como JS/CSS e quebrar
+            // o app inteiro, em vez de só faltar aquele arquivo específico.
+            if (req.mode === "navigate") return caches.match("./index.html");
+            return Response.error();
+          })
         )
     );
   } else if (url.hostname === "www.gstatic.com" && url.pathname.includes("/firebasejs/")) {

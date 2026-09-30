@@ -23,6 +23,12 @@
      principal não sobrou nenhuma cor fria na paleta de destaque. */
   --teal: #56A7B2;
   --azul-claro: #87D1E6;
+  /* Versões escuras dos dois acima -- só pra texto/ícone BRANCO em cima
+     (ex: iniciais do avatar de usuário) -- as cores claras acima têm
+     contraste ruim demais com branco (~2.8:1 e ~1.7:1, abaixo do mínimo
+     de acessibilidade), principalmente no celular sob luz forte. */
+  --teal-escuro: #386D74;
+  --azul-escuro: #238BA9;
 
   /* --- Dourado: único acento de destaque (== tabColor do Dashboard no Excel) --- */
   --dourado: #C9A34E;
@@ -1401,7 +1407,7 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
 .cal-day-badge.andamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
 .cal-day-badge.concluido { background: var(--verde-fundo); color: var(--verde-texto); }
 .cal-day-badge.atrasado { background: #10263D; color: #fff; } /* literal de propósito, ver .status-select.atrasado */
-.cal-day-badge.holiday { background: var(--dourado); color: #fff; }
+.cal-day-badge.holiday { background: var(--dourado); color: var(--verde-900); } /* branco em cima do dourado tem contraste ruim (~2.4:1) */
 .cal-day-badge.gap { background: var(--vermelho-fundo); color: var(--vermelho-texto); border: 1px dashed var(--vermelho); cursor: default; }
 
 .cal-badge-tooltip {
@@ -1431,7 +1437,7 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
 .cal-day-badge.atrasado:hover {
   background: #FEE2E2;
 }
-.cal-day-badge.holiday { background: var(--dourado); color: #fff; }
+.cal-day-badge.holiday { background: var(--dourado); color: var(--verde-900); } /* branco em cima do dourado tem contraste ruim (~2.4:1) */
 
 /* Dashboard / KPIs */
 .ciclo-resumo {
@@ -2106,15 +2112,19 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 .checklist-item:last-child { border-bottom: none; }
 .checklist-item input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; }
 
-.estrelas-widget { display: flex; gap: 4px; margin: var(--sp-2) 0; }
+.estrelas-widget { display: flex; gap: 10px; margin: var(--sp-2) 0; }
 .estrelas-widget .estrela {
-  font-size: 26px;
+  font-size: 30px;
   line-height: 1;
   color: var(--borda-forte);
   cursor: pointer;
   user-select: none;
 }
-.estrelas-widget .estrela.ativa { color: var(--dourado); }
+/* --dourado sozinho (usado nos botões/destaques) tem pouco contraste
+   como TEXTO/ícone num fundo claro -- quase 2.4:1, ilegível principalmente
+   no celular sob luz forte. --dourado-escuro (já usado noutros lugares
+   pelo mesmo motivo) resolve sem perder a identidade "dourada". */
+.estrelas-widget .estrela.ativa { color: var(--dourado-escuro); }
 
 .campo-outro { margin-top: 6px; }
 
@@ -2445,6 +2455,16 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
      realmente usa ficavam escondidas na faixa de abas de cima. Troca:
      os atalhos aparecem embaixo, e a duplicata em cima some. */
   body.modo-trabalhador .sidenav-atalho-trabalhador { display: flex; }
+  /* Só 3 itens (Hoje/Calendário/Dashboard) nessa barra pro trabalhador,
+     contra os 6+ do admin (Gestão) -- sobra espaço de sobra, então o
+     alvo de toque pode ser maior nesse caso específico. É a única
+     navegação que esse papel tem no celular, usada o turno inteiro. */
+  body.modo-trabalhador .sidenav-item {
+    font-size: 11.5px;
+    padding: 10px 4px;
+    gap: 4px;
+    min-height: 48px;
+  }
   /* Pro trabalhador, TODA aba dessa faixa de cima já está escondida
      (essas três por essa regra, Levantamento/Cronograma por já não
      serem admin) -- sem esconder a faixa inteira, sobrava um vão vazio
@@ -2556,6 +2576,17 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     color: var(--texto-suave);
     text-align: left;
     flex-shrink: 0;
+  }
+
+  /* O <select> de status é o toque mais repetido do sistema (o técnico
+     usa pra marcar Pendente/Em andamento/Concluída várias vezes por
+     turno, nas telas "Hoje" e no detalhe do dia do Calendário) -- o
+     tamanho normal (pensado pra encaixar numa célula de tabela desktop)
+     fica pequeno demais pra acertar com o dedo. Maior só no celular. */
+  select.status-select {
+    padding: 8px 14px;
+    font-size: 12.5px;
+    min-height: 40px;
   }
 
   /* Só a de equipamentos tem coluna de seleção (checkbox) e de ações (⋯)
