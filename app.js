@@ -80,7 +80,13 @@ async function calcularProximaData(item) {
   const DIAS_UTEIS = NOMES_DIAS.slice(0, diasSemana);
   const ehDiaUtilLocal = (dt) => DIAS_UTEIS.includes(NOMES_DIAS[(dt.getDay() + 6) % 7]) && !estaEmFeriado(dt);
 
-  const [a, m, d] = item.dataAgendada.split("-");
+  // Rede de segurança: dataAgendada vazia (item "aguardando agendamento"
+  // -- hoje nunca chega até aqui, já que todo lugar que abre a tela de
+  // concluir preventiva filtra por uma data real antes) viraria Invalid
+  // Date aqui, e o "while" duas linhas abaixo trava a aba pra sempre
+  // (Invalid Date nunca avança com setDate). Cai pra hoje nesse caso.
+  const baseIso = item.dataAgendada || formatISO(new Date());
+  const [a, m, d] = baseIso.split("-");
   let cursor = adicionarMeses(new Date(a, parseInt(m, 10) - 1, d, 12, 0, 0), ESTADO.configSite.mesesCiclo);
   while (!ehDiaUtilLocal(cursor)) cursor.setDate(cursor.getDate() + 1);
 

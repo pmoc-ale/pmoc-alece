@@ -117,8 +117,12 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
     porSetor[setor].push(e);
   });
 
+  // dataAgendada vazio (equipamento "aguardando agendamento", cadastrado
+  // mas ainda sem entrar no cronograma) precisa ficar de fora -- sem o
+  // "e.dataAgendada &&", "" < hojeISO é true em JS, e cada um deles
+  // entraria como se estivesse atrasado no relatório oficial.
   const atrasados = equipamentos.filter(e =>
-    e.dataAgendada < hojeISO && e.statusPreventiva !== 'Concluída'
+    e.dataAgendada && e.dataAgendada < hojeISO && e.statusPreventiva !== 'Concluída'
   );
   const atrasaramSemana = atrasados.filter(e => e.dataAgendada >= seteDiasAtrasData).length;
 
