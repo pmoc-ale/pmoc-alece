@@ -183,7 +183,7 @@
           <span class="pill" id="previewCount">0 itens</span>
         </div>
         <div class="table-wrap">
-          <table id="previewTable"></table>
+          <table id="previewTable" class="tabela-cards-mobile"></table>
         </div>
       </div>
       <div class="card" id="cardSumidosPlanilha" hidden>
@@ -193,7 +193,7 @@
         </div>
         <p class="muted" id="sumidosExplicacao"></p>
         <div class="table-wrap">
-          <table id="sumidosTable"></table>
+          <table id="sumidosTable" class="tabela-cards-mobile"></table>
         </div>
       </div>
     </section>
@@ -304,7 +304,7 @@
           </div>
           <p class="muted">Toda vez que um aparelho atrasado é reagendado automaticamente, fica registrado aqui — mesmo depois que ele já não aparece mais como atrasado no calendário.</p>
           <div class="table-wrap">
-            <table id="atrasosTable"></table>
+            <table id="atrasosTable" class="tabela-cards-mobile"></table>
           </div>
         </div>
       </details>
@@ -330,7 +330,7 @@
           </div>
           <p class="muted">Todos os cronogramas gerados a partir deste levantamento ficam salvos aqui. Ao gerar um cronograma a partir de um levantamento novo, esse histórico é reiniciado.</p>
           <div class="table-wrap">
-            <table id="ciclosTable"></table>
+            <table id="ciclosTable" class="tabela-cards-mobile"></table>
           </div>
         </div>
       </details>
@@ -362,7 +362,7 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table id="ordensTable"></table>
+          <table id="ordensTable" class="tabela-cards-mobile tabela-com-selecao"></table>
         </div>
         <div style="text-align: right;">
           <button class="btn danger-inverted" id="btnLimparOrdens">Apagar todas as ordens de serviço</button>
@@ -396,7 +396,7 @@
           </div>
         </div>
         <div class="table-wrap">
-            <table id="historicoTable"></table>
+            <table id="historicoTable" class="tabela-cards-mobile tabela-com-selecao"></table>
         </div>
         <div style="text-align: right;">
           <button class="btn danger-inverted" id="btnLimparHistorico">Apagar todo o histórico</button>
@@ -502,7 +502,7 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table id="equipamentosTable" class="tabela-cards-mobile"></table>
+          <table id="equipamentosTable" class="tabela-cards-mobile tabela-com-selecao"></table>
         </div>
       </div>
       <details class="drawer-secao" id="cardChamadosOrfaos" hidden>
@@ -510,7 +510,7 @@
         <div style="padding: var(--sp-4);">
           <p class="muted">Chamados corretivos da planilha que não bateram com nenhum equipamento já cadastrado — pode ser um aparelho que falta registrar.</p>
           <div class="table-wrap">
-            <table id="chamadosOrfaosTable"></table>
+            <table id="chamadosOrfaosTable" class="tabela-cards-mobile"></table>
           </div>
         </div>
       </details>
@@ -732,7 +732,7 @@
         </div>
         <input type="text" class="search-input" id="buscaFeriados" placeholder="Buscar por descrição ou tipo...">
         <div class="table-wrap">
-          <table id="feriadosTable"></table>
+          <table id="feriadosTable" class="tabela-cards-mobile"></table>
         </div>
       </div>
     </section>
@@ -811,7 +811,7 @@
             <span class="pill" id="usuariosCount">0 contas</span>
           </div>
           <div class="table-wrap">
-            <table id="usuariosTable"></table>
+            <table id="usuariosTable" class="tabela-cards-mobile"></table>
           </div>
         </div>
       </div>
@@ -823,7 +823,7 @@
             <span class="pill" id="auditoriaCount">0 registros</span>
           </div>
           <div class="table-wrap">
-            <table id="auditoriaTable"></table>
+            <table id="auditoriaTable" class="tabela-cards-mobile"></table>
           </div>
         </div>
       </div>
@@ -937,7 +937,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=124"></script>
+<script type="module" src="app.js?v=125"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

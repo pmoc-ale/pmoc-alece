@@ -937,12 +937,13 @@ function renderChamadosOrfaos() {
     const tr = document.createElement("tr");
     const salaGabinete = [c.gabinete, c.sala, c.nomeSetor, c.salaSetor].filter(Boolean).join(" / ") || "-";
     tr.innerHTML = `
-      <td>${escapeHtml(c.dataFormatada || "-")}</td>
-      <td>${escapeHtml(c.anexo || "-")}</td>
-      <td>${escapeHtml(salaGabinete)}</td>
-      <td>${escapeHtml(c.chamado || "-")}</td>
-      <td>${escapeHtml(c.descricaoProblema || c.pecaFaltante || "-")}</td>`;
+      <td data-label="Data">${escapeHtml(c.dataFormatada || "-")}</td>
+      <td data-label="Anexo">${escapeHtml(c.anexo || "-")}</td>
+      <td data-label="Sala/Gabinete">${escapeHtml(salaGabinete)}</td>
+      <td data-label="Chamado">${escapeHtml(c.chamado || "-")}</td>
+      <td data-label="Descrição">${escapeHtml(c.descricaoProblema || c.pecaFaltante || "-")}</td>`;
     const tdBtn = document.createElement("td");
+    tdBtn.dataset.label = "Ações";
     const btn = document.createElement("button");
     btn.className = "btn ghost";
     btn.style.fontSize = "12px";
@@ -2096,7 +2097,7 @@ function renderSumidosPlanilha(sumidos) {
   ];
   const table = $("#sumidosTable");
   table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead>
-    <tbody>${sumidos.map((i) => `<tr>${cols.map((c) => `<td>${escapeHtml(String(c[1](i) ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    <tbody>${sumidos.map((i) => `<tr>${cols.map((c) => `<td data-label="${c[0]}">${escapeHtml(String(c[1](i) ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 
 async function atualizarCadastroPredioExistente(itensDaPlanilha) {
@@ -2366,7 +2367,7 @@ function renderPreview(itens) {
   ];
   const table = $("#previewTable");
   table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead>
-    <tbody>${itens.map((i) => `<tr>${cols.map((c) => `<td>${c[1](i) ?? ""}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    <tbody>${itens.map((i) => `<tr>${cols.map((c) => `<td data-label="${c[0]}">${escapeHtml(c[1](i) ?? "")}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 
 $("#btnGerar").addEventListener("click", () => {
@@ -2957,9 +2958,14 @@ $("#btnSalvarConfigSite")?.addEventListener("click", async () => {
   if (removidos.length && removidos.length === adicionados.length) {
     renomeacoes = removidos.map((antigo, i) => ({ antigo, novo: adicionados[i] }));
     const descricao = renomeacoes.map((r) => `"${r.antigo}" → "${r.novo}"`).join(", ");
-    const ok = window.confirm(
-      `Parece que você renomeou: ${descricao}.\n\nQuer que eu atualize automaticamente os equipamentos, equipes e capacidades já cadastrados pra usar o nome novo? Se a lista mudou por outro motivo, clique em Cancelar (a lista de prédios salva do mesmo jeito, só não mexe em mais nada).`
-    );
+    const ok = await confirmarModal({
+      titulo: "Prédio(s) renomeado(s)?",
+      corpoHtml:
+        `<p>Parece que você renomeou: <strong>${escapeHtml(descricao)}</strong>.</p>` +
+        `<p>Quer que eu atualize automaticamente os equipamentos, equipes e capacidades já cadastrados pra usar o nome novo? Se a lista mudou por outro motivo, clique em Cancelar (a lista de prédios salva do mesmo jeito, só não mexe em mais nada).</p>`,
+      textoConfirmar: "Atualizar nomes",
+      textoCancelar: "Cancelar",
+    });
     if (!ok) renomeacoes = [];
   } else if (removidos.length) {
     const impacto = removidos
@@ -2967,9 +2973,15 @@ $("#btnSalvarConfigSite")?.addEventListener("click", async () => {
       .join(", ");
     const temImpacto = removidos.some((p) => ESTADO.equipamentos.some((e) => (e.local || "SEDE") === p));
     if (temImpacto) {
-      const ok = window.confirm(
-        `Remover ${removidos.join(", ")} da lista vai deixar estes equipamentos sem prédio válido: ${impacto}.\n\nEles continuam existindo, mas somem dos filtros por prédio. Quer continuar mesmo assim?`
-      );
+      const ok = await confirmarModal({
+        titulo: "Remover prédio da lista?",
+        corpoHtml:
+          `<p>Remover <strong>${escapeHtml(removidos.join(", "))}</strong> da lista vai deixar estes equipamentos sem prédio válido: ${escapeHtml(impacto)}.</p>` +
+          `<p>Eles continuam existindo, mas somem dos filtros por prédio.</p>`,
+        textoConfirmar: "Continuar mesmo assim",
+        textoCancelar: "Cancelar",
+        perigo: true,
+      });
       if (!ok) return;
     }
   }
@@ -3837,10 +3849,10 @@ function renderAuditoria() {
   registros.forEach((r) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${new Date(r.registradoEm).toLocaleString("pt-BR")}</td>
-      <td>${escapeHtml(r.usuario || "-")}</td>
-      <td><strong>${escapeHtml(r.acao)}</strong></td>
-      <td>${escapeHtml(r.detalhes || "-")}</td>`;
+      <td data-label="Data/Hora">${new Date(r.registradoEm).toLocaleString("pt-BR")}</td>
+      <td data-label="Usuário">${escapeHtml(r.usuario || "-")}</td>
+      <td data-label="Ação"><strong>${escapeHtml(r.acao)}</strong></td>
+      <td data-label="Detalhes">${escapeHtml(r.detalhes || "-")}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -3891,14 +3903,15 @@ function renderUsuarios() {
     const equipeTexto = u.permissao !== "trabalhador" ? "-" : (u.equipe ? `${escapeHtml(u.predio || "")} — ${escapeHtml(u.equipe)}` : "Sem equipe");
 
     tr.innerHTML = `
-      <td>${avatarUsuarioHtml(u)}</td>
-      <td ${estiloUsuario}>${u.usuario} ${u.bloqueado ? '(Bloqueado)' : ''}</td>
-      <td>${ROTULOS_PERMISSAO[u.permissao] || "Padrão"}</td>
-      <td>${equipeTexto}</td>
-      <td>${u.criadoEm ? new Date(u.criadoEm).toLocaleDateString("pt-BR") : "-"}</td>
-      <td>${u.ultimoLogin ? new Date(u.ultimoLogin).toLocaleString("pt-BR") : "-"}</td>`;
+      <td data-label="Avatar">${avatarUsuarioHtml(u)}</td>
+      <td data-label="Usuário" ${estiloUsuario}>${u.usuario} ${u.bloqueado ? '(Bloqueado)' : ''}</td>
+      <td data-label="Permissão">${ROTULOS_PERMISSAO[u.permissao] || "Padrão"}</td>
+      <td data-label="Equipe">${equipeTexto}</td>
+      <td data-label="Criado em">${u.criadoEm ? new Date(u.criadoEm).toLocaleDateString("pt-BR") : "-"}</td>
+      <td data-label="Último login">${u.ultimoLogin ? new Date(u.ultimoLogin).toLocaleString("pt-BR") : "-"}</td>`;
 
     const tdMenu = document.createElement("td");
+    tdMenu.dataset.label = "Ações";
 
     const acaoBloqueio = u.bloqueado ? "Desbloquear" : "Bloquear";
     const outrasPermissoes = Object.keys(ROTULOS_PERMISSAO).filter((p) => p !== (u.permissao || "padrao"));
@@ -4277,11 +4290,15 @@ function renderEquipesPorPredio() {
 
   // Re-atachando os eventos originais
   container.querySelectorAll(".btn-adicionar-vaga").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const predio = btn.dataset.predio;
       const equipesDoPredio = ESTADO.equipes.filter((e) => e.predio === predio);
       const proximaOrdem = equipesDoPredio.reduce((max, e) => Math.max(max, e.ordem), 0) + 1;
-      const nomeTemp = window.prompt(`Nome da nova equipe em ${predio}:`);
+      const nomeTemp = await promptModal({
+        titulo: "Nova equipe",
+        label: `Nome da nova equipe em ${predio}:`,
+        textoConfirmar: "Adicionar",
+      });
       if (!nomeTemp || !nomeTemp.trim()) return;
       addDoc(collection(db, "equipes"), { predio, ordem: proximaOrdem, nome: nomeTemp.trim() })
         .then(() => registrarAuditoria("Adicionar equipe", `${nomeTemp.trim()} — ${predio}`))
@@ -4393,9 +4410,13 @@ function renderEquipesPorPredio() {
         (e) => (e.local || "SEDE") === existente.predio && e.equipeResponsavel === existente.nome
       );
       if (equipamentosPresos.length) {
-        const ok = window.confirm(
-          `"${existente.nome}" tem ${equipamentosPresos.length} equipamento(s) agendado(s) em ${existente.predio}. Ao mover pra ${destino}, esses equipamentos vão continuar mostrando "${existente.nome}" como responsável. Quer continuar mesmo assim?`
-        );
+        const ok = await confirmarModal({
+          titulo: "Mover equipe com equipamentos agendados?",
+          corpoHtml: `<p><strong>${escapeHtml(existente.nome)}</strong> tem ${equipamentosPresos.length} equipamento(s) agendado(s) em ${escapeHtml(existente.predio)}. Ao mover pra ${escapeHtml(destino)}, esses equipamentos vão continuar mostrando "${escapeHtml(existente.nome)}" como responsável.</p>`,
+          textoConfirmar: "Continuar mesmo assim",
+          textoCancelar: "Cancelar",
+          perigo: true,
+        });
         if (!ok) return;
       }
 
@@ -4419,9 +4440,15 @@ function renderEquipesPorPredio() {
         ? ESTADO.equipamentos.filter((e) => e.equipeResponsavel === existente.nome)
         : [];
       const aviso = equipamentosPresos.length
-        ? `Excluir "${existente.nome}"? Ela tem ${equipamentosPresos.length} equipamento(s) que vão continuar mostrando essa equipe como responsável.`
-        : "Excluir essa equipe?";
-      const ok = window.confirm(aviso);
+        ? `Ela tem ${equipamentosPresos.length} equipamento(s) que vão continuar mostrando essa equipe como responsável.`
+        : "";
+      const ok = await confirmarModal({
+        titulo: `Excluir "${existente ? existente.nome : "essa equipe"}"?`,
+        corpoHtml: aviso ? `<p>${escapeHtml(aviso)}</p>` : "",
+        textoConfirmar: "Excluir",
+        textoCancelar: "Cancelar",
+        perigo: true,
+      });
       if (!ok) return;
       try {
         await deleteDoc(doc(db, "equipes", btn.dataset.id));
@@ -5082,13 +5109,13 @@ function renderResumoAtrasos() {
     .forEach((h) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${h.patrimonio || "-"}</td>
-        <td>${h.local || "SEDE"}</td>
-        <td>${h.setor || "-"}</td>
-        <td>${h.equipe || "-"}</td>
-        <td>${formatarDataBR(h.dataAnterior)}</td>
-        <td>${formatarDataBR(h.dataNova)}</td>
-        <td>${new Date(h.registradoEm).toLocaleString("pt-BR")}</td>`;
+        <td data-label="Patrimônio">${h.patrimonio || "-"}</td>
+        <td data-label="Prédio">${h.local || "SEDE"}</td>
+        <td data-label="Setor">${h.setor || "-"}</td>
+        <td data-label="Equipe">${h.equipe || "-"}</td>
+        <td data-label="De">${formatarDataBR(h.dataAnterior)}</td>
+        <td data-label="Para">${formatarDataBR(h.dataNova)}</td>
+        <td data-label="Quando">${new Date(h.registradoEm).toLocaleString("pt-BR")}</td>`;
       tbody.appendChild(tr);
     });
 }
@@ -5735,16 +5762,16 @@ function renderHistorico(){
 
     tr.innerHTML = `
         <td></td>
-        <td>
+        <td data-label="Data e hora">
           <div class="hist-data-principal">${data.toLocaleDateString("pt-BR")}</div>
           <div class="hist-data-hora">${data.toLocaleTimeString("pt-BR")}</div>
         </td>
-        <td><span class="hist-evento ${evento.classe}">${escapeHtml(evento.rotulo)}</span></td>
-        <td>${escapeHtml(h.patrimonio || "-")}</td>
-        <td>${escapeHtml(h.setor)}</td>
-        <td>${escapeHtml(h.equipe)}</td>
-        <td>${escapeHtml(h.usuario || "-")}</td>
-        <td><div class="hist-alteracao">${colAlteracao}</div></td>
+        <td data-label="Evento"><span class="hist-evento ${evento.classe}">${escapeHtml(evento.rotulo)}</span></td>
+        <td data-label="Patrimônio">${escapeHtml(h.patrimonio || "-")}</td>
+        <td data-label="Setor">${escapeHtml(h.setor)}</td>
+        <td data-label="Equipe">${escapeHtml(h.equipe)}</td>
+        <td data-label="Usuário">${escapeHtml(h.usuario || "-")}</td>
+        <td data-label="Alteração"><div class="hist-alteracao">${colAlteracao}</div></td>
     `;
 
     const chaveSel = `${h.cicloId}::${h.id}`;
@@ -5808,11 +5835,11 @@ function renderOrdens() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td></td>
-      <td>${new Date(o.registradoEm).toLocaleString("pt-BR")}</td>
-      <td>${escapeHtml(o.patrimonio || "-")}</td>
-      <td>${escapeHtml(o.setor || "")}</td>
-      <td>${escapeHtml(o.ambiente || "")}</td>
-      <td>${escapeHtml(o.equipe || "")}</td>
+      <td data-label="Data de Conclusão">${new Date(o.registradoEm).toLocaleString("pt-BR")}</td>
+      <td data-label="Patrimônio">${escapeHtml(o.patrimonio || "-")}</td>
+      <td data-label="Setor">${escapeHtml(o.setor || "")}</td>
+      <td data-label="Ambiente">${escapeHtml(o.ambiente || "")}</td>
+      <td data-label="Equipe">${escapeHtml(o.equipe || "")}</td>
     `;
 
     const chaveSel = `${o.cicloId}::${o.id}`;
@@ -5860,7 +5887,13 @@ function renderOrdens() {
 $("#btnExcluirSelecionadosOrdens")?.addEventListener("click", async () => {
   const chaves = [...ESTADO.selecaoOrdens];
   if (!chaves.length) return;
-  const ok = window.confirm(`Excluir ${chaves.length} ordem(ns) de serviço selecionada(s)?`);
+  const ok = await confirmarModal({
+    titulo: "Excluir ordens de serviço?",
+    corpoHtml: `<p>Excluir ${chaves.length} ordem(ns) de serviço selecionada(s)?</p>`,
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     const porCiclo = {};
@@ -5887,7 +5920,13 @@ $("#btnExcluirSelecionadosOrdens")?.addEventListener("click", async () => {
 $("#btnExcluirSelecionadosHistorico")?.addEventListener("click", async () => {
   const chaves = [...ESTADO.selecaoHistorico];
   if (!chaves.length) return;
-  const ok = window.confirm(`Excluir ${chaves.length} registro(s) de histórico selecionado(s)?`);
+  const ok = await confirmarModal({
+    titulo: "Excluir histórico?",
+    corpoHtml: `<p>Excluir ${chaves.length} registro(s) de histórico selecionado(s)?</p>`,
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     const porCiclo = {};
@@ -5931,6 +5970,27 @@ function atualizarAlturaTopbar() {
 }
 atualizarAlturaTopbar();
 window.addEventListener("resize", atualizarAlturaTopbar);
+
+// No celular, quando o teclado abre pra digitar num campo dentro de um
+// drawer (ex: "técnico responsável" na conclusão de preventiva), a área
+// realmente visível da tela (window.visualViewport) fica menor que a
+// "viewport" cheia que o CSS normalmente usa -- sem isso, o rodapé do
+// drawer (position:fixed, onde ficam os botões Continuar/Cancelar,
+// ver .drawer em styles.css) podia ficar escondido atrás do teclado em
+// vez de subir junto com ele. window.visualViewport não existe em
+// navegadores bem antigos -- nesse caso simplesmente não ajusta nada,
+// caindo no comportamento de sempre (100vh), sem quebrar nada.
+function ajustarDrawerParaTeclado() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  document.documentElement.style.setProperty("--altura-visivel", `${vv.height}px`);
+  document.documentElement.style.setProperty("--topo-visivel", `${vv.offsetTop}px`);
+}
+if (window.visualViewport) {
+  ajustarDrawerParaTeclado();
+  window.visualViewport.addEventListener("resize", ajustarDrawerParaTeclado);
+  window.visualViewport.addEventListener("scroll", ajustarDrawerParaTeclado);
+}
 
 // Botão flutuante (mobile): quando a lista de equipamentos já está longa,
 // evita ter que rolar a tela de volta lá pra cima só pra achar o formulário
@@ -6154,9 +6214,13 @@ async function adicionarEquipamentoManual() {
       e.patrimonio && normalizarTexto(e.patrimonio) === normalizarTexto(patrimonio) && e.id !== idEquipamentoEmEdicao
     );
     if (duplicado) {
-      const ok = window.confirm(
-        `Já existe um equipamento com o patrimônio "${patrimonio}" (${duplicado.setor} — ${duplicado.ambiente}, ${duplicado.local || "SEDE"}).\n\nQuer continuar mesmo assim?`
-      );
+      const ok = await confirmarModal({
+        titulo: "Patrimônio já cadastrado",
+        corpoHtml: `<p>Já existe um equipamento com o patrimônio "${escapeHtml(patrimonio)}" (${escapeHtml(duplicado.setor)} — ${escapeHtml(duplicado.ambiente)}, ${escapeHtml(duplicado.local || "SEDE")}).</p>`,
+        textoConfirmar: "Continuar mesmo assim",
+        textoCancelar: "Cancelar",
+        perigo: true,
+      });
       if (!ok) return;
     }
   }
@@ -7389,7 +7453,14 @@ function mostrarPainelPlanta(item) {
   $("#btnAbrirDrawerDaPlanta")?.addEventListener("click", () => abrirDrawerEquipamento(item.id));
   $("#btnVerCondensadora")?.addEventListener("click", () => irParaMarcador(condensadora.plantaId, condensadora.x, condensadora.y, () => mostrarPainelCondensadora(condensadora)));
   $("#btnRemoverMarcacaoEvap")?.addEventListener("click", async () => {
-    if (!confirm("Remover a marcação desse aparelho nesta planta?")) return;
+    const ok = await confirmarModal({
+      titulo: "Remover marcação?",
+      corpoHtml: "<p>Remover a marcação desse aparelho nesta planta?</p>",
+      textoConfirmar: "Remover",
+      textoCancelar: "Cancelar",
+      perigo: true,
+    });
+    if (!ok) return;
     try {
       await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
         // Limpa também o tamanho customizado -- senão, ao marcar esse
@@ -7438,7 +7509,14 @@ function mostrarPainelCondensadora(cond) {
   });
   $("#btnImprimirQrCond")?.addEventListener("click", () => imprimirQrCondensadoras([cond]));
   $("#btnRemoverMarcacaoCond")?.addEventListener("click", async () => {
-    if (!confirm(`Remover a condensadora "${cond.codigo}" desta planta?`)) return;
+    const ok = await confirmarModal({
+      titulo: "Remover condensadora?",
+      corpoHtml: `<p>Remover a condensadora "${escapeHtml(cond.codigo || "")}" desta planta?</p>`,
+      textoConfirmar: "Remover",
+      textoCancelar: "Cancelar",
+      perigo: true,
+    });
+    if (!ok) return;
     const plantaRef = doc(db, "plantas", cond.plantaId);
     try {
       await runTransaction(db, async (tx) => {
@@ -8003,9 +8081,16 @@ $("#btnExcluirPlanta")?.addEventListener("click", async () => {
     (e) => e.plantaId === planta.id || e.condensadoraPlantaId === planta.id
   );
   const aviso = afetados.length
-    ? ` ${afetados.length} aparelho(s) marcado(s) nela vão ficar sem posição (o cadastro deles não é afetado, só a marcação some).`
+    ? `<p>${afetados.length} aparelho(s) marcado(s) nela vão ficar sem posição (o cadastro deles não é afetado, só a marcação some).</p>`
     : "";
-  if (!confirm(`Excluir a planta "${planta.nome}"?${aviso}`)) return;
+  const ok = await confirmarModal({
+    titulo: `Excluir a planta "${planta.nome}"?`,
+    corpoHtml: aviso,
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
+  if (!ok) return;
   try {
     const batch = writeBatch(db);
     batch.delete(doc(db, "plantas", planta.id));
@@ -8856,7 +8941,13 @@ function renderEquipamentosCadastro() {
 $("#btnExcluirSelecionadosEquipamentos")?.addEventListener("click", async () => {
   const ids = [...ESTADO.selecaoEquipamentos];
   if (!ids.length) return;
-  const ok = window.confirm(`Excluir ${ids.length} equipamento(s) selecionado(s)? Essa ação não pode ser desfeita.`);
+  const ok = await confirmarModal({
+    titulo: "Excluir equipamentos?",
+    corpoHtml: `<p>Excluir ${ids.length} equipamento(s) selecionado(s)?</p><div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     for (const id of ids) {
@@ -9298,9 +9389,12 @@ async function abrirDrawerEquipamento(id) {
     const capacidadeDia = Math.max(1, cap.nEquipes) * Math.max(1, cap.aparelhosDia);
     const feriadoNoDia = feriadoNaData(novaData);
     if (feriadoNoDia) {
-      const ok = window.confirm(
-        `Esse dia é ${feriadoNoDia.tipo === "feriado" ? "feriado" : "período de férias"} (${feriadoNoDia.label}). Agendar mesmo assim?`
-      );
+      const ok = await confirmarModal({
+        titulo: "Agendar num feriado?",
+        corpoHtml: `<p>Esse dia é ${feriadoNoDia.tipo === "feriado" ? "feriado" : "período de férias"} (${escapeHtml(feriadoNoDia.label)}).</p>`,
+        textoConfirmar: "Agendar mesmo assim",
+        textoCancelar: "Cancelar",
+      });
       if (!ok) return;
     }
 
@@ -9309,9 +9403,12 @@ async function abrirDrawerEquipamento(id) {
     ).length;
 
     if (jaNoDia >= capacidadeDia) {
-      const ok = window.confirm(
-        `Esse dia já tem ${jaNoDia} aparelho(s) em ${localItem}, no limite da capacidade (${capacidadeDia}/dia). Agendar mesmo assim?`
-      );
+      const ok = await confirmarModal({
+        titulo: "Capacidade do dia já no limite",
+        corpoHtml: `<p>Esse dia já tem ${jaNoDia} aparelho(s) em ${escapeHtml(localItem)}, no limite da capacidade (${capacidadeDia}/dia).</p>`,
+        textoConfirmar: "Agendar mesmo assim",
+        textoCancelar: "Cancelar",
+      });
       if (!ok) return;
     }
 
@@ -9344,7 +9441,13 @@ async function abrirDrawerEquipamento(id) {
   });
 
   $("#drawerExcluir")?.addEventListener("click", async () => {
-    const ok = window.confirm(`Remover "${item.patrimonio || item.ambiente}"? Essa ação não pode ser desfeita.`);
+    const ok = await confirmarModal({
+      titulo: `Remover "${item.patrimonio || item.ambiente}"?`,
+      corpoHtml: `<div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+      textoConfirmar: "Remover",
+      textoCancelar: "Cancelar",
+      perigo: true,
+    });
     if (!ok) return;
     try {
       await registrarHistorico(item, "-", "Excluído", "Cadastro");
@@ -9489,7 +9592,12 @@ async function adicionarFeriadosNacionais() {
     toast("Os feriados nacionais já estão todos cadastrados.");
     return;
   }
-  const ok = window.confirm(`Adicionar ${novos.length} feriado(s) nacional(is)?\n\n${novos.map((f) => f.label).join(", ")}`);
+  const ok = await confirmarModal({
+    titulo: "Adicionar feriados nacionais?",
+    corpoHtml: `<p>Adicionar ${novos.length} feriado(s) nacional(is)?</p><p>${escapeHtml(novos.map((f) => f.label).join(", "))}</p>`,
+    textoConfirmar: "Adicionar",
+    textoCancelar: "Cancelar",
+  });
   if (!ok) return;
   try {
     const idsNovos = [];
@@ -9516,7 +9624,12 @@ async function adicionarFeriadosNacionais() {
 $("#btnAdicionarFeriadosNacionais")?.addEventListener("click", adicionarFeriadosNacionais);
 
 async function removerFeriado(id, label) {
-  const ok = window.confirm(`Remover "${label}"?`);
+  const ok = await confirmarModal({
+    titulo: `Remover "${label}"?`,
+    textoConfirmar: "Remover",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     await deleteDoc(doc(db, "feriados", id));
@@ -9586,10 +9699,11 @@ function renderFeriados() {
     const repeteTexto = ehMovel
       ? '<span class="pill">Móvel (Páscoa)</span>'
       : f.anual ? '<span class="pill">Todo ano</span>' : "-";
-    tr.innerHTML = `<td>${f.tipo === "feriado" ? "Feriado" : "Férias"}</td><td>${escapeHtml(f.label)}</td>
-      <td>${inicioTexto}</td><td>${fimTexto}</td>
-      <td>${repeteTexto}</td>`;
+    tr.innerHTML = `<td data-label="Tipo">${f.tipo === "feriado" ? "Feriado" : "Férias"}</td><td data-label="Descrição">${escapeHtml(f.label)}</td>
+      <td data-label="Início">${inicioTexto}</td><td data-label="Fim">${fimTexto}</td>
+      <td data-label="Repete">${repeteTexto}</td>`;
     const tdBtn = document.createElement("td");
+    tdBtn.dataset.label = "Ações";
     tdBtn.style.display = "flex";
     tdBtn.style.gap = "6px";
     if (!ehMovel) {
@@ -10001,9 +10115,13 @@ async function apagarCronograma() {
     return;
   }
 
-  const confirmado = window.confirm(
-    `Isso vai apagar TODOS os ${ESTADO.equipamentos.length} equipamentos do cronograma atual. Continuar?`
-  );
+  const confirmado = await confirmarModal({
+    titulo: "Apagar o cronograma inteiro?",
+    corpoHtml: `<p>Isso vai apagar TODOS os ${ESTADO.equipamentos.length} equipamentos do cronograma atual.</p><div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+    textoConfirmar: "Apagar tudo",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!confirmado) return;
 
   btnApagarCronograma.disabled = true;
@@ -10054,9 +10172,13 @@ if (btnApagarDadosTecnicos) {
 }
 
 async function apagarDadosTecnicos() {
-  const confirmado = window.confirm(
-    "Isso vai apagar TODOS os dados técnicos (Marca, Modelo, Capacidade, Fio, etc.) salvos de TODAS as máquinas permanentemente, voltando o sistema ao estado zero. Continuar?"
-  );
+  const confirmado = await confirmarModal({
+    titulo: "Apagar todos os dados técnicos?",
+    corpoHtml: `<p>Isso vai apagar TODOS os dados técnicos (Marca, Modelo, Capacidade, Fio, etc.) salvos de TODAS as máquinas, voltando o sistema ao estado zero.</p><div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+    textoConfirmar: "Apagar tudo",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!confirmado) return;
 
   btnApagarDadosTecnicos.disabled = true;
@@ -10115,9 +10237,12 @@ async function limparMarcacoesOrfas() {
     return;
   }
 
-  const confirmado = window.confirm(
-    `Encontrei ${afetados.length} aparelho(s) marcado(s) numa planta que já foi excluída. Limpar só a marcação deles (o cadastro não é afetado)?`
-  );
+  const confirmado = await confirmarModal({
+    titulo: "Limpar marcações órfãs?",
+    corpoHtml: `<p>Encontrei ${afetados.length} aparelho(s) marcado(s) numa planta que já foi excluída. Limpar só a marcação deles (o cadastro não é afetado)?</p>`,
+    textoConfirmar: "Limpar",
+    textoCancelar: "Cancelar",
+  });
   if (!confirmado) return;
 
   btnLimparMarcacoesOrfas.disabled = true;
@@ -10157,9 +10282,13 @@ if (btnLimparHistorico) {
 }
 
 async function apagarTodoHistoricoTodosOsCiclos() {
-  const ok = window.confirm(
-    "Isso vai apagar TODO o histórico de manutenção de TODOS os ciclos, permanentemente. Continuar?"
-  );
+  const ok = await confirmarModal({
+    titulo: "Apagar todo o histórico?",
+    corpoHtml: `<p>Isso vai apagar TODO o histórico de manutenção de TODOS os ciclos.</p><div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+    textoConfirmar: "Apagar tudo",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     const snap = await getDocs(collectionGroup(db, "historico"));
@@ -10187,9 +10316,13 @@ if (btnLimparOrdens) {
 }
 
 async function apagarTodasOrdensTodosOsCiclos() {
-  const ok = window.confirm(
-    "Isso vai apagar TODAS as ordens de serviço de TODOS os ciclos, permanentemente. Continuar?"
-  );
+  const ok = await confirmarModal({
+    titulo: "Apagar todas as ordens de serviço?",
+    corpoHtml: `<p>Isso vai apagar TODAS as ordens de serviço de TODOS os ciclos.</p><div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+    textoConfirmar: "Apagar tudo",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     const snap = await getDocs(collectionGroup(db, "ordens"));
@@ -10393,9 +10526,13 @@ async function apagarTodosOsCiclos() {
 }
 
 async function deletarCiclo(id) {
-  const ok = window.confirm(
-    "Excluir este ciclo permanentemente? Isso também apaga os equipamentos, o histórico e as ordens de serviço salvos dentro dele."
-  );
+  const ok = await confirmarModal({
+    titulo: "Excluir este ciclo?",
+    corpoHtml: `<p>Isso também apaga os equipamentos, o histórico e as ordens de serviço salvos dentro dele.</p><div class="modal-confirm-aviso">Essa ação não pode ser desfeita.</div>`,
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   await registrarAuditoria("Apagar ciclo", `Ciclo ${numeroDoCiclo(id)}`);
   try {
@@ -10431,7 +10568,12 @@ async function deletarCiclo(id) {
 }
 
 async function deletarRegistroOrdem(cicloId, id) {
-  const ok = window.confirm("Excluir este registro permanentemente?");
+  const ok = await confirmarModal({
+    titulo: "Excluir este registro?",
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     await deleteDoc(doc(db, "ciclos", cicloId, "ordens", id));
@@ -10443,7 +10585,12 @@ async function deletarRegistroOrdem(cicloId, id) {
 }
 
 async function deletarRegistroHistorico(cicloId, id) {
-  const ok = window.confirm("Excluir este registro permanentemente?");
+  const ok = await confirmarModal({
+    titulo: "Excluir este registro?",
+    textoConfirmar: "Excluir",
+    textoCancelar: "Cancelar",
+    perigo: true,
+  });
   if (!ok) return;
   try {
     await deleteDoc(doc(db, "ciclos", cicloId, "historico", id));
@@ -10549,17 +10696,18 @@ function renderCiclos() {
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><strong>Ciclo ${numeroCiclo}</strong></td>
-      <td>${statusLabel}</td>
-      <td>${formatarDataBR(dataDeInicio)}</td>
-      <td>${c.dataFechamento ? formatarDataBR(c.dataFechamento) : "-"}</td>
-      <td>${c.total || ESTADO.equipamentos.length}</td>
-      <td>${c.noPrazo !== undefined ? c.noPrazo : "-"}</td>
-      <td>${c.emAtraso !== undefined ? c.emAtraso : "-"}</td>
-      <td style="font-size:12px;color:var(--texto-suave)">${porPredio}</td>`;
-      
+      <td data-label="Ciclo"><strong>Ciclo ${numeroCiclo}</strong></td>
+      <td data-label="Status">${statusLabel}</td>
+      <td data-label="Início">${formatarDataBR(dataDeInicio)}</td>
+      <td data-label="Encerramento">${c.dataFechamento ? formatarDataBR(c.dataFechamento) : "-"}</td>
+      <td data-label="Aparelhos">${c.total || ESTADO.equipamentos.length}</td>
+      <td data-label="No prazo">${c.noPrazo !== undefined ? c.noPrazo : "-"}</td>
+      <td data-label="Em atraso">${c.emAtraso !== undefined ? c.emAtraso : "-"}</td>
+      <td data-label="Por prédio" style="font-size:12px;color:var(--texto-suave)">${porPredio}</td>`;
+
     // CRIANDO A COLUNA DE AÇÕES (ABRIR E APAGAR)
     const tdAcoes = document.createElement("td");
+    tdAcoes.dataset.label = "Ações";
     
     const btnLoad = document.createElement("button");
     btnLoad.className = "btn ghost";

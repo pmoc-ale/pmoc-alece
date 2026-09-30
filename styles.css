@@ -1605,7 +1605,15 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 
 .drawer {
   position: fixed;
-  top: 0; right: 0; bottom: 0;
+  /* top/height (em vez de top:0+bottom:0) porque "--altura-visivel" é
+     atualizada em JS a partir de window.visualViewport -- no celular,
+     quando o teclado abre, a área realmente visível encolhe, e sem
+     isso o rodapé do drawer (onde ficam os botões Continuar/Cancelar)
+     ficava escondido atrás do teclado em vez de subir junto com ele.
+     Ver ajustarDrawerParaTeclado() em app.js. */
+  top: var(--topo-visivel, 0px);
+  right: 0;
+  height: var(--altura-visivel, 100vh);
   width: 420px;
   max-width: 92vw;
   background: var(--superficie);
@@ -2589,18 +2597,19 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     min-height: 40px;
   }
 
-  /* Só a de equipamentos tem coluna de seleção (checkbox) e de ações (⋯)
-     nas pontas — viram "cantos" fixos do card em vez de mais uma linha de
-     rótulo:valor. A de detalhe do dia não tem essas colunas extras, usa
-     só o padrão genérico acima. */
-  #equipamentosTable tr { padding: 30px 40px 8px 12px; }
-  #equipamentosTable td:first-child {
+  /* Tabelas com coluna de seleção (checkbox) E de ações (⋯) nas pontas
+     (Equipamentos, Histórico, Ordens de serviço) — viram "cantos" fixos
+     do card em vez de mais uma linha de rótulo:valor. As outras tabelas
+     em cards (ex: detalhe do dia) não têm essas colunas extras, usam só
+     o padrão genérico acima. */
+  .tabela-com-selecao tr { padding: 30px 40px 8px 12px; }
+  .tabela-com-selecao td:first-child {
     position: absolute;
     top: 8px;
     left: 8px;
     padding: 0;
   }
-  #equipamentosTable td:last-child {
+  .tabela-com-selecao td:last-child {
     position: absolute;
     top: 4px;
     right: 4px;
