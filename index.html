@@ -89,14 +89,14 @@
 <div class="alert-toast-stack" id="alertaToastStack">
   <div class="alert-banner" id="alertaFotosPendentes" hidden style="--toast-bg:var(--verde-900); --toast-cor:var(--verde-50); --toast-faixa:var(--verde-700);">
     <div class="alert-banner-linha">
-      <span class="alert-banner-icon"></span>
+      <span class="alert-banner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a4.5 4.5 0 0 0-4.5 4.5v2.3c0 .9-.3 1.8-.9 2.5L5 15.3c-.6.7 0 1.7.9 1.7h12.2c.9 0 1.5-1 .9-1.7l-1.6-2c-.6-.7-.9-1.6-.9-2.5V8.5A4.5 4.5 0 0 0 12 4Z"/><path d="M9.8 19a2.3 2.3 0 0 0 4.4 0"/></svg></span>
       <span class="alert-banner-text" id="alertaFotosPendentesTexto"></span>
     </div>
   </div>
 
   <div class="alert-banner" id="alertaAtrasados" hidden>
     <div class="alert-banner-linha">
-      <span class="alert-banner-icon"></span>
+      <span class="alert-banner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a4.5 4.5 0 0 0-4.5 4.5v2.3c0 .9-.3 1.8-.9 2.5L5 15.3c-.6.7 0 1.7.9 1.7h12.2c.9 0 1.5-1 .9-1.7l-1.6-2c-.6-.7-.9-1.6-.9-2.5V8.5A4.5 4.5 0 0 0 12 4Z"/><path d="M9.8 19a2.3 2.3 0 0 0 4.4 0"/></svg></span>
       <span class="alert-banner-text" id="alertaAtrasadosTexto"></span>
       <button class="alert-banner-close" id="fecharAlertaAtrasados" aria-label="Fechar aviso">×</button>
     </div>
@@ -107,7 +107,7 @@
 
   <div class="alert-banner" id="alertaAguardandoAgendamento" hidden style="--toast-bg:var(--dourado-tint); --toast-cor:var(--dourado-escuro); --toast-faixa:var(--dourado);">
     <div class="alert-banner-linha">
-      <span class="alert-banner-icon"></span>
+      <span class="alert-banner-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a4.5 4.5 0 0 0-4.5 4.5v2.3c0 .9-.3 1.8-.9 2.5L5 15.3c-.6.7 0 1.7.9 1.7h12.2c.9 0 1.5-1 .9-1.7l-1.6-2c-.6-.7-.9-1.6-.9-2.5V8.5A4.5 4.5 0 0 0 12 4Z"/><path d="M9.8 19a2.3 2.3 0 0 0 4.4 0"/></svg></span>
       <span class="alert-banner-text">Aguardando agendamento</span>
       <button class="alert-banner-close" id="fecharAlertaAguardandoAgendamento" aria-label="Fechar aviso">×</button>
     </div>
@@ -615,6 +615,7 @@
               <button type="button" id="btnPlantaZoomOut" title="Afastar">−</button>
               <button type="button" id="btnPlantaZoomReset" title="Ver planta inteira">⤢</button>
             </div>
+            <div class="planta-minimapa" id="plantaMinimapa" title="Clique pra pular pra esse ponto da planta" hidden></div>
             <div class="planta-painel" id="plantaPainel" hidden></div>
             <div class="card planta-dropdown-marcacao" id="cardPosicionarPlanta" hidden>
               <!-- Nível 1: escolhe o TIPO (evaporadora/condensadora), empilhados.
@@ -937,7 +938,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=125"></script>
+<script type="module" src="app.js?v=126"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

@@ -6866,6 +6866,56 @@ function montarSvgPlanta(planta, dados) {
       }
     });
   });
+
+  criarMinimapaPlanta(svg);
+}
+
+// Visão geral da planta inteira num cantinho, com um retângulo
+// mostrando onde a visão principal está no momento -- clicar nele pula
+// a visão principal pra lá. É um clone ESTÁTICO do SVG principal (só
+// uma vez, aqui) escalado pro tamanho todo da planta via viewBox; só o
+// retângulo em cima dele (atualizarIndicadorMinimapa, chamado em
+// aplicarView() dentro de ativarZoomPan) se mexe depois disso -- clonar
+// o desenho inteiro de novo a cada zoom/arrasto seria caro à toa.
+function criarMinimapaPlanta(svg) {
+  const wrap = $("#plantaMinimapa");
+  const original = svg.__viewOriginal;
+  if (!wrap || !original || !original.w || !original.h) return;
+
+  wrap.innerHTML = "";
+  wrap.style.height = `${Math.round(130 * (original.h / original.w))}px`;
+
+  const clone = svg.cloneNode(true);
+  clone.removeAttribute("id");
+  clone.setAttribute("viewBox", `${original.x} ${original.y} ${original.w} ${original.h}`);
+  wrap.appendChild(clone);
+
+  const indicador = document.createElement("div");
+  indicador.className = "planta-minimapa-viewport";
+  wrap.appendChild(indicador);
+
+  svg.__minimapaIndicador = indicador;
+  wrap.hidden = false;
+  atualizarIndicadorMinimapa(svg);
+
+  // Reaproveita o mesmo clique-vira-coordenada-do-SVG de svgPontoDeClique
+  // (mais abaixo), usando o clone (mesmo viewBox = planta inteira) --
+  // clicar no minimapa centraliza a visão principal ali.
+  wrap.onclick = (ev) => {
+    const pt = svgPontoDeClique(clone, ev);
+    svg.__irPara?.(pt.x, pt.y);
+  };
+}
+
+function atualizarIndicadorMinimapa(svg) {
+  const indicador = svg.__minimapaIndicador;
+  const original = svg.__viewOriginal;
+  if (!indicador || !original) return;
+  const [x, y, w, h] = (svg.getAttribute("viewBox") || "").split(" ").map(Number);
+  indicador.style.left = `${((x - original.x) / original.w) * 100}%`;
+  indicador.style.top = `${((y - original.y) / original.h) * 100}%`;
+  indicador.style.width = `${(w / original.w) * 100}%`;
+  indicador.style.height = `${(h / original.h) * 100}%`;
 }
 
 // Converte um clique do mouse (coordenadas de tela) pra coordenada do
@@ -8220,6 +8270,7 @@ function ativarZoomPan(svg) {
       v.y = Math.min(Math.max(v.y, minY), maxY);
     }
     svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+    atualizarIndicadorMinimapa(svg);
   }
   function zoomEm(fatorEscala, cxTela, cyTela) {
     const v = viewAtual();
@@ -8314,6 +8365,14 @@ function ativarZoomPan(svg) {
   svg.__zoomIn = () => { const v = viewAtual(); zoomEm(1 / 1.4, svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2, svg.getBoundingClientRect().top + svg.getBoundingClientRect().height / 2); };
   svg.__zoomOut = () => { const v = viewAtual(); zoomEm(1.4, svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2, svg.getBoundingClientRect().top + svg.getBoundingClientRect().height / 2); };
   svg.__zoomReset = () => { if (svg.__viewOriginal) aplicarView(svg.__viewOriginal); };
+  // Usado pelo clique no minimapa (ver criarMinimapaPlanta) -- centraliza
+  // a visão principal num ponto, passando pelo mesmo aplicarView() que já
+  // trata o limite de arrastar (sem isso, clicar perto da borda do
+  // minimapa jogaria a visão principal pra fora da área permitida).
+  svg.__irPara = (x, y) => {
+    const v = viewAtual();
+    aplicarView({ x: x - v.w / 2, y: y - v.h / 2, w: v.w, h: v.h });
+  };
 }
 
 // Centraliza a visão da planta num ponto específico, aproximando um
