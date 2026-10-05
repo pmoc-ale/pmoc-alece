@@ -36,7 +36,13 @@
   --dourado-tint: #FBF3E1;
 
   /* --- Neutros (herdados do template da OS impressa) --- */
-  --fundo: #F2F4F7;
+  /* Quase branco (não #F2F4F7 cinza-azulado de antes) -- pedido pra
+     ficar mais parecido com a referência que a Jovanna mandou. Não é
+     #FFFFFF puro igual --superficie pra uns poucos lugares que ainda
+     precisam de um pouco de contraste contra um cartão branco (dia
+     vazio do calendário, badge neutro do histórico) continuarem
+     distinguíveis -- na prática ainda lê como "fundo branco". */
+  --fundo: #FAFBFC;
   --superficie: #FFFFFF;
   --borda: #DCE3EA;
   --borda-forte: #C4CEDA;
