@@ -29,9 +29,16 @@ service cloud.firestore {
 
     match /usuarios/{uid} {
       // Sempre pode ler o próprio documento (necessário pra tela de login
-      // detectar "conta bloqueada" antes de negar acesso); ler o cadastro
-      // de outros usuários exige não estar bloqueado.
-      allow read: if request.auth != null && (request.auth.uid == uid || !estouBloqueado());
+      // detectar "conta bloqueada" antes de negar acesso). Ler o cadastro
+      // de OUTRO usuário só pra admin -- antes bastava estar logado e não
+      // bloqueado, o que deixava qualquer colega ler o perfil completo de
+      // qualquer outro, inclusive perguntaSeguranca/respostaSegurancaHash
+      // (pergunta de recuperação de senha, de baixa entropia -- nome da
+      // mãe, cidade natal etc.). A checagem de "nome de usuário já existe"
+      // (usuarioJaExiste em app.js) não precisa mais disso -- usa a lista
+      // separada e sem dado sensível em configuracoes/usuariosEmUso logo
+      // abaixo.
+      allow read: if request.auth != null && (request.auth.uid == uid || souAdmin());
 
       // Auto-cadastro (tela de login pública): só cria como "padrão" e não
       // bloqueado, não importa o que a pessoa tente mandar no resto do
@@ -86,6 +93,19 @@ service cloud.firestore {
     // não como admin) consegue ler todas as inscrições pra mandar os avisos.
     match /pushSubscriptions/{uid} {
       allow create, update, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Lista de nomes de usuário já em uso (só o nome -- nenhum dado
+    // sensível) -- existe pra "Minha conta" avisar "esse usuário já
+    // existe" sem precisar ler o perfil completo de ninguém (ver
+    // usuarios/{uid} acima, que agora só deixa ler o próprio ou admin).
+    // hasOnly(["nomes"]) trava a escrita só nesse campo, pra um usuário
+    // mal-intencionado não poder usar esse documento pra gravar outra
+    // coisa qualquer.
+    match /configuracoes/usuariosEmUso {
+      allow read: if request.auth != null && !estouBloqueado();
+      allow write: if request.auth != null && !estouBloqueado()
+        && request.resource.data.keys().hasOnly(["nomes"]);
     }
 
     // A regra genérica lá embaixo só deixa ADMIN escrever -- sem essa regra

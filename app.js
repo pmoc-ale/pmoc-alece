@@ -3,6 +3,7 @@ import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.
 import {
   collection, collectionGroup, doc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, query,
   orderBy, where, writeBatch, deleteDoc, addDoc, limit, deleteField, runTransaction, FieldPath,
+  arrayUnion, arrayRemove,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
@@ -3491,13 +3492,34 @@ $("#contaFotoInput")?.addEventListener("change", () => {
   leitor.readAsDataURL(arquivo);
 });
 
-// Confere se já existe outro usuário (que não seja eu mesmo) com esse
-// login -- a regra do Firestore deixa qualquer pessoa logada e não
-// bloqueada ler a coleção toda, então dá pra checar sem ser admin.
+// Confere se já existe outro usuário com esse login. Não lê mais a
+// coleção "usuarios" inteira (precisaria deixar qualquer pessoa logada
+// ler o perfil completo de todo mundo, inclusive o hash da resposta de
+// segurança de outros -- ver a regra em firestore.rules) -- consulta só
+// uma lista separada, sem nenhum dado sensível, mantida em
+// configuracoes/usuariosEmUso por registrarUsuarioEmUso/removerUsuarioEmUso.
 async function usuarioJaExiste(usuarioNovo) {
   const alvo = normalizarTexto(usuarioNovo);
-  const snap = await getDocs(collection(db, "usuarios"));
-  return snap.docs.some((d) => d.id !== auth.currentUser.uid && normalizarTexto(d.data().usuario) === alvo);
+  const snap = await getDoc(doc(db, "configuracoes", "usuariosEmUso"));
+  const nomes = snap.exists() ? (snap.data().nomes || []) : [];
+  return nomes.includes(alvo);
+}
+
+// As duas funções abaixo mantêm configuracoes/usuariosEmUso em dia --
+// chamadas toda vez que um usuário é criado, renomeado, ou loga de novo
+// (pra ir "curando" sozinha as contas que existiam antes dessa lista
+// existir, sem precisar de uma migração manual no banco).
+async function registrarUsuarioEmUso(usuario) {
+  const nome = normalizarTexto(usuario);
+  if (!nome) return;
+  await setDoc(doc(db, "configuracoes", "usuariosEmUso"), { nomes: arrayUnion(nome) }, { merge: true });
+}
+async function removerUsuarioEmUso(usuario) {
+  const nome = normalizarTexto(usuario);
+  if (!nome) return;
+  // Só limpeza (libera o nome antigo pra reuso) -- se o documento ainda
+  // nem existir por algum motivo, não é erro nenhum pra quem chamou.
+  await updateDoc(doc(db, "configuracoes", "usuariosEmUso"), { nomes: arrayRemove(nome) }).catch(() => {});
 }
 
 async function salvarMinhaConta() {
@@ -3570,6 +3592,10 @@ async function salvarMinhaConta() {
       campos.respostaSegurancaHash = await hashRespostaSeguranca(respostaSeguranca);
     }
     await updateDoc(doc(db, "usuarios", auth.currentUser.uid), campos);
+    if (usuarioMudou) {
+      await registrarUsuarioEmUso(usuarioNovo);
+      await removerUsuarioEmUso(usuarioAtual);
+    }
 
     ESTADO.meuUsuarioDoc = { ...ESTADO.meuUsuarioDoc, ...campos };
     if (usuarioMudou) ESTADO.usuarioNome = usuarioNovo;
@@ -3633,9 +3659,14 @@ async function registrarUsuarioLogado(user) {
       ultimoLogin: agora,
     };
     await setDoc(ref, dados);
+    await registrarUsuarioEmUso(dados.usuario);
     return dados;
   }
   await updateDoc(ref, { ultimoLogin: agora });
+  // "Cura" sozinha contas que já existiam antes de configuracoes/
+  // usuariosEmUso existir -- sem isso, só quem criasse conta OU trocasse
+  // de usuário DEPOIS dessa mudança apareceria na lista.
+  await registrarUsuarioEmUso(snap.data().usuario);
   return snap.data();
 }
 
@@ -3775,6 +3806,7 @@ async function criarContaAdmin(usuario, senha, permissao) {
       ultimoLogin: "",
       criadoPor: ESTADO.usuarioNome || "",
     });
+    await registrarUsuarioEmUso(usuario);
     await registrarAuditoria("Criar usuário", `${usuario} (${permissao})`);
   } finally {
     await deleteApp(appTemp);
