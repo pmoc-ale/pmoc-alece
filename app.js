@@ -10681,7 +10681,7 @@ async function executarReagendamento(btn, textoNormal) {
 
 const btnReagendar = document.getElementById("btnReagendarAtrasados");
 if (btnReagendar) {
-  btnReagendar.addEventListener("click", () => executarReagendamento(btnReagendar, "Reagendar Agora"));
+  btnReagendar.addEventListener("click", () => executarReagendamento(btnReagendar, "Reagendar agora"));
 }
 
 const btnReagendarCalendario = document.getElementById("btnReagendarCalendario");

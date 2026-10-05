@@ -687,14 +687,24 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   max-width: calc(100vw - 32px);
 }
 .alert-toast-stack .alert-banner {
-  --toast-bg: var(--vermelho-fundo);
-  --toast-cor: var(--vermelho-texto);
-  --toast-faixa: #E8A87C;
+  /* Vermelho/dourado próprios do toast, DIFERENTES de --vermelho-fundo/
+     --vermelho-texto (que ficam reservados pro resto do app, pra bater
+     com as cores do Excel exportado -- ver comentário em :root). Tom
+     salmão/pastel antigo (#F8CBAD) tinha pouco contraste com o texto;
+     esses valores seguem o padrão comum de alerta (fundo quase branco,
+     texto escuro, faixa saturada) pedido pela Jovanna. */
+  --toast-bg: #FEF2F2;
+  --toast-cor: #991B1B;
+  --toast-faixa: #DC2626;
   background: var(--toast-bg);
   color: var(--toast-cor);
   border-bottom: none;
   border-left: 4px solid var(--toast-faixa);
   border-radius: var(--raio);
+  /* Sem isso, a faixa dourada/vermelha da esquerda ultrapassa a
+     cantoneira arredondada no topo/base do cartão (fica reta onde a
+     borda já devia estar curvando). */
+  overflow: hidden;
   box-shadow: var(--sombra-elevada);
   padding: 12px 14px;
   align-items: stretch;
@@ -728,7 +738,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   align-items: center;
   gap: var(--sp-2);
 }
-.alert-banner-btn { align-self: flex-start; }
+.alert-banner-btn { align-self: stretch; }
 
 #alertaAguardandoAgendamentoLista {
   display: flex;
