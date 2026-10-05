@@ -165,11 +165,14 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background:
-    radial-gradient(circle at 6% -8%, transparent 0, transparent 36vmax, rgba(201,163,78,0.4) 36.4vmax, rgba(201,163,78,0.4) 36.7vmax, transparent 37.1vmax),
-    radial-gradient(circle at 97% 106%, transparent 0, transparent 28vmax, rgba(201,163,78,0.3) 28.4vmax, rgba(201,163,78,0.3) 28.7vmax, transparent 29.1vmax),
-    radial-gradient(circle at 15% 20%, rgba(201,163,78,0.10), transparent 45%),
-    linear-gradient(160deg, var(--verde-900), var(--verde-800) 60%, #041A0F);
+  /* Cor sólida (sem gradiente nem "brilho" atrás) -- o próprio manual de
+     marca da ALECE é explícito sobre isso ("cores sólidas, nunca
+     gradiente"), e um fundo com anéis de luz/gradiente diagonal é
+     exatamente a cara de tela de login genérica de SaaS feita por IA,
+     bem diferente do visual mais sóbrio que um site oficial de governo
+     costuma ter. A silhueta do Ceará (::before abaixo) já dá o respiro
+     visual sem precisar de gradiente nenhum. */
+  background: var(--verde-900);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2940,7 +2943,7 @@ body.modo-trabalhador .status-select {
 }
 /* --- LAUNCHPAD (GERAR CRONOGRAMA) --- */
 .launchpad-card {
-  background: linear-gradient(145deg, var(--verde-900), var(--verde-800));
+  background: var(--verde-900); /* sólido, não gradiente -- ver .auth-overlay acima pelo motivo */
   border-radius: var(--raio);
   padding: var(--sp-5);
   display: flex;
