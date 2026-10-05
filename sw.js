@@ -6,7 +6,7 @@
 // acontece sozinho -- toda vez que tem sinal, o site busca a versão nova
 // na rede antes de qualquer cache, ver estratégia "rede primeiro" abaixo
 // -- isso aqui só limpa versões antigas que sobraram no aparelho).
-const CACHE_VERSAO = "pmoc-alece-v84";
+const CACHE_VERSAO = "pmoc-alece-v85";
 
 // SEM os "?v=NN" de cache-busting -- index.html/app.js mudam esse número
 // toda vez que o código muda, e escrever o número aqui de novo (fácil de
@@ -22,6 +22,9 @@ const ARQUIVOS_ESSENCIAIS = [
   "./utils/qrcode.js",
   "./utils/pdfGenerator.js",
   "./utils/dwfParser.js",
+  "./utils/formatacao.js",
+  "./utils/dominioPmoc.js",
+  "./utils/identidadeUsuario.js",
   "./assets/Brasão_do_Ceará.svg",
   "./assets/ceara-silhueta.svg",
   "./manifest.json",

@@ -10,6 +10,20 @@ import {
   setPersistence, inMemoryPersistence, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+// Funções puras (sem ESTADO/DOM/Firebase) extraídas pra fora desse arquivo
+// -- primeiro passo de ir organizando o app.js em módulos menores, sem
+// mudar nenhum comportamento (ver utils/formatacao.js, utils/dominioPmoc.js
+// e utils/identidadeUsuario.js pros comentários originais de cada função).
+import {
+  escapeHtml, normalizarTexto, normalizarBusca, formatISO, formatarDataBR, adicionarMeses,
+} from "./utils/formatacao.js?v=1";
+import {
+  PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna,
+} from "./utils/dominioPmoc.js?v=1";
+import {
+  SUFIXO_LOGIN, usuarioParaEmail, extrairUsuario, ROTULOS_PERMISSAO,
+} from "./utils/identidadeUsuario.js?v=1";
+
 const $ = (sel) => document.querySelector(sel);
 const $all = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -34,21 +48,6 @@ function ligarSeletorDeArquivo(idInput, idBotao, idNome, textoPadrao) {
     });
   }
 }
-
-const SUFIXO_LOGIN = "@pcm-alece.local";
-function usuarioParaEmail(usuario) {
-  return usuario.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") + SUFIXO_LOGIN;
-}
-function extrairUsuario(email) {
-  return String(email || "").split("@")[0];
-}
-
-const PRIORIDADE = {
-  "1 - Presidência": 1, "2 - Primeiro Secretário": 2, "3 - Gabinetes": 3,
-  "4 - TI/Racks": 4, "5 - Plenário": 5, "6 - Administração": 6, "7 - Todo o resto": 7,
-};
-const NOMES_DIAS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
-const ROTULOS_PERMISSAO = { admin: "Administrador", padrao: "Padrão", trabalhador: "Trabalhador" };
 
 const CHECKLIST_PREVENTIVA = [
   "Limpeza do filtro de ar",
@@ -102,65 +101,8 @@ async function calcularProximaData(item) {
   return { data: formatISO(cursor), dia: NOMES_DIAS[(cursor.getDay() + 6) % 7] };
 }
 
-function adicionarMeses(date, meses) {
-  const d = new Date(date.getTime());
-  const diaOriginal = d.getDate();
-  d.setMonth(d.getMonth() + meses);
-  if (d.getDate() !== diaOriginal) d.setDate(0);
-  return d;
-}
 let idEquipamentoEmEdicao = null;
 
-function identificarSetor(setorTxt, ambienteTxt) {
-  const texto = `${setorTxt || ""} ${ambienteTxt || ""}`.toUpperCase();
-  if (/PRESID/.test(texto)) return "1 - Presidência";
-  if (/1[ºªA]?\s*SECRETARIA|SECRETARI[OA]/.test(texto)) return "2 - Primeiro Secretário";
-  if (/\bGABINETE\b/.test(texto)) return "3 - Gabinetes";
-  if (/\bSERVIDOR\b|\bREDE\b|INFRAESTRUTURA|\bRACK\b|\bCPD\b|DESENVOLVIMENTO/.test(texto)) return "4 - TI/Racks";
-  if (/PLEN[ÁA]RIO/.test(texto)) return "5 - Plenário";
-  if (/PROTOCOLO|REPROGRAFIA|ADMINISTR/.test(texto)) return "6 - Administração";
-  return "7 - Todo o resto";
-}
-
-function descobrirPiso(setorTxt) {
-  if (!setorTxt) return 99;
-  const texto = String(setorTxt).toUpperCase();
-  if (texto.includes("SUBSOLO") || texto.includes("TÉRREO") || texto.includes("TERREO")) return 0;
-  const m = texto.match(/(\d+)\s*[ºÂ°]?\s*PISO/);
-  if (m) return parseInt(m[1], 10);
-  return 99;
-}
-
-function localizarColuna(nomesPossiveis, headers) {
-  // normalizarBusca tira acento além de maiúscula/minúscula -- sem isso,
-  // um cabeçalho tipo "Potencia (BTU)" (sem acento) não batia com
-  // "Potência" e a coluna inteira ficava em branco sem avisar nada
-  // (só "Patrimônio"/"Gás" tinham as duas grafias cadastradas à mão;
-  // qualquer outra coluna acentuada tinha o mesmo risco).
-  const normalizados = headers.map((h) => normalizarBusca(h));
-  for (const nome of nomesPossiveis) {
-    const idx = normalizados.indexOf(normalizarBusca(nome));
-    if (idx !== -1) return headers[idx];
-  }
-  for (let i = 0; i < headers.length; i++) {
-    for (const nome of nomesPossiveis) {
-      if (normalizados[i].includes(normalizarBusca(nome))) return headers[i];
-    }
-  }
-  return null;
-}
-
-function formatISO(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-function formatarDataBR(iso) {
-  if (!iso) return "-";
-  const [a, m, d] = iso.split("-");
-  return `${d}/${m}/${a}`;
-}
 // Um aparelho é considerado atrasado quando a data agendada já passou e ele ainda não foi marcado como Concluída.
 function estaAtrasado(item) {
   if (!item.dataAgendada || item.statusPreventiva === "Concluída") return false;
@@ -752,35 +694,6 @@ async function carregarChamadosCorretivos(forcar) {
   } catch (err) {
     console.error("Erro ao carregar chamados corretivos:", err);
   }
-}
-
-function normalizarTexto(v) {
-  return String(v || "").trim().toUpperCase();
-}
-
-// Usado nas caixas de busca (equipamentos, condensadoras, feriados, ordens,
-// histórico) -- sem isso, buscar "secretaria" não achava "Secretária" e
-// "administracao" não achava "Administração" (o .toLowerCase() sozinho já
-// ignora maiúscula/minúscula, mas não ignora acento nenhum). O
-// normalize("NFD") separa a letra do acento (é́ em vez de é) e o
-// replace tira só a parte do acento, sobrando a letra "pelada".
-function normalizarBusca(v) {
-  return String(v || "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
-// Protege contra HTML/script escondido em texto vindo de fora (planilha
-// importada, formulário público de chamados, campos digitados por usuários)
-// antes de inserir na tela via innerHTML. Sem isso, alguém poderia escrever
-// algo tipo <script> num campo de texto e rodar código no navegador de quem
-// visse aquele dado depois.
-function escapeHtml(valor) {
-  return String(valor ?? "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
 }
 
 // Índice de chamados corretivos, reconstruído só quando ESTADO.chamadosCorretivos
