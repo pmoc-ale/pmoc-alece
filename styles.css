@@ -64,8 +64,11 @@
   --sp-6: 32px;
   --sp-7: 48px;
 
-  --raio: 6px;
-  --raio-pequeno: 4px;
+  /* Cantos mais retos (menos "bolha") -- cartão muito arredondado com
+     sombra suave é outra cara clássica de site feito às pressas por IA;
+     site de governo de verdade tende a ser mais quadrado/sóbrio. */
+  --raio: 4px;
+  --raio-pequeno: 3px;
   --sombra: 0 1px 2px rgba(16, 38, 61, 0.06), 0 2px 8px rgba(16, 38, 61, 0.05);
   --sombra-elevada: 0 4px 16px rgba(16, 38, 61, 0.12), 0 1px 3px rgba(16, 38, 61, 0.08);
 
@@ -237,7 +240,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   width: 100%;
   max-width: 460px;
   padding: calc(var(--sp-6) + 4px) var(--sp-5) 0;
-  border-radius: 16px;
+  border-radius: var(--raio); /* era 16px fixo -- mesmo motivo do --raio acima */
   box-shadow: var(--sombra-elevada);
   overflow: hidden;
 }
