@@ -127,29 +127,35 @@
     <button class="tab sidenav-item sidenav-atalho-trabalhador" data-view="dashboard">
       <span class="sidenav-icon"></span> Dashboard
     </button>
-    <div class="sidenav-label">Gestão</div>
-    <button class="tab sidenav-item" data-view="ordens">
-      <span class="sidenav-icon"></span> Ordens de serviço
-    </button>
-    <button class="tab sidenav-item" data-view="historico">
-      <span class="sidenav-icon"></span> Histórico
-    </button>
+    <details class="sidenav-grupo" open>
+      <summary class="sidenav-label">Gestão</summary>
+      <button class="tab sidenav-item" data-view="ordens">
+        <span class="sidenav-icon"></span> Ordens de serviço
+      </button>
+      <button class="tab sidenav-item" data-view="historico">
+        <span class="sidenav-icon"></span> Histórico
+      </button>
+    </details>
 
-    <div class="sidenav-label">Inventário</div>
-    <button class="tab sidenav-item" data-view="equipamentos">
-      <span class="sidenav-icon"></span> Equipamentos
-    </button>
-    <button class="tab sidenav-item" data-view="condensadoras">
-      <span class="sidenav-icon"></span> Condensadoras
-    </button>
+    <details class="sidenav-grupo" open>
+      <summary class="sidenav-label">Inventário</summary>
+      <button class="tab sidenav-item" data-view="equipamentos">
+        <span class="sidenav-icon"></span> Equipamentos
+      </button>
+      <button class="tab sidenav-item" data-view="condensadoras">
+        <span class="sidenav-icon"></span> Condensadoras
+      </button>
+    </details>
 
-    <div class="sidenav-label">Configuração</div>
-    <button class="tab sidenav-item" data-view="localizacao">
-      <span class="sidenav-icon"></span> Localização
-    </button>
-    <button class="tab sidenav-item" data-view="feriados">
-      <span class="sidenav-icon"></span> Feriados e férias
-    </button>
+    <details class="sidenav-grupo" open>
+      <summary class="sidenav-label">Configuração</summary>
+      <button class="tab sidenav-item" data-view="localizacao">
+        <span class="sidenav-icon"></span> Localização
+      </button>
+      <button class="tab sidenav-item" data-view="feriados">
+        <span class="sidenav-icon"></span> Feriados e férias
+      </button>
+    </details>
     <div class="sidenav-spacer"></div>
     <button class="sidenav-item" id="btnSair" style="margin-top:8px">
       <span class="sidenav-icon"></span> Sair
@@ -943,7 +949,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=130"></script>
+<script type="module" src="app.js?v=131"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

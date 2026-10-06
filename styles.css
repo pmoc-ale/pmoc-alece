@@ -783,6 +783,15 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   overflow-y: auto;
 }
 
+/* Cada grupo (Gestão/Inventário/Configuração) é um <details> -- só
+   mostra os itens de dentro quando a pessoa clica no rótulo (<summary>),
+   pedido da Jovanna pra encolher o menu lateral. Nativo do navegador
+   (sem JS nenhum pra abrir/fechar); o único JS envolvido é abrir sozinho
+   o grupo certo quando a view ativa é trocada (ver abrirGrupoDaViewAtiva
+   em app.js), senão a tela ativa podia ficar escondida dentro de um
+   grupo fechado sem nenhuma pista visual do motivo. */
+.sidenav-grupo { display: flex; flex-direction: column; gap: 3px; }
+
 .sidenav-label {
   font-size: 12px;
   font-weight: 700;
@@ -791,7 +800,26 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   letter-spacing: 0.08em;
   padding: 0 var(--sp-3);
   margin-bottom: var(--sp-2);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
 }
+.sidenav-label::-webkit-details-marker { display: none; }
+.sidenav-label:hover { color: var(--verde-900); }
+.sidenav-label::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.sidenav-grupo[open] > .sidenav-label::after { transform: rotate(45deg); }
 
 .sidenav-item {
   display: flex;
@@ -2522,6 +2550,12 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   }
   .sidenav::-webkit-scrollbar { display: none; }
   .sidenav-label, .sidenav-spacer { display: none !important; }
+  /* No celular o menu vira uma barra de ícones no rodapé (sem rótulo,
+     sem recolher) -- "display:contents" faz os botões de dentro do
+     <details> virarem item direto da barra de novo, em vez de ficarem
+     empilhados dentro de uma caixinha só (que é o que <details> faz por
+     padrão, pensado pro menu em coluna do desktop). */
+  .sidenav-grupo { display: contents; }
   .sidenav-item {
     flex: 1;
     min-width: 56px;

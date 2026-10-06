@@ -981,6 +981,27 @@ $all(".subtab").forEach((btn) => {
   });
 });
 
+// Mapa de qual grupo recolhível do menu lateral (ver .sidenav-grupo no
+// CSS) cada view pertence -- só usado pra abrir sozinho o grupo certo
+// quando a aba muda, senão a aba ativa podia ficar escondida dentro de
+// um grupo fechado sem nenhuma pista visual do motivo.
+const GRUPO_SIDENAV_POR_VIEW = {
+  ordens: "Gestão", historico: "Gestão",
+  equipamentos: "Inventário", condensadoras: "Inventário",
+  localizacao: "Configuração", feriados: "Configuração",
+};
+function abrirGrupoDaViewAtiva(view) {
+  // No celular o menu lateral vira uma barra de ícones no rodapé, sempre
+  // expandida (ver media query) -- não tem rótulo clicável lá, então não
+  // faz sentido mexer em open/closed nesse tamanho de tela.
+  if (window.matchMedia("(max-width: 768px)").matches) return;
+  const nomeGrupo = GRUPO_SIDENAV_POR_VIEW[view];
+  if (!nomeGrupo) return;
+  $all(".sidenav-grupo").forEach((details) => {
+    details.open = details.querySelector(".sidenav-label")?.textContent.trim() === nomeGrupo;
+  });
+}
+
 $all(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     // Sair da aba Cronograma sem clicar em "Gerar/Adicionar" abandona o
@@ -1008,6 +1029,7 @@ $all(".tab").forEach((btn) => {
       b.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     });
     $(`#view-${btn.dataset.view}`).classList.add("active");
+    abrirGrupoDaViewAtiva(btn.dataset.view);
     if (btn.dataset.view) {
       localStorage.setItem("ultimaAbaPMOC", btn.dataset.view);
     }
