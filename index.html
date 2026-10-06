@@ -75,6 +75,7 @@
       <details class="topbar-conta">
         <summary title="Conta" aria-label="Conta">
           <span class="topbar-conta-avatar" id="topbarContaAvatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg></span>
+          <span class="topbar-conta-nome" id="topbarContaNome"></span>
           <span class="topbar-conta-seta" aria-hidden="true">⌄</span>
         </summary>
         <div class="topbar-conta-menu">
@@ -126,19 +127,23 @@
     <button class="tab sidenav-item sidenav-atalho-trabalhador" data-view="dashboard">
       <span class="sidenav-icon"></span> Dashboard
     </button>
-    <div class="sidenav-label" id="sidenavLabelGestao" style="font-size: 15px; text-align: center; display: block; width: 100%; margin-bottom: 5px;">Gestão</div>
+    <div class="sidenav-label">Gestão</div>
     <button class="tab sidenav-item" data-view="ordens">
       <span class="sidenav-icon"></span> Ordens de serviço
     </button>
     <button class="tab sidenav-item" data-view="historico">
       <span class="sidenav-icon"></span> Histórico
     </button>
+
+    <div class="sidenav-label">Inventário</div>
     <button class="tab sidenav-item" data-view="equipamentos">
       <span class="sidenav-icon"></span> Equipamentos
     </button>
     <button class="tab sidenav-item" data-view="condensadoras">
       <span class="sidenav-icon"></span> Condensadoras
     </button>
+
+    <div class="sidenav-label">Configuração</div>
     <button class="tab sidenav-item" data-view="localizacao">
       <span class="sidenav-icon"></span> Localização
     </button>
@@ -938,7 +943,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=129"></script>
+<script type="module" src="app.js?v=130"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

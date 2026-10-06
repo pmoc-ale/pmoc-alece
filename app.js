@@ -3239,11 +3239,14 @@ $("#btnSairTopbar")?.addEventListener("click", () => {
 // ------------------------------------------------------------------
 function atualizarAvatarTopbar() {
   const el = $("#topbarContaAvatar");
-  if (!el) return;
-  const fotoUrl = ESTADO.meuUsuarioDoc?.fotoUrl;
-  el.innerHTML = fotoUrl
-    ? `<img src="${escapeHtml(fotoUrl)}" alt="Foto de perfil">`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg>`;
+  if (el) {
+    const fotoUrl = ESTADO.meuUsuarioDoc?.fotoUrl;
+    el.innerHTML = fotoUrl
+      ? `<img src="${escapeHtml(fotoUrl)}" alt="Foto de perfil">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/></svg>`;
+  }
+  const nomeEl = $("#topbarContaNome");
+  if (nomeEl) nomeEl.textContent = ESTADO.meuUsuarioDoc?.nome || ESTADO.usuarioNome || "";
 }
 
 const ICONE_AVATAR_PADRAO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/></svg>`;
