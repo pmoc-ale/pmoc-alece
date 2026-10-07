@@ -18,8 +18,8 @@ import {
   escapeHtml, normalizarTexto, normalizarBusca, formatISO, formatarDataBR, adicionarMeses,
 } from "./utils/formatacao.js?v=1";
 import {
-  PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna,
-} from "./utils/dominioPmoc.js?v=1";
+  PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna, normalizarTipoEquipamento,
+} from "./utils/dominioPmoc.js?v=2";
 import {
   SUFIXO_LOGIN, usuarioParaEmail, extrairUsuario, ROTULOS_PERMISSAO,
 } from "./utils/identidadeUsuario.js?v=1";
@@ -1612,7 +1612,7 @@ function linhasParaItens(rows) {
 
     const tipoGas = colTipoGas ? limparValor(row[colTipoGas]) : "";
     const tag = colTag ? limparValor(row[colTag]) : "";
-    const tipo = colTipo ? limparValor(row[colTipo]) : "";
+    const tipo = colTipo ? normalizarTipoEquipamento(limparValor(row[colTipo])) : "";
 
     const setorPCM = identificarSetor(setor, ambiente);
 
@@ -5556,6 +5556,18 @@ async function finalizarConclusao() {
       dataConclusao: formatISO(new Date()),
     };
     if (tipoGasNovo) camposStatus.tipoGas = tipoGasNovo;
+
+    // Equipamento cadastrado manualmente (sem planilha) nunca passa pela
+    // coluna "Tipo Equip." -- a única chance de saber o formato dele
+    // (Split Hi-Wall/Cassete/Piso-Teto) é o campo "Modelo" da evaporadora
+    // preenchido aqui (ou numa conclusão anterior, ver
+    // modalConclusaoEstado.dadosExistentes). Só completa se "tipo" ainda
+    // estiver vazio -- nunca sobrescreve o que já veio certo da planilha.
+    if (!item.tipo) {
+      const modeloEvap = infoTecnica?.evaporadora?.modelo || modalConclusaoEstado.dadosExistentes?.evaporadora?.modelo;
+      if (modeloEvap) camposStatus.tipo = modeloEvap;
+    }
+
     const proxima = await calcularProximaData({ ...item, dataConclusao: camposStatus.dataConclusao });
     camposStatus.proximaPreventiva = proxima.data;
     camposStatus.proximaPreventivaDia = proxima.dia;
@@ -8871,19 +8883,23 @@ function renderEquipamentosCadastro() {
       const origemItem = item.origem === "manual" ? "manual" : "planilha";
       if (origemItem !== origemFiltro) return false;
     }
-    if (tipoFiltro && item.tipo !== tipoFiltro) return false;
+    if (tipoFiltro && normalizarTipoEquipamento(item.tipo) !== tipoFiltro) return false;
     return true;
   });
 
   // Opções do filtro de Tipo não são uma lista fixa (cada planilha de
   // prédio escreve esse campo do jeito que quiser -- "Split Hi-Wall",
   // "SPLIT PAREDE" etc.) -- então o <select> é montado com os valores que
-  // realmente existem no cadastro, em vez de uma lista chutada que podia
-  // nem bater com o que foi importado. Preserva a seleção atual (senão
-  // reconstruir o <select> a cada render perderia o filtro escolhido).
+  // realmente existem no cadastro (já consolidados por
+  // normalizarTipoEquipamento, que junta grafias diferentes do mesmo
+  // tipo -- cobre inclusive cadastro antigo, de antes dessa função
+  // existir, sem precisar reimportar nada), em vez de uma lista chutada
+  // que podia nem bater com o que foi importado. Preserva a seleção
+  // atual (senão reconstruir o <select> a cada render perderia o filtro
+  // escolhido).
   const selTipo = $("#filtroTipo");
   if (selTipo) {
-    const tiposExistentes = [...new Set(ESTADO.equipamentos.map((e) => e.tipo).filter(Boolean))].sort((a, b) =>
+    const tiposExistentes = [...new Set(ESTADO.equipamentos.map((e) => normalizarTipoEquipamento(e.tipo)).filter(Boolean))].sort((a, b) =>
       a.localeCompare(b, "pt-BR")
     );
     const valorAtual = selTipo.value;
@@ -8929,7 +8945,7 @@ function renderEquipamentosCadastro() {
             : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}
       </td>
       <td data-label="Origem">${item.origem === "manual" ? "Manual" : "Planilha"}</td>
-      <td data-label="Tipo">${escapeHtml(item.tipo || "-")}</td>
+      <td data-label="Tipo">${escapeHtml(normalizarTipoEquipamento(item.tipo) || "-")}</td>
       <td data-label="Marca/Modelo/Cap." style="font-size:12px">${dadosTecnicos}</td>
       <td data-label="Corretivas" style="text-align:center">${totalCorretivas > 0 ? `<strong>${totalCorretivas}</strong>` : "-"}</td>`;
 

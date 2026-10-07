@@ -29,6 +29,29 @@ export function descobrirPiso(setorTxt) {
   return 99;
 }
 
+// Consolida grafias diferentes do mesmo tipo de equipamento -- cada
+// prédio escreveu a coluna "Tipo Equip." do levantamento do jeito que
+// quis (maiúscula, sinônimo em português tipo "parede" pra "Hi-Wall"
+// etc.). Só junta os casos onde dá pra ter certeza que é a mesma coisa;
+// o que não reconhece (um "Split" genérico, condensadora de VRF,
+// equipamento de ventilação...) fica como veio, só sem espaço duplicado
+// -- melhor mostrar cru do que arriscar juntar tipos diferentes.
+const MAPA_TIPO_EQUIPAMENTO = {
+  "SPLIT HI-WALL": "Split Hi-Wall",
+  "HIWALL INVERTER": "Split Hi-Wall",
+  "SPLIT PAREDE": "Split Hi-Wall", // "parede" = montado na parede = Hi-Wall
+  "CASSETE": "Cassete",
+  "SPLIT PISO/TETO": "Split Piso/Teto",
+  "SPLIT TETO": "Split Piso/Teto",
+  "SPLIT PISO": "Split Piso/Teto",
+  "DUTO": "Duto",
+};
+export function normalizarTipoEquipamento(valorCru) {
+  const texto = String(valorCru || "").trim().replace(/\s+/g, " ");
+  if (!texto) return "";
+  return MAPA_TIPO_EQUIPAMENTO[texto.toUpperCase()] || texto;
+}
+
 export function localizarColuna(nomesPossiveis, headers) {
   // normalizarBusca tira acento além de maiúscula/minúscula -- sem isso,
   // um cabeçalho tipo "Potencia (BTU)" (sem acento) não batia com
