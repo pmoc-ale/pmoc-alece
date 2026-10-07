@@ -498,6 +498,12 @@
               <option value="planilha">Planilha</option>
               <option value="manual">Manual</option>
             </select>
+            <!-- Opções preenchidas sozinhas em renderEquipamentosCadastro(), com
+                 os tipos que realmente existem no cadastro (Split Hi-Wall,
+                 Cassete, Piso/Teto etc. variam de planilha pra planilha). -->
+            <select id="filtroTipo">
+              <option value="">Tipo: todos</option>
+            </select>
           </div>
         </div>
         <!-- FIM DA NOVA TOOLBAR -->
@@ -949,7 +955,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=131"></script>
+<script type="module" src="app.js?v=132"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

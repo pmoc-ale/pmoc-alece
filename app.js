@@ -1549,6 +1549,10 @@ function linhasParaItens(rows) {
   const colPotencia = localizarColuna(["Potência", "BTU", "Capacidade"], headers);
   const colTipoGas = localizarColuna(["Tipo de Gás", "Tipo de Gas", "Gás", "Gas"], headers);
   const colTag = localizarColuna(["TAG", "Tag"], headers);
+  // Sem "Tipo" sozinho na lista -- viraria risco de casar com a coluna
+  // errada por semelhança (ex: "Tipo de Gás") numa planilha que não
+  // tivesse exatamente uma das variantes de "Tipo Equip." abaixo.
+  const colTipo = localizarColuna(["Tipo Equip.", "Tipo Equipamento", "Tipo do Equipamento"], headers);
 
   if (!colSetor || !colAmbiente) {
     return { erro: "Não encontrei as colunas 'Setor' e 'Ambiente'. Confira o cabeçalho." };
@@ -1608,6 +1612,7 @@ function linhasParaItens(rows) {
 
     const tipoGas = colTipoGas ? limparValor(row[colTipoGas]) : "";
     const tag = colTag ? limparValor(row[colTag]) : "";
+    const tipo = colTipo ? limparValor(row[colTipo]) : "";
 
     const setorPCM = identificarSetor(setor, ambiente);
 
@@ -1628,6 +1633,7 @@ function linhasParaItens(rows) {
       modelo,         // <--- Salva no Firebase
       capacidade,     // <--- Salva no Firebase
       tipoGas,
+      tipo,           // <--- Salva no Firebase (Split Hi-Wall, Cassete, Piso/Teto etc.)
       setor, ambiente,
       local: row.__local || "SEDE",
       statusCondicao: colStatus ? String(row[colStatus] ?? "") : "",
@@ -2037,7 +2043,7 @@ function renderSumidosPlanilha(sumidos) {
 }
 
 async function atualizarCadastroPredioExistente(itensDaPlanilha) {
-  const CAMPOS_CADASTRO = ["setor", "ambiente", "tag", "marca", "modelo", "capacidade", "tipoGas", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
+  const CAMPOS_CADASTRO = ["setor", "ambiente", "tag", "marca", "modelo", "capacidade", "tipoGas", "tipo", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
 
   const porPredio = new Map();
   itensDaPlanilha.forEach((item) => {
@@ -2108,7 +2114,7 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
         patrimonio: itemPlanilha.patrimonio, setor: itemPlanilha.setor, ambiente: itemPlanilha.ambiente,
         tag: itemPlanilha.tag,
         marca: itemPlanilha.marca, modelo: itemPlanilha.modelo, capacidade: itemPlanilha.capacidade,
-        tipoGas: itemPlanilha.tipoGas, statusCondicao: itemPlanilha.statusCondicao,
+        tipoGas: itemPlanilha.tipoGas, tipo: itemPlanilha.tipo, statusCondicao: itemPlanilha.statusCondicao,
         setorPCM: itemPlanilha.setorPCM, prioridadeSetor: itemPlanilha.prioridadeSetor, pisoPCM: itemPlanilha.pisoPCM,
         statusPreventiva: "Pendente", observacao: "", origem: "manual",
         ordemExecucao, equipeResponsavel, dataAgendada: "", diaPlanejado: "", semanaPlanejada: "",
@@ -4572,7 +4578,7 @@ ligarBusca("buscaCondensadoras", "condensadoras", renderCondensadorasCadastro);
 ligarBusca("buscaFeriados", "feriados", renderFeriados);
 ligarBusca("buscaOrdens", "ordens", renderOrdens);
 ligarBusca("buscaHistorico", "historico", renderHistorico);
-["filtroStatus", "filtroSetorPCM", "filtroOrigem"].forEach((id) => {
+["filtroStatus", "filtroSetorPCM", "filtroOrigem", "filtroTipo"].forEach((id) => {
   $(`#${id}`)?.addEventListener("change", renderEquipamentosCadastro);
 });
 
@@ -8849,6 +8855,7 @@ function renderEquipamentosCadastro() {
   const statusFiltro = $("#filtroStatus")?.value || "";
   const setorPCMFiltro = $("#filtroSetorPCM")?.value || "";
   const origemFiltro = $("#filtroOrigem")?.value || "";
+  const tipoFiltro = $("#filtroTipo")?.value || "";
   const filtrados = aplicarFiltroLocal(ESTADO.equipamentos).filter((item) => {
     if (termo) {
       const alvo = normalizarBusca(`${item.patrimonio || ""} ${item.tag || ""} ${item.setor || ""} ${item.ambiente || ""} ${item.setorPCM || ""} ${item.equipeResponsavel || ""}`);
@@ -8864,8 +8871,27 @@ function renderEquipamentosCadastro() {
       const origemItem = item.origem === "manual" ? "manual" : "planilha";
       if (origemItem !== origemFiltro) return false;
     }
+    if (tipoFiltro && item.tipo !== tipoFiltro) return false;
     return true;
   });
+
+  // Opções do filtro de Tipo não são uma lista fixa (cada planilha de
+  // prédio escreve esse campo do jeito que quiser -- "Split Hi-Wall",
+  // "SPLIT PAREDE" etc.) -- então o <select> é montado com os valores que
+  // realmente existem no cadastro, em vez de uma lista chutada que podia
+  // nem bater com o que foi importado. Preserva a seleção atual (senão
+  // reconstruir o <select> a cada render perderia o filtro escolhido).
+  const selTipo = $("#filtroTipo");
+  if (selTipo) {
+    const tiposExistentes = [...new Set(ESTADO.equipamentos.map((e) => e.tipo).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "pt-BR")
+    );
+    const valorAtual = selTipo.value;
+    selTipo.innerHTML = `<option value="">Tipo: todos</option>${tiposExistentes
+      .map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`)
+      .join("")}`;
+    if (tiposExistentes.includes(valorAtual)) selTipo.value = valorAtual;
+  }
 
   let itensComCorretivas = filtrados.map((item) => {
     const { exatos, aproximados } = chamadosDoEquipamento(item);
@@ -8883,7 +8909,7 @@ function renderEquipamentosCadastro() {
   table.innerHTML = `<thead><tr>
       <th style="width:30px"><input type="checkbox" id="checkTodosEquipamentos"></th>
       <th>Patrimônio</th><th>Setor</th><th>Ambiente</th><th>Prédio</th><th>Setor PCM</th>
-      <th>Status</th><th>Origem</th><th>Marca/Modelo/Capacidade</th>
+      <th>Status</th><th>Origem</th><th>Tipo</th><th>Marca/Modelo/Capacidade</th>
       <th id="thCorretivas" style="cursor:pointer" title="Clique para ordenar">Corretivas${setaOrdenacao}</th>
       <th></th>
     </tr></thead><tbody></tbody>`;
@@ -8903,6 +8929,7 @@ function renderEquipamentosCadastro() {
             : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}
       </td>
       <td data-label="Origem">${item.origem === "manual" ? "Manual" : "Planilha"}</td>
+      <td data-label="Tipo">${escapeHtml(item.tipo || "-")}</td>
       <td data-label="Marca/Modelo/Cap." style="font-size:12px">${dadosTecnicos}</td>
       <td data-label="Corretivas" style="text-align:center">${totalCorretivas > 0 ? `<strong>${totalCorretivas}</strong>` : "-"}</td>`;
 
