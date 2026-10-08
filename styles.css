@@ -51,6 +51,12 @@
   --texto-fraco: #8B98A6;
 
   /* --- Status (== cores usadas no Excel exportado) --- */
+  /* Usados só em botão/menu/ícone de AÇÃO destrutiva (excluir, bloquear
+     etc.) -- de propósito iguais ao Excel exportado, não mexer. Pra
+     BADGE/ETIQUETA passiva de estado (pendente/atrasado/em andamento),
+     ver --estado-erro-*/--estado-alerta-* logo abaixo: o salmão/amarelo
+     pastel daqui tinha baixo contraste pra esse uso (pesquisa de
+     referência institucional confirmou -- ver auditoria visual). */
   --verde: #375623;
   --verde-fundo: #C6E0B4;
   --verde-texto: #2C4A1C;
@@ -60,6 +66,17 @@
   --vermelho: #C00000;
   --vermelho-fundo: #F8CBAD;
   --vermelho-texto: #A13800;
+
+  /* --- Estado passivo (badge/etiqueta de pendente/atrasado/em andamento,
+     faixas de aviso) -- fundo quase branco + texto escuro saturado,
+     padrão confirmado em GOV.UK/USWDS (ver auditoria visual), em vez do
+     salmão/amarelo pastel de baixo contraste do bloco acima. */
+  --estado-erro-fundo: #FEF2F2;
+  --estado-erro-texto: #991B1B;
+  --estado-erro-faixa: #DC2626;
+  --estado-alerta-fundo: #FFFBEB;
+  --estado-alerta-texto: #92400E;
+  --estado-alerta-faixa: #D97706;
 
   /* --- Escala de espaçamento (base 4px) --- */
   --sp-1: 4px;
@@ -466,9 +483,9 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   margin: var(--sp-3) 0 0;
 }
 .modal-confirm-card.perigo .modal-confirm-aviso {
-  background: var(--vermelho-fundo);
-  border-left-color: var(--vermelho);
-  color: var(--vermelho-texto);
+  background: var(--estado-erro-fundo);
+  border-left-color: var(--estado-erro-faixa);
+  color: var(--estado-erro-texto);
 }
 
 /* Campo de texto dentro do modal, usado por promptModal() (substitui o
@@ -654,9 +671,9 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 /* Faixa de alerta (usada tb como aviso inline dentro de card/seção --
    ver .alert-toast-stack logo abaixo pros avisos flutuantes no topo) */
 .alert-banner {
-  background: var(--vermelho-fundo);
-  border-bottom: 1px solid #E8A87C;
-  color: var(--vermelho-texto);
+  background: var(--estado-erro-fundo);
+  border-bottom: 1px solid var(--estado-erro-faixa);
+  color: var(--estado-erro-texto);
   padding: 10px var(--sp-5);
   display: flex;
   align-items: center;
@@ -669,7 +686,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
 .alert-banner-close {
   background: none;
   border: none;
-  color: var(--vermelho-texto);
+  color: var(--estado-erro-texto);
   font-size: 18px;
   line-height: 1;
   padding: 2px 6px;
@@ -933,8 +950,8 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   white-space: nowrap;
 }
 .hist-evento.hist-cadastro { background: var(--verde-100); color: var(--verde-800); }
-.hist-evento.hist-reagendamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
-.hist-evento.hist-excluido { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
+.hist-evento.hist-reagendamento { background: var(--estado-alerta-fundo); color: var(--estado-alerta-texto); }
+.hist-evento.hist-excluido { background: var(--estado-erro-fundo); color: var(--estado-erro-texto); }
 .hist-evento.hist-preventiva { background: var(--fundo); color: var(--texto-suave); border: 1px solid var(--borda); }
 .hist-evento.hist-correcao { background: var(--dourado-tint); color: var(--dourado-escuro); }
 
@@ -1331,8 +1348,8 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
   appearance: none;
   cursor: pointer;
 }
-.status-select.pendente { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
-.status-select.andamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
+.status-select.pendente { background: var(--estado-erro-fundo); color: var(--estado-erro-texto); }
+.status-select.andamento { background: var(--estado-alerta-fundo); color: var(--estado-alerta-texto); }
 .status-select.concluido { background: var(--verde-fundo); color: var(--verde-texto); }
 /* Literal (não a variável de marca) de propósito -- "concluido" já é
    verde, "atrasado" precisa continuar visualmente diferente dele (ver
@@ -1482,12 +1499,12 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
   white-space: nowrap;
   font-size: 10px;
 }
-.cal-day-badge.pendente { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
-.cal-day-badge.andamento { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
+.cal-day-badge.pendente { background: var(--estado-erro-fundo); color: var(--estado-erro-texto); }
+.cal-day-badge.andamento { background: var(--estado-alerta-fundo); color: var(--estado-alerta-texto); }
 .cal-day-badge.concluido { background: var(--verde-fundo); color: var(--verde-texto); }
 .cal-day-badge.atrasado { background: #10263D; color: #fff; } /* literal de propósito, ver .status-select.atrasado */
 .cal-day-badge.holiday { background: var(--dourado); color: var(--verde-900); } /* branco em cima do dourado tem contraste ruim (~2.4:1) */
-.cal-day-badge.gap { background: var(--vermelho-fundo); color: var(--vermelho-texto); border: 1px dashed var(--vermelho); cursor: default; }
+.cal-day-badge.gap { background: var(--estado-erro-fundo); color: var(--estado-erro-texto); border: 1px dashed var(--estado-erro-faixa); cursor: default; }
 
 .cal-badge-tooltip {
   position: fixed;
@@ -1567,7 +1584,9 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
 }
 .kpi-card .num {
   font-family: var(--fonte-display);
-  font-size: 42px;       /* Aumentado de 30px para 42px */
+  font-size: 34px;       /* 5 números do mesmo tamanho competiam entre
+    si -- "Execução" (o que resume o ciclo inteiro) fica maior que os
+    outros 4, ver .kpi-card.execucao .num logo abaixo. */
   font-weight: 700;      /* Um pouco mais pesado */
   color: var(--verde-900);
   line-height: 1;
@@ -1599,12 +1618,19 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
 .kpi-card.total { border-top-color: var(--verde-700); }
 .kpi-card.concluido { border-top-color: var(--verde-fundo); }
 .kpi-card.concluido .num { color: var(--verde-texto); }
-.kpi-card.andamento { border-top-color: var(--amarelo-fundo); }
-.kpi-card.andamento .num { color: var(--amarelo-texto); }
-.kpi-card.pendente { border-top-color: var(--vermelho-fundo); }
-.kpi-card.pendente .num { color: var(--vermelho-texto); }
+.kpi-card.andamento { border-top-color: var(--estado-alerta-faixa); }
+.kpi-card.andamento .num { color: var(--estado-alerta-texto); }
+.kpi-card.pendente { border-top-color: var(--estado-erro-faixa); }
+.kpi-card.pendente .num { color: var(--estado-erro-texto); }
 .kpi-card.execucao { border-top-color: var(--dourado); }
 .kpi-card.execucao .num { color: var(--dourado-escuro); }
+
+/* "Execução" é o número que resume o ciclo inteiro (os outros 4 são
+   contexto de apoio) -- destacar ele visualmente em vez dos 5 cartões
+   competirem em pé de igualdade segue o padrão visto em dashboards
+   institucionais pesquisados ("lead with one headline number, then the
+   breakdown"). Cálculo continua idêntico, só o tamanho mudou. */
+.kpi-card.execucao .num { font-size: 44px; }
 
 /* --- ACORDEÕES (DASHBOARD E DRAWER) --- */
 details.ciclos-discreto, details.drawer-secao {
@@ -2487,6 +2513,15 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   text-align: center;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* Erro (mensagem começa com "Erro", ver toast() em app.js) fica visualmente
+   diferente de um aviso comum -- antes era a mesma caixinha verde pra tudo,
+   sem distinguir "deu certo"/"só um aviso" de "algo falhou de verdade"
+   (ver auditoria visual). */
+.toast.toast-erro {
+  background: var(--estado-erro-fundo);
+  color: var(--estado-erro-texto);
+  border-left-color: var(--estado-erro-faixa);
+}
 
 /* RESPONSIVIDADE (MOBILE / CELULAR) */
 
@@ -2628,7 +2663,8 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
      de 42px) empurrava esse card pra trás da barra inferior fixa (fica
      cortado assim que o Dashboard abre, antes de rolar a tela). */
   .kpi-card { padding: var(--sp-3) var(--sp-4); }
-  .kpi-card .num { font-size: 30px; margin-bottom: 4px; }
+  .kpi-card .num { font-size: 26px; margin-bottom: 4px; }
+  .kpi-card.execucao .num { font-size: 34px; }
 
   /* Busca/filtros de Equipamentos: as regras de ".toolbar-pesquisa" e
      ".filtros-equipamentos" puras (usadas no desktop) têm mais peso do
@@ -3035,7 +3071,7 @@ body.modo-trabalhador .status-select {
 }
 .eq-badge-rodizio { background: var(--verde-700); color: #fff; }
 .eq-badge-fora-rodizio { background: #ea580c; color: #fff; }
-.eq-badge-rotina { background: var(--amarelo-fundo); color: var(--amarelo-texto); }
+.eq-badge-rotina { background: var(--estado-alerta-fundo); color: var(--estado-alerta-texto); }
 .eq-badge-reserva { background: var(--borda); color: var(--texto-suave); }
 
 .btn-adicionar-vaga {

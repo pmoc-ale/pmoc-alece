@@ -880,6 +880,13 @@ function renderChamadosOrfaos() {
 function toast(msg) {
   const el = $("#toast");
   el.textContent = msg;
+  // Toast de erro sempre começa com "Erro" (padrão já usado em todo o
+  // app.js -- ver os catch{} de cada ação, "Erro ao salvar: ..." etc.).
+  // Detectar isso aqui em vez de exigir um segundo parâmetro em duzentos
+  // lugares que já chamam toast(msg) é o jeito de diferenciar erro de
+  // aviso comum sem precisar mexer em cada chamada (ver auditoria
+  // visual, avisos todos iguais independente do tipo).
+  el.classList.toggle("toast-erro", /^erro\b/i.test(msg.trim()));
   el.classList.add("show");
   clearTimeout(toast._t);
   toast._t = setTimeout(() => el.classList.remove("show"), 2600);
