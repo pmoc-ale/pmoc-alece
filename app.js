@@ -2878,7 +2878,17 @@ async function propagarRenomeacaoPredios(renomeacoes) {
 
 // --- SALVAR CONFIGURAÇÕES ---
 $("#btnSalvarConfigSite")?.addEventListener("click", async () => {
-  const mesesCiclo = Math.max(1, parseInt($("#cfgMesesCiclo").value, 10) || 4);
+  // O HTML já tem min="1" max="24" (ver index.html), mas isso só evita a
+  // setinha do campo passar da faixa -- dá pra digitar qualquer número
+  // direto no teclado. Antes, só um Math.max(1, ...) sem limite de cima
+  // deixava passar qualquer valor (ver auditoria, BUG-005); agora rejeita
+  // de vez e avisa, em vez de aceitar calado um número fora da faixa.
+  const mesesCicloDigitado = $("#cfgMesesCiclo").value;
+  const mesesCiclo = parseInt(mesesCicloDigitado, 10);
+  if (!Number.isInteger(mesesCiclo) || mesesCiclo < 1 || mesesCiclo > 24) {
+    toast("Duração do ciclo inválida -- digite um número inteiro entre 1 e 24 meses.");
+    return;
+  }
   const urlCorretivas = $("#cfgUrlCorretivas").value.trim();
   const predios = $("#cfgPredios").value.split("\n").map((p) => p.trim()).filter(Boolean);
   const fotoObrigatoria = $("#cfgFotoObrigatoria")?.checked === true;
@@ -3880,7 +3890,7 @@ function renderUsuarios() {
 
     tr.innerHTML = `
       <td data-label="Avatar">${avatarUsuarioHtml(u)}</td>
-      <td data-label="Usuário" ${estiloUsuario}>${u.usuario} ${u.bloqueado ? '(Bloqueado)' : ''}</td>
+      <td data-label="Usuário" ${estiloUsuario}>${escapeHtml(u.usuario)} ${u.bloqueado ? '(Bloqueado)' : ''}</td>
       <td data-label="Permissão">${ROTULOS_PERMISSAO[u.permissao] || "Padrão"}</td>
       <td data-label="Equipe">${equipeTexto}</td>
       <td data-label="Criado em">${u.criadoEm ? new Date(u.criadoEm).toLocaleDateString("pt-BR") : "-"}</td>
@@ -4553,6 +4563,26 @@ function lerCapacidadesDaTela() {
   return capacidades;
 }
 
+// Roda fn() com o botão travado contra clique duplo -- trava o botão
+// (btn.disabled = true) ANTES de qualquer "await", no mesmo instante
+// síncrono do clique, então um segundo clique bem rápido (ou um duplo-
+// clique de verdade) já encontra o botão desabilitado e nem chega a
+// chamar fn() de novo (sem isso, dava pra dois cliques entrarem na
+// função antes do primeiro terminar de gravar no Firestore, criando
+// cadastro duplicado -- ver auditoria, BUG-002/BUG-003). SEMPRE destrava
+// no final, sucesso ou erro (o "finally" roda mesmo se fn() rejeitar ou
+// lançar antes do primeiro "await" interno dela) -- um botão que trava
+// pra sempre depois de um erro seria pior que o problema original.
+async function comBotaoTravado(btn, fn) {
+  if (!btn || btn.disabled) return; // já tem uma chamada em andamento
+  btn.disabled = true;
+  try {
+    return await fn();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // Espera a pessoa parar de digitar por 300ms antes de rodar renderFn — sem
 // isso, cada tecla refazia a tabela inteira (inclusive o casamento com
 // chamados corretivos), o que engasgava a digitação com a base grande.
@@ -5085,10 +5115,10 @@ function renderResumoAtrasos() {
     .forEach((h) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td data-label="Patrimônio">${h.patrimonio || "-"}</td>
-        <td data-label="Prédio">${h.local || "SEDE"}</td>
-        <td data-label="Setor">${h.setor || "-"}</td>
-        <td data-label="Equipe">${h.equipe || "-"}</td>
+        <td data-label="Patrimônio">${escapeHtml(h.patrimonio || "-")}</td>
+        <td data-label="Prédio">${escapeHtml(h.local || "SEDE")}</td>
+        <td data-label="Setor">${escapeHtml(h.setor || "-")}</td>
+        <td data-label="Equipe">${escapeHtml(h.equipe || "-")}</td>
         <td data-label="De">${formatarDataBR(h.dataAnterior)}</td>
         <td data-label="Para">${formatarDataBR(h.dataNova)}</td>
         <td data-label="Quando">${new Date(h.registradoEm).toLocaleString("pt-BR")}</td>`;
@@ -5107,17 +5137,25 @@ function renderDashboard() {
   const andamento = itens.filter((i) => i.statusPreventiva === "Em andamento").length;
   const pendentes = total - concluidas - andamento;
   const execucao = total ? Math.round((concluidas / total) * 1000) / 10 : 0;
+  // "Atrasado" não é um status próprio -- é um pendente com a data
+  // vencida (ver estaAtrasado()), então já está CONTADO dentro de
+  // "pendentes" ali em cima, não é um número à parte. Calculado aqui só
+  // pra mostrar isso embaixo do cartão "Pendentes" (ver sublabel abaixo)
+  // -- sem essa linha, ficava parecendo que "Pendentes" e os atrasados
+  // do resumo logo abaixo eram duas contagens somáveis (ver auditoria,
+  // BUG-006).
+  const atrasados = itens.filter(estaAtrasado).length;
 
   const cartoes = [
-    ["total", total, "Equipamentos"],
-    ["concluido", concluidas, "Concluídas"],
-    ["andamento", andamento, "Em andamento"],
-    ["pendente", pendentes, "Pendentes"],
-    ["execucao", `${execucao}%`, "Execução"],
+    ["total", total, "Equipamentos", ""],
+    ["concluido", concluidas, "Concluídas", ""],
+    ["andamento", andamento, "Em andamento", ""],
+    ["pendente", pendentes, "Pendentes", atrasados > 0 ? `dos quais ${atrasados} atrasado(s)` : ""],
+    ["execucao", `${execucao}%`, "Execução", ""],
   ];
-  
-  $("#kpiRow").innerHTML = cartoes.map(([cls, num, label]) =>
-    `<div class="kpi-card ${cls}"><div class="num">${num}</div><div class="label">${label}</div></div>`
+
+  $("#kpiRow").innerHTML = cartoes.map(([cls, num, label, sublabel]) =>
+    `<div class="kpi-card ${cls}"><div class="num">${num}</div><div class="label">${label}</div>${sublabel ? `<div class="sublabel">${escapeHtml(sublabel)}</div>` : ""}</div>`
   ).join("");
   
   const cicloAtual = numeroDoCiclo(ESTADO.cicloAtual);
@@ -5872,7 +5910,7 @@ function renderOrdens() {
   atualizarBarraSelecao("selecaoOrdens", "selecaoOrdens", "selecaoOrdensTexto");
 }
 
-$("#btnExcluirSelecionadosOrdens")?.addEventListener("click", async () => {
+async function excluirOrdensSelecionadas() {
   const chaves = [...ESTADO.selecaoOrdens];
   if (!chaves.length) return;
   const ok = await confirmarModal({
@@ -5903,9 +5941,16 @@ $("#btnExcluirSelecionadosOrdens")?.addEventListener("click", async () => {
     console.error(err);
     toast("Erro ao excluir: " + err.message);
   }
-});
+}
+const btnExcluirSelecionadosOrdens = $("#btnExcluirSelecionadosOrdens");
+// comBotaoTravado -- mesma proteção contra clique duplo aplicada em
+// excluirEquipamentosSelecionados (ver auditoria, BUG-003); mesmo padrão
+// repetido aqui, então mesma correção.
+btnExcluirSelecionadosOrdens?.addEventListener("click", () =>
+  comBotaoTravado(btnExcluirSelecionadosOrdens, excluirOrdensSelecionadas)
+);
 
-$("#btnExcluirSelecionadosHistorico")?.addEventListener("click", async () => {
+async function excluirHistoricoSelecionado() {
   const chaves = [...ESTADO.selecaoHistorico];
   if (!chaves.length) return;
   const ok = await confirmarModal({
@@ -5936,11 +5981,23 @@ $("#btnExcluirSelecionadosHistorico")?.addEventListener("click", async () => {
     console.error(err);
     toast("Erro ao excluir: " + err.message);
   }
-});
+}
+const btnExcluirSelecionadosHistorico = $("#btnExcluirSelecionadosHistorico");
+// comBotaoTravado -- mesmo padrão do BUG-003 (ver excluirOrdensSelecionadas/
+// excluirEquipamentosSelecionados logo acima).
+btnExcluirSelecionadosHistorico?.addEventListener("click", () =>
+  comBotaoTravado(btnExcluirSelecionadosHistorico, excluirHistoricoSelecionado)
+);
 
 const btnAdicionarEquipamento = $("#btnAdicionarEquipamento");
 if (btnAdicionarEquipamento) {
-  btnAdicionarEquipamento.addEventListener("click", adicionarEquipamentoManual);
+  // comBotaoTravado -- sem isso, clicar duas vezes rápido (ou a rede
+  // demorar no meio de um upload de foto) deixava rodar
+  // adicionarEquipamentoManual() duas vezes com os mesmos dados do
+  // formulário, criando um cadastro duplicado (ver auditoria, BUG-002).
+  btnAdicionarEquipamento.addEventListener("click", () =>
+    comBotaoTravado(btnAdicionarEquipamento, adicionarEquipamentoManual)
+  );
 }
 ligarSeletorDeArquivo("eqFotoInput", "btnEqFotoEscolher", "eqFotoNome", "Nenhuma selecionada");
 
@@ -9010,7 +9067,7 @@ function renderEquipamentosCadastro() {
   renderChamadosOrfaos();
 }
 
-$("#btnExcluirSelecionadosEquipamentos")?.addEventListener("click", async () => {
+async function excluirEquipamentosSelecionados() {
   const ids = [...ESTADO.selecaoEquipamentos];
   if (!ids.length) return;
   const ok = await confirmarModal({
@@ -9042,7 +9099,16 @@ $("#btnExcluirSelecionadosEquipamentos")?.addEventListener("click", async () => 
     console.error(err);
     toast("Erro ao excluir: " + err.message);
   }
-});
+}
+const btnExcluirSelecionadosEquipamentos = $("#btnExcluirSelecionadosEquipamentos");
+// comBotaoTravado -- mesma proteção contra clique duplo do BUG-002 (ver
+// auditoria, BUG-003); aqui o risco era menor (apagar duas vezes o mesmo
+// id não dá erro no Firestore), mas dois cliques rápidos abriam a
+// confirmação duas vezes e podiam gravar dois registros de auditoria
+// pra uma exclusão só.
+btnExcluirSelecionadosEquipamentos?.addEventListener("click", () =>
+  comBotaoTravado(btnExcluirSelecionadosEquipamentos, excluirEquipamentosSelecionados)
+);
 // ------------------------------------------------------------------
 // Painel lateral com detalhes do equipamento
 // ------------------------------------------------------------------

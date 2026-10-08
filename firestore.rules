@@ -76,6 +76,40 @@ service cloud.firestore {
       );
     }
 
+    // Fechar o ciclo atual e abrir o próximo acontece sozinho (sem
+    // precisar de admin) assim que o ÚLTIMO equipamento pendente é
+    // concluído -- pode ser um trabalhador comum quem completa esse
+    // último item (ver verificarFechamentoCiclo()/
+    // fecharCicloEIniciarProximo() em app.js). O documento do ciclo
+    // (aqui, não numa subcoleção) não tinha regra própria antes, caía na
+    // regra genérica no fim do arquivo (só admin escreve) -- fechar o
+    // ciclo falhava com "permissão negada" pra quem não fosse admin (ver
+    // auditoria, BUG-004).
+    //
+    // Em vez de abrir create/update geral em ciclos/{cicloId} pra
+    // trabalhador (deixaria criar/editar QUALQUER ciclo com QUALQUER
+    // dado), libera só as duas operações exatas que
+    // fecharCicloEIniciarProximo() faz:
+    match /ciclos/{cicloId} {
+      // Fechar o ciclo ATIVO -- nunca reabre um já encerrado, nunca pula
+      // pra outro status, e só nos campos que o fechamento de verdade
+      // grava (ver updateDoc em fecharCicloEIniciarProximo()).
+      allow update: if souTrabalhador()
+        && resource.data.status == "Ativo"
+        && request.resource.data.status == "Encerrado"
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(["status", "dataFechamento", "total", "noPrazo", "emAtraso", "porPredio"]);
+
+      // Criar o PRÓXIMO ciclo -- só com os 3 campos que toda criação de
+      // ciclo grava (gerarCronograma()/gerarCronogramaSemAgendar()
+      // também criam ciclo, mas são telas só de admin na interface; aqui
+      // é a regra do banco, mais restrita que "qualquer coisa" de
+      // qualquer forma).
+      allow create: if souTrabalhador()
+        && request.resource.data.keys().hasOnly(["criadoEm", "dataInicio", "status"])
+        && request.resource.data.status == "Ativo";
+    }
+
     match /ciclos/{cicloId}/equipamentos/{itemId} {
       allow create, update: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
