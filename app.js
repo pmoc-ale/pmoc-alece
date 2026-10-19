@@ -19,7 +19,8 @@ import {
 } from "./utils/formatacao.js?v=1";
 import {
   PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna, normalizarTipoEquipamento,
-} from "./utils/dominioPmoc.js?v=2";
+  detectarPatrimoniosDuplicados,
+} from "./utils/dominioPmoc.js?v=3";
 import {
   SUFIXO_LOGIN, usuarioParaEmail, extrairUsuario, ROTULOS_PERMISSAO,
 } from "./utils/identidadeUsuario.js?v=1";
@@ -929,6 +930,43 @@ function confirmarModal({ titulo = "Confirmar", corpoHtml = "", textoConfirmar =
   });
 }
 
+// Avisa (sem decidir nada sozinho) quando a planilha que está prestes a
+// ser importada tem patrimônio repetido -- dentro dela mesma, ou batendo
+// com um patrimônio que já existe no cadastro só que em OUTRO prédio
+// (mesmo prédio é o caminho normal de "atualizar quem já existe", não é
+// conflito). Nunca funde, apaga nem corrige nada sozinho -- só mostra o
+// que achou e deixa a pessoa escolher entre corrigir a planilha ou seguir
+// mesmo assim (pode ser um patrimônio de verdade repetido por algum
+// motivo do prédio, quem decide é quem conhece os dados). Sem nenhuma
+// duplicidade, devolve true na hora, sem mostrar confirmação nenhuma --
+// importar planilha sem conflito continua idêntico a antes disso existir.
+async function confirmarSemPatrimoniosConflitantes(itens) {
+  const { duplicadosNaPlanilha, conflitosComCadastro } = detectarPatrimoniosDuplicados(itens, ESTADO.equipamentos);
+  if (!duplicadosNaPlanilha.length && !conflitosComCadastro.length) return true;
+
+  const listaDuplicados = duplicadosNaPlanilha.map((d) =>
+    `<li><strong>${escapeHtml(d.patrimonio)}</strong> aparece ${d.ocorrencias.length}x na planilha ` +
+    `(linha${d.ocorrencias.length > 1 ? "s" : ""} ${d.ocorrencias.map((o) => o.linha).join(", ")}: ` +
+    `${d.ocorrencias.map((o) => escapeHtml(`${o.setor || "-"} / ${o.ambiente || "-"}`)).join("; ")})</li>`
+  ).join("");
+  const listaConflitos = conflitosComCadastro.map((c) =>
+    `<li><strong>${escapeHtml(c.patrimonio)}</strong> já está cadastrado em ` +
+    `${escapeHtml(c.prediosNoCadastro.join(", "))}, mas essa planilha traz ele pra ` +
+    `${escapeHtml(c.prediosNaPlanilha.join(", "))}</li>`
+  ).join("");
+
+  return confirmarModal({
+    titulo: "Patrimônio repetido ou em conflito",
+    corpoHtml:
+      (duplicadosNaPlanilha.length ? `<p>Patrimônio repetido dentro da própria planilha:</p><ul>${listaDuplicados}</ul>` : "") +
+      (conflitosComCadastro.length ? `<p>Patrimônio que já existe no cadastro em outro prédio:</p><ul>${listaConflitos}</ul>` : "") +
+      `<div class="modal-confirm-aviso">Isso costuma ser erro de digitação -- confira a planilha antes de continuar. Nada foi importado ainda; nenhum cadastro será apagado, sobrescrito ou fundido automaticamente.</div>`,
+    textoConfirmar: "Continuar mesmo assim",
+    textoCancelar: "Corrigir a planilha",
+    perigo: true,
+  });
+}
+
 // Substitui window.prompt() por uma janela com a cara do sistema, do
 // mesmo jeito que confirmarModal já faz com window.confirm() -- reusa a
 // mesma janela (#modalConfirmOverlay), só com um campo de texto dentro.
@@ -1449,6 +1487,7 @@ function processarArquivo(file) {
           const linhasDesses = todasAsLinhas.filter((l) => prediosJaExistemNaPlanilha.includes((l.__local || "SEDE").trim()));
           const resultado = linhasParaItens(linhasDesses);
           if (resultado.erro) { toast(resultado.erro); return; }
+          if (!(await confirmarSemPatrimoniosConflitantes(resultado.itens))) return;
           // Calcula os números de verdade ANTES de perguntar -- assim a
           // pergunta já mostra uma prévia real (quantos vão atualizar,
           // quantos são novos, quantos sumiram), em vez de um texto
@@ -1489,6 +1528,7 @@ function processarArquivo(file) {
             const linhasDesses = todasAsLinhas.filter((l) => prediosNovosNaPlanilha.includes((l.__local || "SEDE").trim()));
             const resultado = linhasParaItens(linhasDesses);
             if (resultado.erro) { toast(resultado.erro); return; }
+            if (!(await confirmarSemPatrimoniosConflitantes(resultado.itens))) return;
             ESTADO.modoAdicionarPredio = true;
             ESTADO.itensParaAdicionarPredio = resultado.itens;
             irParaAba("config");
@@ -1510,6 +1550,16 @@ function processarArquivo(file) {
           perigo: true,
         });
         if (!querSubstituir) return;
+      }
+
+      // Mesmo aviso de patrimônio repetido/conflitante de cima, agora pro
+      // caminho de "Substituir tudo" (ou primeiro levantamento, sem
+      // cadastro anterior nenhum) -- antes de apagar e recomeçar do zero.
+      const preCheck = linhasParaItens(todasAsLinhas);
+      if (preCheck.erro) { toast(preCheck.erro); return; }
+      if (!(await confirmarSemPatrimoniosConflitantes(preCheck.itens))) {
+        $("#dropzoneLabel").textContent = "Clique ou arraste o arquivo aqui";
+        return;
       }
 
       // 1. Limpamos o estado atual para não mostrar dados velhos

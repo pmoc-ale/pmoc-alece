@@ -1,7 +1,7 @@
 // Regras de classificação específicas do PMOC ALECE (prioridade de setor,
 // piso, achar coluna de planilha) -- puras, sem ESTADO/DOM/Firebase.
 // Extraído do app.js; ver utils/formatacao.js pro resto das funções puras.
-import { normalizarBusca } from "./formatacao.js";
+import { normalizarBusca, normalizarTexto } from "./formatacao.js";
 
 export const PRIORIDADE = {
   "1 - Presidência": 1, "2 - Primeiro Secretário": 2, "3 - Gabinetes": 3,
@@ -50,6 +50,62 @@ export function normalizarTipoEquipamento(valorCru) {
   const texto = String(valorCru || "").trim().replace(/\s+/g, " ");
   if (!texto) return "";
   return MAPA_TIPO_EQUIPAMENTO[texto.toUpperCase()] || texto;
+}
+
+// Acha patrimônio repetido ANTES de importar, pra avisar em vez de
+// silenciosamente criar um cadastro duplicado (ver contagemPorPatrimonio
+// em linhasParaItens, que só desempata o ID -- continua desempatando
+// normalmente, isso aqui é só o aviso, não muda esse comportamento).
+// Duas listas separadas: patrimônio que se repete DENTRO da própria
+// planilha (provável erro de digitação) e patrimônio que já existe no
+// cadastro só que num prédio diferente do que a planilha está trazendo
+// agora (o mesmo prédio é o caminho normal de "atualizar quem já existe",
+// não um conflito). Campo vazio nunca conta como duplicidade.
+export function detectarPatrimoniosDuplicados(itens, equipamentosExistentes = []) {
+  const porPatrimonio = new Map();
+  itens.forEach((item, idx) => {
+    if (!item.patrimonio) return;
+    const chave = normalizarTexto(item.patrimonio);
+    if (!chave) return;
+    if (!porPatrimonio.has(chave)) porPatrimonio.set(chave, []);
+    porPatrimonio.get(chave).push({
+      linha: idx + 2, // +2: header ocupa a linha 1 da planilha
+      patrimonio: item.patrimonio,
+      setor: item.setor,
+      ambiente: item.ambiente,
+      local: item.local,
+    });
+  });
+
+  const duplicadosNaPlanilha = [];
+  for (const ocorrencias of porPatrimonio.values()) {
+    if (ocorrencias.length > 1) duplicadosNaPlanilha.push({ patrimonio: ocorrencias[0].patrimonio, ocorrencias });
+  }
+
+  const porPatrimonioExistente = new Map();
+  equipamentosExistentes.forEach((e) => {
+    if (!e.patrimonio) return;
+    const chave = normalizarTexto(e.patrimonio);
+    if (!porPatrimonioExistente.has(chave)) porPatrimonioExistente.set(chave, []);
+    porPatrimonioExistente.get(chave).push(e);
+  });
+
+  const conflitosComCadastro = [];
+  for (const [chave, ocorrencias] of porPatrimonio.entries()) {
+    const existentes = porPatrimonioExistente.get(chave) || [];
+    const prediosDiferentes = existentes.filter((e) =>
+      !ocorrencias.some((o) => normalizarTexto(o.local) === normalizarTexto(e.local))
+    );
+    if (prediosDiferentes.length) {
+      conflitosComCadastro.push({
+        patrimonio: ocorrencias[0].patrimonio,
+        prediosNaPlanilha: [...new Set(ocorrencias.map((o) => o.local || "SEDE"))],
+        prediosNoCadastro: [...new Set(prediosDiferentes.map((e) => e.local || "SEDE"))],
+      });
+    }
+  }
+
+  return { duplicadosNaPlanilha, conflitosComCadastro };
 }
 
 export function localizarColuna(nomesPossiveis, headers) {
