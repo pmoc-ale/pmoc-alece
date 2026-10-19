@@ -19,8 +19,8 @@ import {
 } from "./utils/formatacao.js?v=1";
 import {
   PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna, normalizarTipoEquipamento,
-  detectarPatrimoniosDuplicados, agruparPreventivasPorMes,
-} from "./utils/dominioPmoc.js?v=4";
+  detectarPatrimoniosDuplicados, agruparPreventivasPorMes, filtrarPreventivasParaRelatorio,
+} from "./utils/dominioPmoc.js?v=5";
 import {
   SUFIXO_LOGIN, usuarioParaEmail, extrairUsuario, ROTULOS_PERMISSAO,
 } from "./utils/identidadeUsuario.js?v=1";
@@ -10363,6 +10363,22 @@ $("#btnExport").addEventListener("click", async () => {
   }
 });
 
+// Filtro do relatório PDF -- reaproveita aplicarFiltroLocal (mesmo filtro
+// de prédio que já existe em cima do Dashboard, inclusive o recorte por
+// equipe de um trabalhador) em vez de inventar um filtro de prédio novo
+// só pro relatório; Situação reusa os MESMOS valores do "#filtroStatus"
+// da tela de Cadastro, pra quem já conhece esse filtro não precisar
+// aprender um segundo vocabulário. A parte de Situação/período é pura
+// (ver filtrarPreventivasParaRelatorio em utils/dominioPmoc.js).
+function itensParaRelatorio() {
+  const itens = aplicarFiltroLocal(ESTADO.equipamentos);
+  return filtrarPreventivasParaRelatorio(itens, {
+    situacao: $("#filtroRelatorioSituacao")?.value || "",
+    dataInicio: $("#filtroRelatorioInicio")?.value || "",
+    dataFim: $("#filtroRelatorioFim")?.value || "",
+  }, formatISO(new Date()));
+}
+
 const btnExportarPDF = $("#btnExportarPDF");
 if (btnExportarPDF) {
   btnExportarPDF.addEventListener("click", () => {
@@ -10370,8 +10386,16 @@ if (btnExportarPDF) {
       toast("Gere o cronograma primeiro.");
       return;
     }
+    const itens = itensParaRelatorio();
+    if (!itens.length) {
+      toast("Nenhum equipamento encontrado com esses filtros.");
+      return;
+    }
     toast("Gerando relatório PDF...");
-    baixarRelatorioPDF(ESTADO.equipamentos, ESTADO.cicloAtual, ESTADO.historico);
+    // historico vai sem filtro de propósito -- é só usado pro indicador
+    // fixo de "concluídos nos últimos 7 dias" do relatório, que é uma
+    // tendência do sistema inteiro, não um recorte do período escolhido.
+    baixarRelatorioPDF(itens, ESTADO.cicloAtual, ESTADO.historico);
   });
 }
 

@@ -354,7 +354,19 @@
       </details>
       <div class="card">
         <h2>Exportar</h2>
-        <p class="muted">Baixa uma planilha .xlsx com os dados atuais, ou um relatório gerencial em PDF.</p>
+        <p class="muted">Baixa uma planilha .xlsx com os dados atuais, ou um relatório gerencial em PDF. O relatório em PDF respeita o filtro de prédio lá em cima e os filtros abaixo; a planilha sempre sai completa.</p>
+        <div class="local-filtro" style="margin-bottom:10px">
+          <select id="filtroRelatorioSituacao" style="width:auto;min-width:200px">
+            <option value="">Situação: todas</option>
+            <option value="Pendente">Pendente</option>
+            <option value="Em andamento">Em andamento</option>
+            <option value="Concluída">Concluída</option>
+            <option value="Atrasado">Atrasado</option>
+            <option value="Aguardando">Aguardando agendamento</option>
+          </select>
+          <label class="muted" style="font-size:12.5px">De <input type="date" id="filtroRelatorioInicio" style="width:auto"></label>
+          <label class="muted" style="font-size:12.5px">até <input type="date" id="filtroRelatorioFim" style="width:auto"></label>
+        </div>
         <button class="btn secondary" id="btnExport">Baixar planilha (.xlsx)</button>
         <button class="btn primary" id="btnExportarPDF" style="margin-left:10px">Baixar relatório (PDF)</button>
       </div>
@@ -962,7 +974,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=138"></script>
+<script type="module" src="app.js?v=139"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

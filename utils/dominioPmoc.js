@@ -93,8 +93,15 @@ export function detectarPatrimoniosDuplicados(itens, equipamentosExistentes = []
   const conflitosComCadastro = [];
   for (const [chave, ocorrencias] of porPatrimonio.entries()) {
     const existentes = porPatrimonioExistente.get(chave) || [];
+    // normalizarBusca (sem acento, não só maiúscula/minúscula) -- mesma
+    // comparação que processarArquivo já usa pra casar nome de prédio
+    // (ver nomesPrediosConhecidos em app.js). "Secretaria"/"Secretária"
+    // batem; "Anexo I"/"Anexo 1" continuam sendo tratados como prédios
+    // diferentes de propósito -- numeral por extenso vs. algarismo não é
+    // problema de acento/maiúscula, e arriscar casar os dois sozinho podia
+    // escapar um conflito de verdade entre dois prédios diferentes.
     const prediosDiferentes = existentes.filter((e) =>
-      !ocorrencias.some((o) => normalizarTexto(o.local) === normalizarTexto(e.local))
+      !ocorrencias.some((o) => normalizarBusca(o.local) === normalizarBusca(e.local))
     );
     if (prediosDiferentes.length) {
       conflitosComCadastro.push({
@@ -128,6 +135,32 @@ export function agruparPreventivasPorMes(itens, hojeISO) {
     else bucket.pendentes++;
   });
   return [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes)).slice(-12);
+}
+
+// Filtro do relatório PDF gerencial (Dashboard > Exportar) -- Situação e
+// período (data AGENDADA, o único campo que toda preventiva tem, concluída
+// ou não). Pura (hojeISO por fora, não "new Date()" aqui dentro) pra dar
+// pra testar; a mesma regra de "atrasado" de estaAtrasado() em app.js,
+// reescrita aqui pelo mesmo motivo de agruparPreventivasPorMes acima.
+export function filtrarPreventivasParaRelatorio(itens, { situacao = "", dataInicio = "", dataFim = "" } = {}, hojeISO) {
+  let resultado = itens;
+  if (situacao === "Atrasado") {
+    resultado = resultado.filter((i) => i.dataAgendada && i.statusPreventiva !== "Concluída" && i.dataAgendada < hojeISO);
+  } else if (situacao === "Aguardando") {
+    resultado = resultado.filter((i) => i.aguardandoAgendamento);
+  } else if (situacao) {
+    resultado = resultado.filter((i) => !i.aguardandoAgendamento && i.statusPreventiva === situacao);
+  }
+
+  if (dataInicio || dataFim) {
+    resultado = resultado.filter((i) => {
+      if (!i.dataAgendada) return false;
+      if (dataInicio && i.dataAgendada < dataInicio) return false;
+      if (dataFim && i.dataAgendada > dataFim) return false;
+      return true;
+    });
+  }
+  return resultado;
 }
 
 export function localizarColuna(nomesPossiveis, headers) {
