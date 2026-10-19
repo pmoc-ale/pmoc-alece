@@ -9140,12 +9140,34 @@ async function excluirEquipamentosSelecionados() {
       const item = ESTADO.equipamentos.find((e) => e.id === id);
       if (item) await registrarHistorico(item, "-", "Excluído", "Cadastro");
     }
-    const TAMANHO_LOTE = 400;
+    // TAMANHO_LOTE menor que os 400 de costume -- cada id agora apaga 2
+    // documentos no mesmo lote (equipamento + ficha técnica), e o Firestore
+    // recusa lote com mais de 500 operações; 200×2=400 fica com folga.
+    const TAMANHO_LOTE = 200;
     for (let inicio = 0; inicio < ids.length; inicio += TAMANHO_LOTE) {
       const batch = writeBatch(db);
-      ids.slice(inicio, inicio + TAMANHO_LOTE).forEach((id) =>
-        batch.delete(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id))
-      );
+      ids.slice(inicio, inicio + TAMANHO_LOTE).forEach((id) => {
+        batch.delete(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id));
+        // infoCondensadoras é ficha técnica do APARELHO FÍSICO (Marca/
+        // Modelo/Gás/Fio), sem valor de auditoria própria -- fica no mesmo
+        // lote (mesma garantia atômica do Firestore: ou os dois documentos
+        // somem juntos, ou nenhum dos dois) pra nunca sobrar órfã. Sem
+        // apagar isso, um patrimônio reimportado depois (mesmo número =
+        // mesmo id, ver contagemPorPatrimonio em linhasParaItens) herdaria
+        // sozinho a ficha técnica de uma máquina física que já não é mais
+        // essa. batch.delete() num documento que nunca existiu (equipamento
+        // que nunca teve ficha técnica preenchida) não dá erro nenhum.
+        //
+        // "ordens" e "historico" NÃO entram aqui -- são comprovação de
+        // manutenção já feita, não estado atual do aparelho. A aba Ordens
+        // lista OS de ciclos já fechados também (collectionGroup "ordens",
+        // ver iniciarSincronizacaoOrdens), e gerarPDFPMOC já foi escrito
+        // pra reimprimir o PDF mesmo sem achar o equipamento em
+        // ESTADO.equipamentos (usa os campos salvos na própria ordem como
+        // reserva) -- apagar junto tiraria a prova de que aquela
+        // manutenção realmente aconteceu.
+        batch.delete(doc(db, "infoCondensadoras", id));
+      });
       await batch.commit();
     }
     ESTADO.selecaoEquipamentos.clear();
