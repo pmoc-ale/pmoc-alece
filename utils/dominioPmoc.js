@@ -108,6 +108,28 @@ export function detectarPatrimoniosDuplicados(itens, equipamentosExistentes = []
   return { duplicadosNaPlanilha, conflitosComCadastro };
 }
 
+// Agrupa preventivas por mês de agendamento (dataAgendada), pro gráfico
+// "Status das preventivas por mês" do Dashboard -- cada aparelho conta
+// uma vez só, no status de HOJE (não um histórico de status passado, que
+// o sistema não guarda por mês). hojeISO é parâmetro (não "new Date()"
+// direto) só pra essa função dar pra testar sem depender da data real da
+// máquina. A mesma regra de "atrasado" do estaAtrasado() em app.js
+// (dataAgendada no passado e ainda não concluída), só reescrita aqui
+// porque essa função é pura (sem ESTADO/DOM) e aquela não.
+export function agruparPreventivasPorMes(itens, hojeISO) {
+  const porMes = new Map();
+  itens.forEach((item) => {
+    if (!item.dataAgendada) return;
+    const mes = item.dataAgendada.slice(0, 7); // "AAAA-MM"
+    if (!porMes.has(mes)) porMes.set(mes, { mes, concluidas: 0, atrasadas: 0, pendentes: 0 });
+    const bucket = porMes.get(mes);
+    if (item.statusPreventiva === "Concluída") bucket.concluidas++;
+    else if (item.dataAgendada < hojeISO) bucket.atrasadas++;
+    else bucket.pendentes++;
+  });
+  return [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes)).slice(-12);
+}
+
 export function localizarColuna(nomesPossiveis, headers) {
   // normalizarBusca tira acento além de maiúscula/minúscula -- sem isso,
   // um cabeçalho tipo "Potencia (BTU)" (sem acento) não batia com

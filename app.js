@@ -19,8 +19,8 @@ import {
 } from "./utils/formatacao.js?v=1";
 import {
   PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna, normalizarTipoEquipamento,
-  detectarPatrimoniosDuplicados,
-} from "./utils/dominioPmoc.js?v=3";
+  detectarPatrimoniosDuplicados, agruparPreventivasPorMes,
+} from "./utils/dominioPmoc.js?v=4";
 import {
   SUFIXO_LOGIN, usuarioParaEmail, extrairUsuario, ROTULOS_PERMISSAO,
 } from "./utils/identidadeUsuario.js?v=1";
@@ -5225,6 +5225,60 @@ function renderDashboard() {
   }
   renderResumoAtrasos();
   renderVisaoGerencial();
+  renderEvolucaoMensal(itens);
+}
+
+// Gráfico de barras empilhadas "Status das preventivas por mês" -- SVG
+// desenhado na mão (sem biblioteca nova pra carregar/guardar offline),
+// com os MESMOS 3 status e as MESMAS cores já usadas nos cartões do
+// Dashboard (ver .kpi-card.concluido/.andamento/.pendente em styles.css)
+// -- "pendente no prazo" usa a cor de "andamento" (âmbar) só porque esse
+// gráfico já tem "atrasado" como fatia própria, então "pendente" aqui é
+// só quem ainda está dentro do prazo (ver agruparPreventivasPorMes).
+function renderEvolucaoMensal(itens) {
+  const el = $("#dashboardEvolucaoMensal");
+  if (!el) return;
+  const dados = agruparPreventivasPorMes(itens, formatISO(new Date()));
+  if (!dados.length) {
+    el.innerHTML = `<p class="muted">Sem preventivas agendadas ainda neste ciclo.</p>`;
+    return;
+  }
+
+  const CORES = { concluidas: "var(--verde-700)", atrasadas: "var(--estado-erro-faixa)", pendentes: "var(--estado-alerta-faixa)" };
+  const ROTULOS = { concluidas: "Concluídas", atrasadas: "Atrasadas", pendentes: "Pendentes (no prazo)" };
+
+  const LARGURA = 760, ALTURA = 220, MARGEM_ESQ = 34, MARGEM_BAIXO = 26, MARGEM_TOPO = 12;
+  const alturaUtil = ALTURA - MARGEM_TOPO - MARGEM_BAIXO;
+  const max = Math.max(1, ...dados.map((d) => d.concluidas + d.atrasadas + d.pendentes));
+  const colunaW = (LARGURA - MARGEM_ESQ) / dados.length;
+  const barraW = Math.max(8, colunaW * 0.55);
+
+  let svg = `<svg viewBox="0 0 ${LARGURA} ${ALTURA}" class="grafico-evolucao" role="img" aria-label="Status das preventivas por mês">`;
+  [0, 0.5, 1].forEach((f) => {
+    const y = MARGEM_TOPO + alturaUtil * (1 - f);
+    svg += `<line x1="${MARGEM_ESQ}" y1="${y}" x2="${LARGURA}" y2="${y}" stroke="var(--borda)" stroke-width="1"/>`;
+    svg += `<text x="2" y="${y + 4}" font-size="10" fill="var(--texto-suave)">${Math.round(max * f)}</text>`;
+  });
+  dados.forEach((d, i) => {
+    const x = MARGEM_ESQ + i * colunaW + (colunaW - barraW) / 2;
+    let yAcumulado = MARGEM_TOPO + alturaUtil;
+    ["concluidas", "atrasadas", "pendentes"].forEach((chave) => {
+      const v = d[chave];
+      const h = (v / max) * alturaUtil;
+      yAcumulado -= h;
+      if (v > 0) svg += `<rect x="${x}" y="${yAcumulado.toFixed(1)}" width="${barraW.toFixed(1)}" height="${h.toFixed(1)}" fill="${CORES[chave]}"><title>${ROTULOS[chave]}: ${v}</title></rect>`;
+    });
+    const [ano, mes] = d.mes.split("-");
+    const rotuloMes = new Date(ano, parseInt(mes, 10) - 1, 1).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }).replace(".", "");
+    svg += `<text x="${(x + barraW / 2).toFixed(1)}" y="${ALTURA - 8}" font-size="10" text-anchor="middle" fill="var(--texto-suave)">${escapeHtml(rotuloMes)}</text>`;
+  });
+  svg += `</svg>`;
+
+  const legenda = Object.keys(CORES).map((chave) =>
+    `<span class="legenda-item"><span class="legenda-dot" style="background:${CORES[chave]}"></span>${ROTULOS[chave]}</span>`
+  ).join("");
+
+  el.innerHTML = `<div class="legenda-grafico">${legenda}</div>${svg}`;
 }
 
 // Aba "Hoje", a tela de entrada do trabalhador (ver abaPadrao em

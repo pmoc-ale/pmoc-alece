@@ -306,6 +306,13 @@
       <div class="local-filtro" id="localFiltroDashboard"></div>
       <div class="ciclo-resumo" id="cicloResumo"></div>
       <div class="kpi-row" id="kpiRow"></div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Status das preventivas por mês</h2>
+        </div>
+        <p class="muted">Cada aparelho agendado conta uma vez, no mês da data planejada, com o status de hoje.</p>
+        <div id="dashboardEvolucaoMensal"></div>
+      </div>
       <details class="ciclos-discreto">
         <summary id="resumoAtrasosResumo">Atrasos: carregando...</summary>
         <div class="card" style="margin-top:10px">
@@ -955,7 +962,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=6"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=137"></script>
+<script type="module" src="app.js?v=138"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

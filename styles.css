@@ -1632,6 +1632,11 @@ table tbody td:first-child { font-family: var(--fonte-dado); }
    breakdown"). Cálculo continua idêntico, só o tamanho mudou. */
 .kpi-card.execucao .num { font-size: 44px; }
 
+.grafico-evolucao { width: 100%; height: auto; display: block; }
+.legenda-grafico { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 10px; font-size: 12.5px; color: var(--texto-suave); }
+.legenda-item { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
 /* --- ACORDEÕES (DASHBOARD E DRAWER) --- */
 details.ciclos-discreto, details.drawer-secao {
   background: var(--superficie);
