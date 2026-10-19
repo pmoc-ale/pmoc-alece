@@ -19,8 +19,8 @@ import {
 } from "./utils/formatacao.js?v=1";
 import {
   PRIORIDADE, NOMES_DIAS, identificarSetor, descobrirPiso, localizarColuna, normalizarTipoEquipamento,
-  detectarPatrimoniosDuplicados, agruparPreventivasPorMes, filtrarPreventivasParaRelatorio,
-} from "./utils/dominioPmoc.js?v=5";
+  detectarPatrimoniosDuplicados, agruparPreventivasPorMes, filtrarPreventivasParaRelatorio, itemEstaAtrasado,
+} from "./utils/dominioPmoc.js?v=6";
 import {
   SUFIXO_LOGIN, usuarioParaEmail, extrairUsuario, ROTULOS_PERMISSAO,
 } from "./utils/identidadeUsuario.js?v=1";
@@ -104,10 +104,13 @@ async function calcularProximaData(item) {
 
 let idEquipamentoEmEdicao = null;
 
-// Um aparelho é considerado atrasado quando a data agendada já passou e ele ainda não foi marcado como Concluída.
+// Um aparelho é considerado atrasado quando a data agendada já passou e ele
+// ainda não foi marcado como Concluída -- implementação de verdade agora em
+// utils/dominioPmoc.js (itemEstaAtrasado, pura e testada), só a "data de
+// hoje" é resolvida aqui -- wrapper fino, sem mudar nenhuma das chamadas
+// existentes (estaAtrasado(item) continua funcionando exatamente igual).
 function estaAtrasado(item) {
-  if (!item.dataAgendada || item.statusPreventiva === "Concluída") return false;
-  return item.dataAgendada < formatISO(new Date());
+  return itemEstaAtrasado(item, formatISO(new Date()));
 }
 
 // Assina/envia fotos via um Worker da Cloudflare (não pelo Firebase Storage —

@@ -115,14 +115,22 @@ export function detectarPatrimoniosDuplicados(itens, equipamentosExistentes = []
   return { duplicadosNaPlanilha, conflitosComCadastro };
 }
 
+// Um aparelho é considerado atrasado quando a data agendada já passou e
+// ele ainda não foi marcado como Concluída -- MESMA regra que
+// estaAtrasado() em app.js (que continua existindo lá, só que agora como
+// um wrapper fino em cima desta aqui, pra quem já chama estaAtrasado(item)
+// sem precisar mudar nenhuma das ~10 chamadas espalhadas pelo arquivo).
+// hojeISO é parâmetro (não "new Date()" direto) só pra essa função dar
+// pra testar sem depender da data real da máquina.
+export function itemEstaAtrasado(item, hojeISO) {
+  if (!item.dataAgendada || item.statusPreventiva === "Concluída") return false;
+  return item.dataAgendada < hojeISO;
+}
+
 // Agrupa preventivas por mês de agendamento (dataAgendada), pro gráfico
 // "Status das preventivas por mês" do Dashboard -- cada aparelho conta
 // uma vez só, no status de HOJE (não um histórico de status passado, que
-// o sistema não guarda por mês). hojeISO é parâmetro (não "new Date()"
-// direto) só pra essa função dar pra testar sem depender da data real da
-// máquina. A mesma regra de "atrasado" do estaAtrasado() em app.js
-// (dataAgendada no passado e ainda não concluída), só reescrita aqui
-// porque essa função é pura (sem ESTADO/DOM) e aquela não.
+// o sistema não guarda por mês).
 export function agruparPreventivasPorMes(itens, hojeISO) {
   const porMes = new Map();
   itens.forEach((item) => {
@@ -131,7 +139,7 @@ export function agruparPreventivasPorMes(itens, hojeISO) {
     if (!porMes.has(mes)) porMes.set(mes, { mes, concluidas: 0, atrasadas: 0, pendentes: 0 });
     const bucket = porMes.get(mes);
     if (item.statusPreventiva === "Concluída") bucket.concluidas++;
-    else if (item.dataAgendada < hojeISO) bucket.atrasadas++;
+    else if (itemEstaAtrasado(item, hojeISO)) bucket.atrasadas++;
     else bucket.pendentes++;
   });
   return [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes)).slice(-12);
@@ -139,13 +147,11 @@ export function agruparPreventivasPorMes(itens, hojeISO) {
 
 // Filtro do relatório PDF gerencial (Dashboard > Exportar) -- Situação e
 // período (data AGENDADA, o único campo que toda preventiva tem, concluída
-// ou não). Pura (hojeISO por fora, não "new Date()" aqui dentro) pra dar
-// pra testar; a mesma regra de "atrasado" de estaAtrasado() em app.js,
-// reescrita aqui pelo mesmo motivo de agruparPreventivasPorMes acima.
+// ou não).
 export function filtrarPreventivasParaRelatorio(itens, { situacao = "", dataInicio = "", dataFim = "" } = {}, hojeISO) {
   let resultado = itens;
   if (situacao === "Atrasado") {
-    resultado = resultado.filter((i) => i.dataAgendada && i.statusPreventiva !== "Concluída" && i.dataAgendada < hojeISO);
+    resultado = resultado.filter((i) => itemEstaAtrasado(i, hojeISO));
   } else if (situacao === "Aguardando") {
     resultado = resultado.filter((i) => i.aguardandoAgendamento);
   } else if (situacao) {
