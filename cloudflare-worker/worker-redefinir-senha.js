@@ -170,7 +170,7 @@ async function obterTokenDeAcessoGoogle(env) {
 // caracteres de acentuação que sobram), pra "São Paulo" e "sao paulo"
 // contarem como a mesma resposta.
 function normalizarResposta(resposta) {
-  return resposta.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return resposta.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
 async function hashResposta(resposta) {
@@ -223,6 +223,66 @@ async function buscarUsuarioPorNomeDeUsuario(usuario, tokenDeAcesso, env) {
 // pra ninguém conseguir descobrir se um nome de usuário existe só de ir
 // testando aqui.
 const ERRO_AUTOSSERVICO = "Não foi possível confirmar usuário, pergunta e resposta. Confira e tente de novo.";
+const ERRO_LIMITE = "Muitas tentativas pra essa conta. Aguarde alguns minutos e tente de novo.";
+
+// [QA-FIX revisão independente] Esse endpoint é público (de propósito, ver
+// comentário acima de tratarAutosservico) e, até aqui, não tinha NENHUM
+// limite de tentativas -- um script poderia tentar milhares de respostas
+// de pergunta de segurança por segundo, sem captcha, sem delay, sem
+// contagem. Pergunta de segurança tem entropia baixa (respostas típicas),
+// então isso é força-bruta viável. Guarda a contagem de tentativas em
+// Firestore (coleção nova, "tentativasRedefinicaoSenha", 1 doc por nome de
+// usuário normalizado) usando o MESMO token de acesso de admin que esse
+// Worker já obtém pra tudo o resto -- não precisa de nenhuma infra nova
+// (KV/Durable Object) pra isso. Cloudflare Rate Limiting Rules (WAF, por
+// IP) continua sendo uma camada complementar recomendada, mas é
+// configuração de painel, fora do que um Worker consegue garantir sozinho
+// -- essa contagem por USUÁRIO é a defesa que dá pra garantir no código.
+const LIMITE_TENTATIVAS = 5;
+const JANELA_MS = 15 * 60 * 1000; // 15 min: tentativas antigas não contam mais
+const BLOQUEIO_MS = 15 * 60 * 1000; // 15 min de bloqueio ao atingir o limite
+
+function urlDocTentativas(usuario, env) {
+  return `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/tentativasRedefinicaoSenha/${encodeURIComponent(usuario)}`;
+}
+
+// Lê o estado de tentativas da conta; null se nunca tentou ou se a
+// leitura falhou -- uma falha aqui NUNCA deve travar o fluxo normal pra
+// quem está tentando de boa fé, só o próprio limite deve bloquear.
+async function lerTentativas(usuario, tokenDeAcesso, env) {
+  const resp = await fetch(urlDocTentativas(usuario, env), {
+    headers: { Authorization: `Bearer ${tokenDeAcesso}` },
+  }).catch(() => null);
+  if (!resp || !resp.ok) return null;
+  const dados = await resp.json().catch(() => null);
+  const campos = dados?.fields || {};
+  return {
+    tentativas: Number(campos.tentativas?.integerValue || 0),
+    primeiraTentativaEm: campos.primeiraTentativaEm?.stringValue || null,
+    bloqueadoAte: campos.bloqueadoAte?.stringValue || null,
+  };
+}
+
+async function gravarTentativas(usuario, estado, tokenDeAcesso, env) {
+  const campos = {
+    tentativas: { integerValue: String(estado.tentativas) },
+    primeiraTentativaEm: { stringValue: estado.primeiraTentativaEm },
+  };
+  if (estado.bloqueadoAte) campos.bloqueadoAte = { stringValue: estado.bloqueadoAte };
+  const mascara = Object.keys(campos).map((k) => `updateMask.fieldPaths=${k}`).join("&");
+  await fetch(`${urlDocTentativas(usuario, env)}?${mascara}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenDeAcesso}` },
+    body: JSON.stringify({ fields: campos }),
+  }).catch(() => {});
+}
+
+async function limparTentativas(usuario, tokenDeAcesso, env) {
+  await fetch(urlDocTentativas(usuario, env), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${tokenDeAcesso}` },
+  }).catch(() => {});
+}
 
 async function tratarAutosservico(corpo, env) {
   const usuario = String(corpo.usuario || "").trim().toLowerCase();
@@ -234,6 +294,24 @@ async function tratarAutosservico(corpo, env) {
 
   try {
     const tokenDeAcesso = await obterTokenDeAcessoGoogle(env);
+
+    const agora = Date.now();
+    const estadoAnterior = await lerTentativas(usuario, tokenDeAcesso, env);
+    if (estadoAnterior?.bloqueadoAte && new Date(estadoAnterior.bloqueadoAte).getTime() > agora) {
+      return respostaJson({ erro: ERRO_LIMITE }, 429);
+    }
+    const dentroDaJanela = estadoAnterior?.primeiraTentativaEm
+      && (agora - new Date(estadoAnterior.primeiraTentativaEm).getTime()) < JANELA_MS;
+    const tentativaAtual = dentroDaJanela ? (estadoAnterior.tentativas || 0) + 1 : 1;
+    const primeiraTentativaEm = dentroDaJanela ? estadoAnterior.primeiraTentativaEm : new Date(agora).toISOString();
+    if (tentativaAtual > LIMITE_TENTATIVAS) {
+      await gravarTentativas(usuario, { tentativas: tentativaAtual, primeiraTentativaEm, bloqueadoAte: new Date(agora + BLOQUEIO_MS).toISOString() }, tokenDeAcesso, env);
+      return respostaJson({ erro: ERRO_LIMITE }, 429);
+    }
+    // Conta a tentativa ANTES de checar a resposta -- senão quem erra de
+    // propósito repetidamente nunca entraria na contagem.
+    await gravarTentativas(usuario, { tentativas: tentativaAtual, primeiraTentativaEm }, tokenDeAcesso, env);
+
     const conta = await buscarUsuarioPorNomeDeUsuario(usuario, tokenDeAcesso, env);
     if (!conta) return respostaJson({ erro: ERRO_AUTOSSERVICO }, 401);
     if (conta.bloqueado) return respostaJson({ erro: "Essa conta está bloqueada. Fale com quem administra o sistema." }, 403);
@@ -250,6 +328,9 @@ async function tratarAutosservico(corpo, env) {
     });
     const dados = await resp.json();
     if (!resp.ok) return respostaJson({ erro: dados.error?.message || "Falha ao redefinir a senha." }, 500);
+    // Sucesso de verdade: limpa a contagem, pra não punir a pessoa com um
+    // bloqueio por tentativas que já deram certo.
+    await limparTentativas(usuario, tokenDeAcesso, env);
     return respostaJson({ ok: true });
   } catch (err) {
     return respostaJson({ erro: "Erro interno: " + err.message }, 500);

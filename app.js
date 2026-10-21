@@ -3660,12 +3660,25 @@ $("#btnSair")?.addEventListener("click", () => {
 });
 
 let appJaInicializado = false;
+// [QA-FIX BUG-QA-001] Antes: a checagem de bloqueado só acontecia em
+// quem CHAMA esta função, usando o retorno dela -- mas uma conta
+// bloqueada faz registrarUsuarioEmUso() ser negada pela própria regra do
+// Firestore (!estouBloqueado()), e essa exceção escapava daqui antes de
+// devolver dados nenhum. Quem chama caía no catch genérico (só loga o
+// erro) e seguia em frente pra dentro do app mesmo assim -- o bloqueio
+// nunca chegava a ser checado. Agora: confere "bloqueado" ANTES de
+// qualquer operação secundária que possa falhar, e cada operação
+// secundária (ultimoLogin, usuariosEmUso) tem o próprio try/catch, pra
+// uma falha nelas nunca travar o acesso de quem tem permissão nem (o
+// oposto, o bug original) liberar quem está bloqueado.
 async function registrarUsuarioLogado(user) {
   const ref = doc(db, "usuarios", user.uid);
   const snap = await getDoc(ref);
   const agora = new Date().toISOString();
+
+  let dados;
   if (!snap.exists()) {
-    const dados = {
+    dados = {
       usuario: extrairUsuario(user.email),
       permissao: "padrao",
       bloqueado: false,
@@ -3673,15 +3686,26 @@ async function registrarUsuarioLogado(user) {
       ultimoLogin: agora,
     };
     await setDoc(ref, dados);
-    await registrarUsuarioEmUso(dados.usuario);
-    return dados;
+  } else {
+    dados = snap.data();
+    if (dados.bloqueado) return dados;
+    try {
+      await updateDoc(ref, { ultimoLogin: agora });
+    } catch (err) {
+      console.warn("Falha ao atualizar último login (não impede o acesso):", err);
+    }
   }
-  await updateDoc(ref, { ultimoLogin: agora });
+
   // "Cura" sozinha contas que já existiam antes de configuracoes/
   // usuariosEmUso existir -- sem isso, só quem criasse conta OU trocasse
-  // de usuário DEPOIS dessa mudança apareceria na lista.
-  await registrarUsuarioEmUso(snap.data().usuario);
-  return snap.data();
+  // de usuário DEPOIS dessa mudança apareceria na lista. Puramente
+  // cosmético (lista de nomes já em uso) -- nunca deve decidir login.
+  try {
+    await registrarUsuarioEmUso(dados.usuario);
+  } catch (err) {
+    console.warn("Falha ao registrar usuário em uso (não impede o acesso):", err);
+  }
+  return dados;
 }
 
 // Esmaece o login e revela o app por baixo, em vez de trocar as duas
@@ -3698,6 +3722,10 @@ function transicaoParaApp(overlay, appRoot) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => appRoot.classList.remove("entrando"));
     });
+    // [QA-FIX BUG-QA-002] Só agora a topbar de verdade está desenhada na
+    // tela (appRoot acabou de deixar de estar "hidden") -- avisa quem
+    // precisa medir a altura dela de novo (ver atualizarAlturaTopbar()).
+    window.dispatchEvent(new Event("pmoc:app-visivel"));
   }
   if (overlay) {
     overlay.classList.add("saindo");
@@ -3727,7 +3755,18 @@ onAuthStateChanged(auth, async (user) => {
       ESTADO.meuUsuarioDoc = dadosUsuario || null;
       atualizarAvatarTopbar();
     } catch (err) {
+      // [QA-FIX BUG-QA-001 (verificação adicional)] Antes: um erro aqui
+      // (ex: Firestore fora do ar, falha de conexão lendo o PRÓPRIO
+      // getDoc do perfil -- não as operações secundárias já tratadas
+      // acima) só era logado, e o código seguia pra transicaoParaApp()
+      // de qualquer jeito, revelando o app mesmo sem saber se a conta
+      // está bloqueada (falha ABERTA). Se não dá pra confirmar o status
+      // da conta, tem que negar por padrão (falhar FECHADO) -- igual já
+      // acontecia para uma conta de fato bloqueada.
       console.error("Erro ao verificar usuário:", err);
+      mostrarErroAuth("Não foi possível confirmar sua conta agora. Tente novamente.");
+      await signOut(auth);
+      return;
     }
     transicaoParaApp(overlay, appRoot);
     atualizarVisibilidadeAdmin();
@@ -3990,6 +4029,8 @@ function renderUsuarios() {
       } catch (err) {
         console.error(err);
         toast("Erro: " + err.message);
+      } finally {
+        fecharMenuLinhaEAtualizar(tdMenu.querySelector("details.menu-linha"));
       }
     });
 
@@ -4004,6 +4045,8 @@ function renderUsuarios() {
         } catch (err) {
           console.error(err);
           toast("Erro ao alterar permissão: " + err.message);
+        } finally {
+          fecharMenuLinhaEAtualizar(tdMenu.querySelector("details.menu-linha"));
         }
       });
     });
@@ -4038,6 +4081,8 @@ function renderUsuarios() {
       } catch (err) {
         console.error(err);
         toast("Erro ao redefinir senha: " + err.message);
+      } finally {
+        fecharMenuLinhaEAtualizar(tdMenu.querySelector("details.menu-linha"));
       }
     });
 
@@ -4095,6 +4140,8 @@ function renderUsuarios() {
         } catch (err) {
           console.error(err);
           toast("Erro ao definir equipe: " + err.message);
+        } finally {
+          fecharMenuLinhaEAtualizar(tdMenu.querySelector("details.menu-linha"));
         }
       });
     }
@@ -6129,6 +6176,16 @@ function atualizarAlturaTopbar() {
 }
 atualizarAlturaTopbar();
 window.addEventListener("resize", atualizarAlturaTopbar);
+// [QA-FIX BUG-QA-002] A primeira chamada acima roda com a tela de login
+// ainda na frente e #appRoot escondido (hidden) -- a topbar de verdade
+// nem está desenhada ainda, então getBoundingClientRect().height mede 0,
+// e --altura-topbar fica travada em "0px" pro resto da sessão (só
+// recalcula em "resize", nunca depois do login). Isso fazia o aviso
+// flutuante de "atrasados" (que usa essa variável pra ficar ABAIXO da
+// topbar) ser posicionado por cima dela, cobrindo a aba Dashboard e o
+// ícone de Configurações. Basta medir de novo assim que o app realmente
+// aparece na tela.
+window.addEventListener("pmoc:app-visivel", atualizarAlturaTopbar);
 
 // No celular, quando o teclado abre pra digitar num campo dentro de um
 // drawer (ex: "técnico responsável" na conclusão de preventiva), a área
@@ -9272,6 +9329,22 @@ document.addEventListener("click", (e) => {
     pendentes.forEach((fn) => fn());
   }
 });
+
+// [QA-FIX BUG-QA-003] Uma ação do próprio menu "⋯" (ex: Bloquear, Mudar
+// permissão) acontece DENTRO dele -- diferente de clicar fora ou rolar a
+// página, esse clique nunca fecha o <details> sozinho, então o redesenho
+// fica represado em _renderesAdiados indefinidamente (a linha mostra dado
+// velho até o usuário clicar em qualquer outro lugar da tela, mesmo o
+// Firestore já tendo sido atualizado com sucesso). Fecha o próprio menu e
+// libera o(s) redesenho(s) represado(s) na hora, sem esperar outro clique.
+function fecharMenuLinhaEAtualizar(det) {
+  if (det) det.open = false;
+  if (_renderesAdiados.size) {
+    const pendentes = [..._renderesAdiados];
+    _renderesAdiados.clear();
+    pendentes.forEach((fn) => fn());
+  }
+}
 
 // Mesma ideia acima, mas pra ".info-popover" (usado no "⋯" de Cadastro
 // de equipamentos e nos avisos de Feriados) -- esses NUNCA tinham fechado

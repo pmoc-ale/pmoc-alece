@@ -703,7 +703,18 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
    "adicionar prédio novo" no Cronograma) continuam como faixa normal. */
 .alert-toast-stack {
   position: fixed;
-  top: calc(var(--altura-topbar, 100px) + 12px);
+  /* [QA-FIX revisão independente] Era "top: calc(--altura-topbar + 12px)",
+     ou seja, logo abaixo da topbar, no canto superior direito -- MESMO
+     canto onde várias telas colocam seus próprios botões de ação no
+     cabeçalho do card (ex: "Excluir planta" em Localização, "Cadastrar
+     equipamento" em Equipamentos). Isso não era só sobreposição visual:
+     o cartão do aviso, por estar por cima, interceptava de verdade o
+     clique nesses botões enquanto algum aviso estivesse visível,
+     mesmo em telas grandes (1920px). Virou canto inferior direito, bem
+     mais distante de onde o resto da tela coloca botões de ação -- o
+     aviso continua visível e flutuante, só não compete mais pelo mesmo
+     canto que os cabeçalhos de card usam. */
+  bottom: 20px;
   right: 20px;
   z-index: 150; /* acima da .topbar (101), senão ela cobre o aviso */
   display: flex;
@@ -711,6 +722,15 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   gap: 10px;
   width: 340px;
   max-width: calc(100vw - 32px);
+  /* [QA-FIX revisão independente] O próprio container (não só os
+     cartões dentro dele, ver .alert-toast-stack .alert-banner abaixo)
+     tem uma caixa de 340px de largura por toda a altura dos avisos +
+     os "vãos" (gap) entre eles -- sem isso, mesmo o espaço VAZIO entre
+     dois cartões continuava interceptando clique em qualquer coisa
+     embaixo. Os controles reais (fechar, "Reagendar agora", itens da
+     lista de agendamento) recebem "auto" de volta explicitamente logo
+     abaixo e continuam clicáveis normalmente. */
+  pointer-events: none;
 }
 .alert-toast-stack .alert-banner {
   /* Vermelho/dourado próprios do toast, DIFERENTES de --vermelho-fundo/
@@ -765,6 +785,23 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   gap: var(--sp-2);
 }
 .alert-banner-btn { align-self: stretch; }
+
+/* [QA-FIX revisão independente] O cartão flutuante inteiro (dentro de
+   .alert-toast-stack) sobrepõe conteúdo real da tela embaixo dele (ver
+   comentário em .alert-toast-stack acima). Pointer-events:none no
+   cartão inteiro, com "auto" de volta só nos controles que a pessoa de
+   fato pode querer clicar (fechar o aviso, "Reagendar agora", os itens
+   da lista de "aguardando agendamento"), faz o resto do cartão --
+   ícone, texto, o preenchimento/vão entre eles -- deixar passar o
+   clique pro que estiver por baixo, em vez de bloquear qualquer coisa
+   num raio de ~340px de largura sempre que algum aviso estiver visível. */
+.alert-toast-stack .alert-banner { pointer-events: none; }
+.alert-toast-stack .alert-banner-close,
+.alert-toast-stack .alert-banner-btn,
+.alert-toast-stack #alertaAguardandoAgendamentoLista,
+.alert-toast-stack #alertaAguardandoAgendamentoLista * {
+  pointer-events: auto;
+}
 
 #alertaAguardandoAgendamentoLista {
   display: flex;

@@ -40,6 +40,15 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/ciclos/$(cicloId)).data.status == "Ativo";
     }
 
+    // [QA-FIX BUG-QA-004] Atalho pra condição de leitura genérica (igual
+    // ao que o catch-all antigo usava): autenticado e não bloqueado.
+    // Reaproveitado em cada coleção que precisa desse mesmo nível de
+    // acesso de leitura, agora de forma explícita em vez de um catch-all
+    // único (ver explicação completa no bloco final do arquivo).
+    function autenticadoENaoBloqueado() {
+      return request.auth != null && !estouBloqueado();
+    }
+
     match /usuarios/{uid} {
       // Sempre pode ler o próprio documento (necessário pra tela de login
       // detectar "conta bloqueada" antes de negar acesso). Ler o cadastro
@@ -89,8 +98,12 @@ service cloud.firestore {
     // Em vez de abrir create/update geral em ciclos/{cicloId} pra
     // trabalhador (deixaria criar/editar QUALQUER ciclo com QUALQUER
     // dado), libera só as duas operações exatas que
-    // fecharCicloEIniciarProximo() faz:
+    // fecharCicloEIniciarProximo() faz. [QA-FIX BUG-QA-004] A leitura
+    // (qualquer autenticado não bloqueado) que antes vinha do catch-all
+    // genérico agora é explícita aqui.
     match /ciclos/{cicloId} {
+      allow read: if autenticadoENaoBloqueado();
+
       // Fechar o ciclo ATIVO -- nunca reabre um já encerrado, nunca pula
       // pra outro status, e só nos campos que o fechamento de verdade
       // grava (ver updateDoc em fecharCicloEIniciarProximo()).
@@ -111,14 +124,20 @@ service cloud.firestore {
     }
 
     match /ciclos/{cicloId}/equipamentos/{itemId} {
+      allow read: if autenticadoENaoBloqueado(); // [QA-FIX BUG-QA-004]
       allow create, update: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
     match /ciclos/{cicloId}/backupPlanilha/{docId} {
-      // Guarda o "antes" de uma atualização de cadastro via planilha, pra
-      // dar pra desfazer -- mesmo nível de permissão de quem pode fazer a
-      // própria atualização (senão a atualização quebra pra quem não é
-      // admin, porque salvar o backup é parte da mesma operação).
-      allow read, create, update, delete: if souTrabalhador() && cicloEstaAtivo(cicloId);
+      // [QA-FIX BUG-QA-004] A leitura era, na prática, igual à de tudo
+      // mais (autenticado e não bloqueado) -- a tela de Levantamento é
+      // só-admin na interface, e só por isso que ADMIN conseguia ler
+      // esse backup antes (via o catch-all genérico, já que essa regra
+      // específica nunca incluiu souAdmin()). Sem o catch-all, isso
+      // quebrava a tela pra admin -- corrigido tornando a leitura
+      // explícita igual à de antes, sem mexer na escrita (continua só
+      // trabalhador + ciclo ativo, como sempre foi).
+      allow read: if autenticadoENaoBloqueado();
+      allow create, update, delete: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
     match /ciclos/{cicloId}/historico/{id} {
       // Só cria -- editar/apagar um registro já existente fica só com admin
@@ -128,17 +147,36 @@ service cloud.firestore {
     match /ciclos/{cicloId}/ordens/{id} {
       allow create, update, delete: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
+
+    // [QA-FIX BUG-QA-004] Leitura de "ordens"/"historico" via
+    // collectionGroup (ver iniciarSincronizacaoOrdens/
+    // iniciarSincronizacaoHistorico e abrirDrawerEquipamento em app.js) --
+    // precisa do padrão recursivo "{caminho=**}/colecao/{id}", documentado
+    // pelo próprio Firebase como a forma correta de dar suporte a
+    // consultas collectionGroup. A condição NÃO pode depender de nenhum
+    // valor capturado pelo wildcard (`caminho`), senão a consulta é
+    // invalidada pelo mecanismo de validação de regras do Firestore
+    // (confirmado por teste direto -- ver BUGQA004_ANALISE.md).
+    match /{caminho=**}/ordens/{id} {
+      allow read: if autenticadoENaoBloqueado();
+    }
+    match /{caminho=**}/historico/{id} {
+      allow read: if autenticadoENaoBloqueado();
+    }
+
     match /infoCondensadoras/{equipamentoId} {
+      allow read: if autenticadoENaoBloqueado(); // [QA-FIX BUG-QA-004]
       allow create, update: if souTrabalhador();
     }
 
     // Inscrição de notificação push do navegador (ver ativarNotificacoesPush
     // em app.js) -- um documento por pessoa (id = o próprio uid), só ela
-    // pode criar/atualizar/apagar a própria. A leitura já cai na regra
-    // genérica lá embaixo (qualquer autenticado não bloqueado) -- é assim
-    // que o Worker de avisos (que loga como um usuário "trabalhador" comum,
-    // não como admin) consegue ler todas as inscrições pra mandar os avisos.
+    // pode criar/atualizar/apagar a própria. [QA-FIX BUG-QA-004] A leitura
+    // em massa (list) usada pelo Worker de avisos de atraso (que loga
+    // como um "trabalhador" comum, não admin) continua igual -- agora
+    // explícita aqui em vez de vir do catch-all genérico.
     match /pushSubscriptions/{uid} {
+      allow read: if autenticadoENaoBloqueado();
       allow create, update, delete: if request.auth != null && request.auth.uid == uid;
     }
 
@@ -150,25 +188,80 @@ service cloud.firestore {
     // mal-intencionado não poder usar esse documento pra gravar outra
     // coisa qualquer.
     match /configuracoes/usuariosEmUso {
-      allow read: if request.auth != null && !estouBloqueado();
-      allow write: if request.auth != null && !estouBloqueado()
+      allow read: if autenticadoENaoBloqueado();
+      allow write: if autenticadoENaoBloqueado()
         && request.resource.data.keys().hasOnly(["nomes"]);
     }
 
-    // A regra genérica lá embaixo só deixa ADMIN escrever -- sem essa regra
-    // própria, qualquer pessoa não-admin mudando o próprio nome/usuário/
-    // senha em "Minha conta" teria o registro de auditoria negado (a ação
-    // em si funciona, só o LOG dela que sumiria, sem erro visível pra
-    // ninguém perceber). Só cria (nunca edita/apaga um log já existente);
-    // ver quem mudou o quê continua só pra admin.
+    // A regra genérica (hoje removida, ver bloco final) só deixava ADMIN
+    // escrever -- sem essa regra própria, qualquer pessoa não-admin
+    // mudando o próprio nome/usuário/senha em "Minha conta" teria o
+    // registro de auditoria negado (a ação em si funciona, só o LOG dela
+    // que sumiria, sem erro visível pra ninguém perceber). Só cria (nunca
+    // edita/apaga um log já existente); ver quem mudou o quê continua só
+    // pra admin -- [QA-FIX BUG-QA-004] essa era a SEGUNDA coleção onde o
+    // catch-all genérico anulava a restrição de leitura (só admin lê);
+    // sem um catch-all genérico, essa restrição agora vale de verdade.
     match /auditoria/{id} {
       allow read: if souAdmin();
-      allow create: if request.auth != null && !estouBloqueado();
+      allow create: if autenticadoENaoBloqueado();
     }
 
-    match /{document=**} {
-      allow read: if request.auth != null && !estouBloqueado();
+    match /equipes/{id} {
+      allow read: if autenticadoENaoBloqueado(); // [QA-FIX BUG-QA-004]
       allow write: if souAdmin();
+    }
+    match /feriados/{id} {
+      allow read: if autenticadoENaoBloqueado(); // [QA-FIX BUG-QA-004]
+      allow write: if souAdmin();
+    }
+    match /config/{id} {
+      // [QA-FIX BUG-QA-004] Coleção "config" (docs "site" e "cronograma",
+      // lidos em toda inicialização do app, por qualquer perfil) --
+      // achado por grep sistemático em app.js de TODO collection()/doc()/
+      // collectionGroup() de topo, pra não deixar nenhuma coleção sem
+      // regra explícita depois de remover o catch-all genérico.
+      allow read: if autenticadoENaoBloqueado();
+      allow write: if souAdmin();
+    }
+    match /plantas/{id} {
+      allow read: if autenticadoENaoBloqueado(); // [QA-FIX BUG-QA-004]
+      allow write: if souAdmin();
+    }
+
+    // [QA-FIX BUG-QA-004] A regra genérica original concedia LEITURA
+    // (allow read) pra QUALQUER caminho, inclusive usuarios/** e
+    // auditoria/**, anulando por completo as restrições específicas
+    // dessas duas coleções (causa raiz do BUG-QA-004 -- no Firestore,
+    // quando mais de uma regra corresponde ao mesmo caminho, o acesso é
+    // concedido se QUALQUER UMA permitir; não existe "a mais específica
+    // vence"). Essa leitura genérica foi removida e distribuída,
+    // coleção por coleção, nos blocos acima -- sem incluir usuarios/** e
+    // auditoria/** na lista, que são as duas que precisavam de restrição
+    // de verdade.
+    //
+    // A parte de ESCRITA do catch-all (sempre documento a documento,
+    // nunca "em lote"/list -- por isso não tem o mesmo problema de
+    // list/collectionGroup que a leitura tem) continua exatamente igual:
+    // cobre a capacidade de admin escrever/apagar em QUALQUER coleção
+    // (ex: excluir equipamentos/ordens/histórico, editar cronograma),
+    // mesmo onde a regra específica só prevê trabalhador -- como já
+    // funcionava antes desta correção.
+    //
+    // [QA-FIX revisão independente] Exceto auditoria/**: como regras do
+    // Firestore são OR (qualquer regra que bata no caminho e permita já
+    // libera), esse catch-all também cobria update/delete em auditoria/
+    // {id}, mesmo a regra própria dessa coleção (acima) só prevendo
+    // "create". Na prática isso deixava admin editar ou apagar um
+    // registro de auditoria já existente -- log deixa de ser confiável
+    // como histórico imutável. document[0] é o primeiro segmento do
+    // caminho capturado por {document=**} (lista de segmentos, não
+    // string) -- excluindo "auditoria" daqui, e sem nenhuma outra regra
+    // permitindo update/delete nela, esses dois verbos passam a ser
+    // negados pra todo mundo, admin incluso; "create" continua liberado
+    // pela regra própria de auditoria/{id}.
+    match /{document=**} {
+      allow write: if souAdmin() && document[0] != "auditoria";
     }
   }
 }
