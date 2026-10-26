@@ -551,6 +551,20 @@ function extrairCodigoCondensadora(codigoPlanta) {
   return codigo || null;
 }
 
+// De "E1/C7" tira só a parte da evaporadora ("E1") -- ou o código
+// inteiro, se não tiver "/" (código sem condensadora vinculada ainda).
+function extrairCodigoEvaporadora(codigoPlanta) {
+  const partes = String(codigoPlanta || "").split("/");
+  return (partes[0] || "").trim() || null;
+}
+
+// Pra comparar um código lido/digitado na planta (ex: "E1", "SS - 1")
+// contra o TAG cadastrado no levantamento (ex: "E-1", "SS-1") sem que
+// hífen, espaço ou maiúscula/minúscula atrapalhem a comparação.
+function normalizarCodigoParaComparacao(c) {
+  return normalizarCodigo(c).replace(/[^A-Z0-9]/g, "");
+}
+
 // Procura em TODAS as plantas cadastradas (a condensadora pode estar em
 // qualquer uma) uma condensadora marcada com esse código.
 function buscarCondensadoraPorCodigo(codigo) {
@@ -6887,6 +6901,13 @@ async function renderLocalizacao() {
     if (itensDoPredio.some((e) => e.id === selecionadoAntes)) select.value = selecionadoAntes;
     atualizarCodigoPlantaInput();
     select.onchange = atualizarCodigoPlantaInput;
+    // Marca que a PESSOA mexeu no seletor de propósito -- diferente de
+    // "input" (dispara só em interação de verdade do usuário),
+    // select.value sozinho não distingue "ela escolheu isso" de "é só o
+    // valor padrão do <select>" (primeira opção, sem ninguém ter
+    // escolhido nada ainda). Ver tentarPreSelecionarEquipamento, que
+    // depende dessa distinção pra saber se pode trocar a seleção sozinho.
+    select.oninput = () => { select.dataset.escolhidoManualmente = "1"; };
     function atualizarCodigoPlantaInput() {
       const itemSelecionado = itensDoPredio.find((e) => e.id === select.value);
       const codigoInput = $("#plantaCodigoInput");
@@ -8253,6 +8274,41 @@ async function tentarLerCodigoPorOcr(svg, x, y) {
 // ------------------------------------------------------------------
 let candidatoSelecionadoParaConfirmar = null; // { chave, x, y } ou null
 
+// Tenta escolher sozinho o aparelho certo no seletor (#plantaEquipamentoSelect),
+// usando o código da evaporadora (lido por OCR, ou o palpite de padrão
+// espacial) contra o TAG que já veio do levantamento (ver "Nº na sala"/
+// TAG em linhasParaItens) -- só quando existe exatamente UM candidato
+// ainda sem marcação nesse prédio com esse TAG. Mais de um (TAG se
+// repete em sala/andar diferente, comum em prédio com vários andares)
+// não arrisca escolher errado: deixa pra pessoa escolher na mão, como
+// já era. Nunca troca uma escolha que a pessoa já fez manualmente pra
+// ESSE candidato (ver dataset.selecionadoAutomaticamente).
+function tentarPreSelecionarEquipamento(planta, codigoEvaporadora) {
+  const select = $("#plantaEquipamentoSelect");
+  if (!select || !codigoEvaporadora) return;
+  // select.value NUNCA é vazio de verdade (um <select> sem "selected"
+  // explícito ainda mostra a primeira opção) -- não dá pra usar o valor
+  // sozinho pra saber se a pessoa escolheu isso de propósito. Só o flag
+  // de interação de verdade (ver select.oninput em renderLocalizacao)
+  // conta como "ela já escolheu, não mexe".
+  if (select.dataset.escolhidoManualmente === "1") return;
+
+  const alvo = normalizarCodigoParaComparacao(extrairCodigoEvaporadora(codigoEvaporadora));
+  if (!alvo) return;
+  const localDaPlanta = planta.local || "SEDE";
+  const candidatos = ESTADO.equipamentos.filter((e) =>
+    (e.local || "SEDE") === localDaPlanta &&
+    !e.plantaId &&
+    normalizarCodigoParaComparacao(e.tag) === alvo
+  );
+  if (candidatos.length !== 1) return;
+
+  select.value = candidatos[0].id;
+  select.dispatchEvent(new Event("change"));
+  const rotulo = candidatos[0].ambiente || candidatos[0].setor || candidatos[0].id;
+  toast(`Aparelho "${rotulo}" (TAG ${candidatos[0].tag}) selecionado automaticamente -- confira antes de confirmar.`);
+}
+
 function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
   if (!marcacaoEstaAtiva()) return;
   const modo = $('input[name="modoMarcacao"]:checked')?.value || "evaporadora";
@@ -8274,6 +8330,18 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
 
   const modoCondensadora = modo === "condensadora";
   const campoCodigo = modoCondensadora ? $("#plantaCondensadoraCodigoInput") : $("#plantaCodigoInput");
+  // Candidato NOVO -- tanto o código quanto a escolha manual (se teve)
+  // eram pro candidato ANTERIOR, não valem mais pra decidir nada deste
+  // aqui. Sem limpar o código, ele podia já vir preenchido sozinho (ver
+  // atualizarCodigoPlantaInput, que mantém esse campo sincronizado com o
+  // que estiver selecionado no dropdown) -- e aí a checagem "só sugere
+  // se tiver vazio" logo abaixo nunca disparava pra esse candidato novo,
+  // nem a pré-seleção automática do equipamento (que depende da
+  // sugestão/leitura de código ter rodado).
+  if (campoCodigo) { campoCodigo.value = ""; delete campoCodigo.dataset.sugeridoAutomaticamente; }
+  const selectEquipamento = $("#plantaEquipamentoSelect");
+  if (selectEquipamento) delete selectEquipamento.dataset.escolhidoManualmente;
+
   if (campoCodigo && !campoCodigo.value.trim()) {
     const prefixoPadrao = modoCondensadora ? "C" : "E";
     const confirmados = modoCondensadora
@@ -8283,6 +8351,14 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
           .map((e) => ({ x: e.plantaX, y: e.plantaY, codigo: e.codigoPlanta }));
     const sugestao = sugerirProximoCodigo(prefixoPadrao, confirmados, cand.x, cand.y);
     if (sugestao) {
+      // Pré-seleciona ANTES de preencher o código: trocar o <select> via
+      // tentarPreSelecionarEquipamento dispara o próprio onchange dele
+      // (atualizarCodigoPlantaInput), que resincroniza este MESMO campo
+      // com o codigoPlanta do equipamento recém-selecionado (geralmente
+      // vazio, por ainda não estar marcado) -- preenchendo o código
+      // DEPOIS garante que a sugestão "E6" fique valendo por último, sem
+      // ser apagada por esse efeito colateral.
+      if (!modoCondensadora) tentarPreSelecionarEquipamento(planta, sugestao);
       campoCodigo.value = sugestao;
       campoCodigo.dataset.sugeridoAutomaticamente = sugestao;
     }
@@ -8299,7 +8375,15 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
       // vazio) -- se ela já digitou/corrigiu por conta própria, não
       // sobrescreve o que ela escreveu.
       if (valorAtual && valorAtual !== campoCodigo.dataset.sugeridoAutomaticamente) return;
+      // O código lido por OCR reflete o que está DESENHADO de verdade,
+      // bem mais confiável que o palpite de padrão espacial de cima pra
+      // casar com o TAG do levantamento. Mesmo motivo da ordem acima:
+      // pré-seleciona ANTES de preencher o código, pra esse valor não
+      // ser apagado pelo onchange do próprio <select> (ver
+      // atualizarCodigoPlantaInput).
+      if (!modoCondensadora) tentarPreSelecionarEquipamento(planta, lido);
       campoCodigo.value = lido;
+      campoCodigo.dataset.sugeridoAutomaticamente = lido;
       toast(`Li "${lido}" na planta -- confira antes de confirmar.`);
     });
   }
