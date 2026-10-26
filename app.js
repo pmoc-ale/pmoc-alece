@@ -8354,11 +8354,18 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
 
   if (campoCodigo && !campoCodigo.value.trim()) {
     const prefixoPadrao = modoCondensadora ? "C" : "E";
+    // Em modo evaporadora, codigoPlanta vem no formato combinado "E7/C6"
+    // (ver extrairCodigoEvaporadora/extrairCodigoCondensadora acima) -- sem
+    // tirar só a parte da evaporadora, o padrão "letra+número" de
+    // sugerirProximoCodigo nunca batia com "E7/C6" (sobra o "/C6" no fim),
+    // descartando TODO vizinho confirmado e deixando a sugestão sempre
+    // vazia com dados reais (só não aparecia nos testes porque usavam
+    // código puro, sem condensadora vinculada ainda).
     const confirmados = modoCondensadora
       ? (planta.condensadoras || []).map((c) => ({ x: c.x, y: c.y, codigo: c.codigo }))
       : ESTADO.equipamentos
           .filter((e) => e.plantaId === planta.id && e.plantaX != null)
-          .map((e) => ({ x: e.plantaX, y: e.plantaY, codigo: e.codigoPlanta }));
+          .map((e) => ({ x: e.plantaX, y: e.plantaY, codigo: extrairCodigoEvaporadora(e.codigoPlanta) }));
     const sugestao = sugerirProximoCodigo(prefixoPadrao, confirmados, cand.x, cand.y);
     if (sugestao) {
       // Pré-seleciona ANTES de preencher o código: trocar o <select> via
