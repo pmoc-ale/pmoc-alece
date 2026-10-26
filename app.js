@@ -508,6 +508,13 @@ function iniciarSincronizacaoPlantas() {
     renderComProtecaoDeMenu("#condensadorasTable", renderCondensadorasCadastro);
   }, (err) => {
     console.error("Erro ao ler plantas:", err);
+    // [QA-FIX usabilidade] Mesma lógica do aviso de chamados corretivos:
+    // sem isso, se esse listener cair (rede, permissão, etc.), a aba
+    // Localização simplesmente para de atualizar sem nenhum sinal visível.
+    // onSnapshot não tenta de novo sozinho depois de um erro -- por isso
+    // um toast único aqui (não precisa de controle de repetição como no
+    // de chamados corretivos, que roda num intervalo).
+    toast("Erro: não foi possível sincronizar as plantas/localização. Recarregue a página pra tentar de novo.");
   });
 }
 
@@ -657,6 +664,8 @@ function parseCSV(texto) {
   return linhas;
 }
 
+let _avisoChamadosCorretivosMostrado = false;
+
 async function carregarChamadosCorretivos(forcar) {
   const agora = Date.now();
   if (!forcar && ESTADO.chamadosCorretivosCarregadosEm &&
@@ -694,9 +703,22 @@ async function carregarChamadosCorretivos(forcar) {
       };
     });
     ESTADO.chamadosCorretivosCarregadosEm = agora;
+    _avisoChamadosCorretivosMostrado = false;
     renderEquipamentosCadastro();
   } catch (err) {
     console.error("Erro ao carregar chamados corretivos:", err);
+    // [QA-FIX usabilidade] Antes essa falha só ia pro console do
+    // navegador -- ninguém que não seja dev percebia que a planilha de
+    // chamados corretivos não carregou (a tela de Equipamentos simplesmente
+    // ficava sem essa informação, sem nenhum aviso visível). Mostra um
+    // toast, mas só UMA VEZ por episódio de falha (reseta no próximo
+    // sucesso acima) -- essa função roda num intervalo periódico, e sem
+    // esse controle o toast repetiria a cada atualização enquanto o
+    // problema durasse.
+    if (!_avisoChamadosCorretivosMostrado) {
+      _avisoChamadosCorretivosMostrado = true;
+      toast("Não foi possível atualizar os chamados corretivos agora. Os dados mostrados podem estar desatualizados.");
+    }
   }
 }
 
@@ -881,7 +903,24 @@ function renderChamadosOrfaos() {
   });
 }
 
-function toast(msg) {
+// [QA-FIX usabilidade] #toast é um ÚNICO elemento reaproveitado -- antes,
+// uma segunda chamada a toast() enquanto a primeira ainda estava visível
+// simplesmente trocava o texto na hora, sem reiniciar a contagem de
+// tempo nem dar chance de leitura (ex: excluir equipamento mostra
+// "excluído(s), reorganizando..." e, pouco depois, "cronograma
+// recalculado..." -- o primeiro aviso quase nunca dava tempo de ser
+// lido). Agora os avisos entram numa fila e aparecem um de cada vez,
+// cada um com seu próprio tempo de exibição.
+const _filaToast = [];
+let _toastExibindoAgora = false;
+
+function _mostrarProximoToast() {
+  const msg = _filaToast.shift();
+  if (msg === undefined) {
+    _toastExibindoAgora = false;
+    return;
+  }
+  _toastExibindoAgora = true;
   const el = $("#toast");
   el.textContent = msg;
   // Toast de erro sempre começa com "Erro" (padrão já usado em todo o
@@ -893,7 +932,20 @@ function toast(msg) {
   el.classList.toggle("toast-erro", /^erro\b/i.test(msg.trim()));
   el.classList.add("show");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove("show"), 2600);
+  toast._t = setTimeout(() => {
+    el.classList.remove("show");
+    // Pequena pausa pra dar tempo da transição de saída terminar antes
+    // do próximo aviso aparecer -- sem isso, dois avisos em sequência
+    // se misturam visualmente na troca.
+    setTimeout(_mostrarProximoToast, 300);
+  }, 2600);
+}
+
+function toast(msg) {
+  // Limite de segurança -- evita uma fila crescendo sem fim se algum
+  // bug em outro lugar chamar toast() em loop.
+  if (_filaToast.length < 8) _filaToast.push(msg);
+  if (!_toastExibindoAgora) _mostrarProximoToast();
 }
 
 // Substitui window.confirm() por uma janela com a cara do sistema --
@@ -1609,6 +1661,13 @@ function linhasParaItens(rows) {
   const colPotencia = localizarColuna(["Potência", "BTU", "Capacidade"], headers);
   const colTipoGas = localizarColuna(["Tipo de Gás", "Tipo de Gas", "Gás", "Gas"], headers);
   const colTag = localizarColuna(["TAG", "Tag"], headers);
+  // [QA-FIX usabilidade] Em sala com vários aparelhos idênticos, o
+  // levantamento às vezes repete o mesmo TAG (ex: "E-1"/"E-2" alternando
+  // 8 vezes numa sala com 8 unidades) e usa essa coluna separada só pra
+  // numerar cada unidade dentro da sala (1 a 8) -- sem ela, esses
+  // aparelhos ficam indistinguíveis no seletor de "marcar na planta"
+  // mesmo depois de incluir o TAG.
+  const colNumeroNaSala = localizarColuna(["Nº na sala", "No na sala", "Numero na sala", "Número na sala"], headers);
   // Sem "Tipo" sozinho na lista -- viraria risco de casar com a coluna
   // errada por semelhança (ex: "Tipo de Gás") numa planilha que não
   // tivesse exatamente uma das variantes de "Tipo Equip." abaixo.
@@ -1672,6 +1731,7 @@ function linhasParaItens(rows) {
 
     const tipoGas = colTipoGas ? limparValor(row[colTipoGas]) : "";
     const tag = colTag ? limparValor(row[colTag]) : "";
+    const numeroNaSala = colNumeroNaSala ? limparValor(row[colNumeroNaSala]) : "";
     const tipo = colTipo ? normalizarTipoEquipamento(limparValor(row[colTipo])) : "";
 
     const setorPCM = identificarSetor(setor, ambiente);
@@ -1689,6 +1749,7 @@ function linhasParaItens(rows) {
       id,
       patrimonio,
       tag,
+      numeroNaSala,   // <--- Salva no Firebase (desempate quando o TAG se repete dentro da mesma sala)
       marca,          // <--- Salva no Firebase
       modelo,         // <--- Salva no Firebase
       capacidade,     // <--- Salva no Firebase
@@ -3764,7 +3825,18 @@ onAuthStateChanged(auth, async (user) => {
       // da conta, tem que negar por padrão (falhar FECHADO) -- igual já
       // acontecia para uma conta de fato bloqueada.
       console.error("Erro ao verificar usuário:", err);
-      mostrarErroAuth("Não foi possível confirmar sua conta agora. Tente novamente.");
+      // [QA-FIX usabilidade] A mensagem genérica de antes não ajudava a
+      // pessoa a saber se o problema era com a internet dela ou com o
+      // sistema -- distingue os dois casos mais comuns (sem internet
+      // local vs. Firestore inalcançável, código "unavailable") antes de
+      // cair na mensagem genérica pra qualquer outro erro.
+      let mensagemErro = "Não foi possível confirmar sua conta agora. Tente novamente.";
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        mensagemErro = "Parece que você está sem conexão com a internet. Verifique e tente novamente.";
+      } else if (err?.code === "unavailable" || /unavailable/i.test(err?.message || "")) {
+        mensagemErro = "O sistema parece estar fora do ar no momento. Tente novamente em alguns instantes.";
+      }
+      mostrarErroAuth(mensagemErro);
       await signOut(auth);
       return;
     }
@@ -3911,7 +3983,11 @@ function iniciarSincronizacaoUsuarios() {
   onSnapshot(q, (snap) => {
     ESTADO.usuarios = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderComProtecaoDeMenu("#usuariosTable", renderUsuarios);
-  }, (err) => console.error("Erro ao ler usuários:", err));
+  }, (err) => {
+    console.error("Erro ao ler usuários:", err);
+    // [QA-FIX usabilidade] Mesmo motivo do aviso em iniciarSincronizacaoPlantas.
+    toast("Erro: não foi possível sincronizar a lista de usuários. Recarregue a página pra tentar de novo.");
+  });
 }
 
 function iniciarSincronizacaoAuditoria() {
@@ -3919,7 +3995,11 @@ function iniciarSincronizacaoAuditoria() {
   onSnapshot(q, (snap) => {
     ESTADO.auditoria = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderAuditoria();
-  }, (err) => console.error("Erro ao ler auditoria:", err));
+  }, (err) => {
+    console.error("Erro ao ler auditoria:", err);
+    // [QA-FIX usabilidade] Mesmo motivo do aviso em iniciarSincronizacaoPlantas.
+    toast("Erro: não foi possível sincronizar o log de auditoria. Recarregue a página pra tentar de novo.");
+  });
 }
 
 function renderAuditoria() {
@@ -4228,7 +4308,11 @@ function iniciarSincronizacaoEquipes() {
   onSnapshot(q, (snap) => {
     ESTADO.equipes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderComProtecaoDeMenu("#equipesPorPredio", renderEquipesPorPredio);
-  }, (err) => console.error("Erro ao ler equipes:", err));
+  }, (err) => {
+    console.error("Erro ao ler equipes:", err);
+    // [QA-FIX usabilidade] Mesmo motivo do aviso em iniciarSincronizacaoPlantas.
+    toast("Erro: não foi possível sincronizar a lista de equipes. Recarregue a página pra tentar de novo.");
+  });
 }
 
 function nomeEquipePorVaga(predio, vaga, nEquipesFallback) {
@@ -5337,7 +5421,8 @@ function renderEvolucaoMensal(itens) {
 // calendário inteiro.
 function renderHojeTrabalhador() {
   const hoje = formatISO(new Date());
-  const itens = aplicarFiltroLocal(ESTADO.equipamentos).filter(
+  const itensDaEquipe = aplicarFiltroLocal(ESTADO.equipamentos);
+  const itens = itensDaEquipe.filter(
     (i) => i.statusPreventiva !== "Concluída" && (i.dataAgendada === hoje || estaAtrasado(i))
   );
   itens.sort((a, b) => (estaAtrasado(b) ? 1 : 0) - (estaAtrasado(a) ? 1 : 0));
@@ -5350,6 +5435,22 @@ function renderHojeTrabalhador() {
   $("#hojeVazio").hidden = itens.length > 0;
   $("#hojeTableWrap").hidden = itens.length === 0;
   if (itens.length) renderTabelaDetalheDia("#tabelaHojeTrabalhador", itens, renderHojeTrabalhador);
+
+  // [QA-FIX usabilidade] Se a pessoa tem equipe definida mas NENHUM
+  // equipamento no sistema inteiro bate com ela (nem atrasado, nem de
+  // outro dia), o mais provável é que o prédio/nome da equipe cadastrado
+  // no perfil dela (ver "Definir equipe" em Usuários) não bate letra por
+  // letra com o que está gravado nos equipamentos -- não necessariamente
+  // "sem nada agendado hoje" de verdade. Antes a tela ficava igual nos
+  // dois casos, sem pista nenhuma de qual dos dois era. Mensagem erro
+  // diferente ajuda a pessoa (ou o admin) a desconfiar de erro de
+  // cadastro em vez de achar que está tudo certo.
+  const vazio = $("#hojeVazio");
+  if (vazio && ESTADO.permissao === "trabalhador" && ESTADO.meuUsuarioDoc?.equipe && itensDaEquipe.length === 0) {
+    vazio.textContent = "Nenhum equipamento encontrado pra sua equipe/prédio. Se isso não parecer certo, avise o administrador -- pode ser um erro de cadastro na equipe ou no prédio do seu usuário.";
+  } else if (vazio) {
+    vazio.textContent = "Nenhuma preventiva marcada pra hoje.";
+  }
 }
 
 async function registrarHistorico(item, statusAnterior, statusNovo, tipo = "Preventiva", fotoUrl = "") {
@@ -6760,7 +6861,27 @@ async function renderLocalizacao() {
     const selecionadoAntes = select.value;
     select.innerHTML = itensDoPredio.map((e) => {
       const marcado = e.plantaId === planta.id ? " ✓ já marcado" : "";
-      const rotulo = [e.codigoPlanta, e.patrimonio ? `Pat. ${e.patrimonio}` : null, e.ambiente].filter(Boolean).join(" — ");
+      // [QA-FIX usabilidade] Antes só usava Patrimônio -- numa sala com
+      // vários aparelhos (ex: 5 equipamentos em "Biblioteca") e ainda sem
+      // patrimônio cadastrado (levantamento recente, patrimônio é
+      // preenchido depois, in loco), a lista inteira mostrava o MESMO
+      // texto repetido ("Biblioteca" x5), sem jeito de saber qual é qual.
+      // O TAG da planilha (E-1, E-2, SS-1...) é exatamente o identificador
+      // que diferencia os aparelhos dentro da mesma sala -- cai pra ele
+      // quando não tem patrimônio ainda. Setor também entra (prédio com
+      // vários andares costuma ter sala de mesmo nome em cada andar, ex:
+      // "Casa de Máquinas" no 1º, 2º, 3º e 4º -- só o nome da sala não
+      // bastava pra diferenciar, nem a combinação com TAG, já que o TAG
+      // tende a reiniciar a numeração em cada andar). Ambiente cai pro
+      // Setor quando a linha da planilha não tinha Ambiente preenchido
+      // (em vez de sumir e deixar só o id genérico "item_123" aparecendo).
+      // Mesmo TAG pode se repetir dentro da MESMA sala quando ela tem
+      // vários aparelhos idênticos (ex: 8 unidades revezando "E-1"/"E-2")
+      // -- "Nº na sala" (1, 2, 3...) é o que desempata esses casos.
+      const tagComNumero = e.tag ? `TAG ${e.tag}${e.numeroNaSala ? ` (nº ${e.numeroNaSala})` : ""}` : null;
+      const identificador = e.patrimonio ? `Pat. ${e.patrimonio}` : tagComNumero;
+      const local = [e.setor, e.ambiente].filter(Boolean).join(" / ");
+      const rotulo = [e.codigoPlanta, identificador, local].filter(Boolean).join(" — ");
       return `<option value="${e.id}">${escapeHtml(rotulo || e.id)}${marcado}</option>`;
     }).join("");
     if (itensDoPredio.some((e) => e.id === selecionadoAntes)) select.value = selecionadoAntes;
