@@ -8112,9 +8112,19 @@ function sugerirProximoCodigo(prefixoPadrao, confirmados, x, y) {
   const comNumero = confirmados
     .map((c) => {
       if (c.x == null || c.y == null) return null;
-      const m = /^([A-Za-z]*)(\d+)$/.exec(normalizarCodigo(c.codigo));
+      // [QA-FIX usabilidade] Era só "letra colada no número" (ex: "E5",
+      // "C7") -- o TAG de verdade do levantamento costuma vir com traço
+      // no meio (ex: "VT-1", "SS-1", igual na planilha), e esse formato
+      // não batia com o padrão antigo. Sem reconhecer o primeiro código
+      // confirmado, não tinha nenhum vizinho pra extrapolar o próximo a
+      // partir dele -- o campo de código (e a pré-seleção de equipamento
+      // que depende dele) ficava sempre vazio pro resto da planta, não só
+      // pro primeiro aparelho. Guarda o separador (traço, espaço ou nada)
+      // separado do prefixo, pra devolver o palpite no MESMO formato que
+      // ela já está usando (ex: confirmado "VT-1" sugere "VT-2", não "VT2").
+      const m = /^([A-Za-z]*)([-\s]?)(\d+)$/.exec(normalizarCodigo(c.codigo));
       if (!m) return null;
-      return { x: c.x, y: c.y, prefixo: m[1] || prefixoPadrao, numero: parseInt(m[2], 10) };
+      return { x: c.x, y: c.y, prefixo: m[1] || prefixoPadrao, separador: m[2] || "", numero: parseInt(m[3], 10) };
     })
     .filter(Boolean)
     .sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
@@ -8122,9 +8132,9 @@ function sugerirProximoCodigo(prefixoPadrao, confirmados, x, y) {
   const [maisProximo, segundo] = comNumero;
   if (segundo && Math.abs(maisProximo.numero - segundo.numero) === 1) {
     const direcao = maisProximo.numero > segundo.numero ? 1 : -1;
-    return maisProximo.prefixo + (maisProximo.numero + direcao);
+    return maisProximo.prefixo + maisProximo.separador + (maisProximo.numero + direcao);
   }
-  return maisProximo.prefixo + (maisProximo.numero + 1);
+  return maisProximo.prefixo + maisProximo.separador + (maisProximo.numero + 1);
 }
 
 // Mesma chave usada pra deduplicar posições idênticas no leitor do CAD
