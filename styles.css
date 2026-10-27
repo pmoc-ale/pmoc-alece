@@ -2594,6 +2594,15 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .brand-org { display: none; }
   .brand img { height: 40px; }
   .brand-name { font-size: 18px; }
+  /* Engrenagem+conta ficavam empurradas pra uma TERCEIRA linha, embaixo
+     das abas (width:100% força as abas pra linha de baixo sozinhas,
+     empurrando quem vem depois delas no HTML junto) -- "order" reordena
+     só visualmente: logo+nome e engrenagem+conta dividem a primeira
+     linha (perto do nome "PMOC ALECE", como já é sem tela estreita),
+     abas ficam sozinhas na segunda. */
+  .brand { order: 1; }
+  .topbar-acoes { order: 2; flex-shrink: 0; }
+  .tabs { order: 3; }
   /* Some na tela estreita -- avatar+seta já bastam pra abrir o menu de
      conta, e o nome completo some com o espaço que teria. */
   .topbar-conta-nome { display: none; }
