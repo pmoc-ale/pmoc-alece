@@ -2882,10 +2882,17 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   display: none !important;
 }
 
-body.modo-padrao .status-select,
-body.modo-padrao input:not(.search-input):not(#authEmail):not(#authSenha):not(#modalConclusao *):not([type="checkbox"]),
-body.modo-padrao select:not(#filtroStatus):not(#filtroSetorPCM):not(#filtroOrigem):not(#plantaSeletor):not(#filtroStatusPlanta):not(.status-select):not(#modalConclusao *),
-body.modo-padrao button.btn.primary:not(#modalConclusao *):not(#modalConfirmOverlay *),
+/* O travamento COMPLETO (sem nenhuma exceção extra) só vale pra "padrão"
+   de verdade (:not(.modo-trabalhador)) nas linhas de input/select/botão
+   primário -- trabalhador tem sua PRÓPRIA versão dessas três logo abaixo,
+   com os campos de "Corrigir informações do aparelho" liberados. As
+   outras linhas (excluir, limpar histórico/ordens etc.) continuam sem
+   essa ressalva -- travadas pros dois perfis igual sempre foi, só não
+   tinham nada que o trabalhador precisasse desbloquear. */
+body.modo-padrao:not(.modo-trabalhador) .status-select,
+body.modo-padrao:not(.modo-trabalhador) input:not(.search-input):not(#authEmail):not(#authSenha):not(#modalConclusao *):not([type="checkbox"]),
+body.modo-padrao:not(.modo-trabalhador) select:not(#filtroStatus):not(#filtroSetorPCM):not(#filtroOrigem):not(#plantaSeletor):not(#filtroStatusPlanta):not(.status-select):not(#modalConclusao *),
+body.modo-padrao:not(.modo-trabalhador) button.btn.primary:not(#modalConclusao *):not(#modalConfirmOverlay *),
 body.modo-padrao button.btn.danger-inverted:not(#modalConfirmOverlay *),
 body.modo-padrao button.sidenav-danger,
 body.modo-padrao #drawerEnviarFoto,
@@ -2893,6 +2900,25 @@ body.modo-padrao #drawerExcluir,
 body.modo-padrao .menu-linha-item,
 body.modo-padrao #btnLimparHistorico,
 body.modo-padrao #btnLimparOrdens {
+  pointer-events: none !important;
+  cursor: not-allowed;
+  background: var(--fundo) !important;
+  color: var(--texto-suave) !important;
+  border-color: var(--borda) !important;
+}
+
+/* Trabalhador: mesmo travamento geral de cima, só que com os campos de
+   "Corrigir informações do aparelho" liberados (ver abrirDrawerEquipamento
+   em app.js). Sem isso, essa função inteira (aberta sozinha pro
+   trabalhador, único jeito dele corrigir um dado errado) ficava visível
+   na tela mas travada de ponta a ponta -- pointer-events:none bloqueia o
+   clique até "atravessar" até o campo, então nem dava pra digitar nos
+   inputs, nem clicar em Salvar. Reportado em produção: "mesmo tendo essa
+   opção ele não consegue".
+*/
+body.modo-trabalhador input:not(.search-input):not(#drawerPatrimonio):not(#drawerTag):not(#drawerAmbiente):not(#drawerMarca):not(#drawerModelo):not(#drawerCapacidade):not(#drawerObservacao):not(#modalConclusao *):not([type="checkbox"]),
+body.modo-trabalhador select:not(#filtroStatus):not(#filtroSetorPCM):not(#filtroOrigem):not(#plantaSeletor):not(#filtroStatusPlanta):not(.status-select):not(#drawerTipoGas):not(#modalConclusao *),
+body.modo-trabalhador button.btn.primary:not(#drawerSalvarCadastro):not(#modalConclusao *):not(#modalConfirmOverlay *) {
   pointer-events: none !important;
   cursor: not-allowed;
   background: var(--fundo) !important;

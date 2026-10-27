@@ -2114,6 +2114,19 @@ async function cadastrarPredioNovoSemAgendar(itensDaPlanilha) {
 // de digitação no Patrimônio da planilha virar um cadastro duplicado em
 // vez de atualizar o certo) e pra montar o relatório de "sumiu da
 // planilha" depois que a atualização roda.
+// Pra casar um item SEM patrimônio (ainda não preenchido em campo, bem
+// comum num levantamento recente) contra um equipamento já cadastrado --
+// sem patrimônio pra comparar, Setor+Ambiente+TAG+"Nº na sala" (mesmo
+// conjunto que já desempata item idêntico no seletor de "marcar na
+// planta") é o que sobra como identidade. Vazio empata com vazio de
+// propósito: 5 equipamentos numa sala sem TAG nenhum ainda casam 1-a-1 na
+// ordem que aparecem, em vez de contar/duplicar os 5 a cada reimportação.
+// Usada tanto pela prévia (compararComPlanilha) quanto pela gravação de
+// verdade (atualizarCadastroPredioExistente) -- as duas precisam bater.
+function chaveSemPatrimonio(item) {
+  return [item.setor, item.ambiente, item.tag, item.numeroNaSala].map((v) => normalizarBusca(v || "")).join("|");
+}
+
 function compararComPlanilha(itensDaPlanilha) {
   const porPredio = new Map();
   itensDaPlanilha.forEach((item) => {
@@ -2136,10 +2149,26 @@ function compararComPlanilha(itensDaPlanilha) {
     const porPatrimonioExistente = new Map();
     existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonioExistente.set(normalizarTexto(e.patrimonio), e); });
 
+    // Mesmo desempate por Setor+Ambiente+TAG+Nº na sala usado na gravação
+    // de verdade (ver chaveSemPatrimonio) -- sem isso, a prévia mostrava
+    // "X novo(s)" pra item que na gravação ia na verdade CASAR com um já
+    // existente, deixando a prévia e o resultado de verdade incoerentes.
+    const porChaveSemPatrimonio = new Map();
+    existentesDoLocal.forEach((e) => {
+      if (e.patrimonio) return;
+      const chave = chaveSemPatrimonio(e);
+      if (!porChaveSemPatrimonio.has(chave)) porChaveSemPatrimonio.set(chave, []);
+      porChaveSemPatrimonio.get(chave).push(e);
+    });
+
     let atualizarPredio = 0, novosPredio = 0;
     itensDoPredio.forEach((item) => {
-      if (item.patrimonio && porPatrimonioExistente.has(normalizarTexto(item.patrimonio))) atualizarPredio++;
-      else novosPredio++;
+      if (item.patrimonio && porPatrimonioExistente.has(normalizarTexto(item.patrimonio))) { atualizarPredio++; return; }
+      if (!item.patrimonio) {
+        const candidatos = porChaveSemPatrimonio.get(chaveSemPatrimonio(item));
+        if (candidatos && candidatos.length) { candidatos.shift(); atualizarPredio++; return; }
+      }
+      novosPredio++;
     });
 
     const sumidosDoPredio = existentesDoLocal.filter((e) => e.patrimonio && !patrimoniosNaPlanilha.has(normalizarTexto(e.patrimonio)));
@@ -2178,7 +2207,7 @@ function renderSumidosPlanilha(sumidos) {
 }
 
 async function atualizarCadastroPredioExistente(itensDaPlanilha) {
-  const CAMPOS_CADASTRO = ["setor", "ambiente", "tag", "marca", "modelo", "capacidade", "tipoGas", "tipo", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
+  const CAMPOS_CADASTRO = ["setor", "ambiente", "tag", "numeroNaSala", "marca", "modelo", "capacidade", "tipoGas", "tipo", "statusCondicao", "setorPCM", "prioridadeSetor", "pisoPCM"];
 
   const porPredio = new Map();
   itensDaPlanilha.forEach((item) => {
@@ -2204,6 +2233,18 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
     const porPatrimonio = new Map();
     existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonio.set(normalizarTexto(e.patrimonio), e); });
 
+    // Só entram aqui os que TAMBÉM não têm patrimônio -- um que já tem
+    // patrimônio preenchido já casa (ou não) pelo mapa de cima; não faz
+    // sentido um item da planilha sem patrimônio "roubar" o lugar de um
+    // equipamento que já foi conferido em campo e tem patrimônio de verdade.
+    const porChaveSemPatrimonio = new Map();
+    existentesDoLocal.forEach((e) => {
+      if (e.patrimonio) return;
+      const chave = chaveSemPatrimonio(e);
+      if (!porChaveSemPatrimonio.has(chave)) porChaveSemPatrimonio.set(chave, []);
+      porChaveSemPatrimonio.get(chave).push(e);
+    });
+
     let contadorLocal = existentesDoLocal.length;
     let maiorOrdem = existentesDoLocal.reduce((max, e) => Math.max(max, e.ordemExecucao || 0), 0);
     const capLocal = (ESTADO.config && ESTADO.config.capacidades && ESTADO.config.capacidades[local]) || { nEquipes: 2, aparelhosDia: 2 };
@@ -2211,7 +2252,15 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
     let atualizadosPredio = 0, adicionadosPredio = 0;
 
     itensDoPredio.forEach((itemPlanilha) => {
-      const existente = itemPlanilha.patrimonio ? porPatrimonio.get(normalizarTexto(itemPlanilha.patrimonio)) : null;
+      let existente = itemPlanilha.patrimonio ? porPatrimonio.get(normalizarTexto(itemPlanilha.patrimonio)) : null;
+      if (!existente && !itemPlanilha.patrimonio) {
+        const candidatos = porChaveSemPatrimonio.get(chaveSemPatrimonio(itemPlanilha));
+        // .shift() consome o candidato -- sem isso, duas linhas da
+        // planilha com a mesma chave (comum: duas unidades idênticas na
+        // mesma sala) casariam as duas com o MESMO equipamento já
+        // cadastrado, perdendo a outra.
+        if (candidatos && candidatos.length) existente = candidatos.shift();
+      }
       if (existente) {
         const campos = {};
         CAMPOS_CADASTRO.forEach((campo) => { campos[campo] = itemPlanilha[campo]; });
@@ -2247,7 +2296,7 @@ async function atualizarCadastroPredioExistente(itensDaPlanilha) {
       const novoItem = {
         id, local,
         patrimonio: itemPlanilha.patrimonio, setor: itemPlanilha.setor, ambiente: itemPlanilha.ambiente,
-        tag: itemPlanilha.tag,
+        tag: itemPlanilha.tag, numeroNaSala: itemPlanilha.numeroNaSala,
         marca: itemPlanilha.marca, modelo: itemPlanilha.modelo, capacidade: itemPlanilha.capacidade,
         tipoGas: itemPlanilha.tipoGas, tipo: itemPlanilha.tipo, statusCondicao: itemPlanilha.statusCondicao,
         setorPCM: itemPlanilha.setorPCM, prioridadeSetor: itemPlanilha.prioridadeSetor, pisoPCM: itemPlanilha.pisoPCM,
@@ -9819,8 +9868,9 @@ async function abrirDrawerEquipamento(id) {
       <label>Patrimônio<input type="text" id="drawerPatrimonio" value="${escapeHtml(item.patrimonio || "")}"></label>
       <label>Tag<input type="text" id="drawerTag" value="${escapeHtml(item.tag || "")}" placeholder="Vem da planilha, se tiver"></label>
       ${restrito ? "" : `
-      <label>Setor<input type="text" id="drawerSetor" value="${escapeHtml(item.setor || "")}"></label>
+      <label>Setor<input type="text" id="drawerSetor" value="${escapeHtml(item.setor || "")}"></label>`}
       <label>Ambiente<input type="text" id="drawerAmbiente" value="${escapeHtml(item.ambiente || "")}"></label>
+      ${restrito ? "" : `
       <label>Prédio
         <select id="drawerLocal">
           ${ESTADO.configSite.predios.map((l) =>
@@ -9837,8 +9887,8 @@ async function abrirDrawerEquipamento(id) {
           <option value="Outro" ${item.tipoGas && !GASES_REFRIGERANTES.includes(item.tipoGas) ? "selected" : ""}>Outro</option>
         </select>
       </label>
-      ${restrito ? "" : `
       <label>Observações (ex: contato da sala, restrições de horário...)<input type="text" id="drawerObservacao" value="${escapeHtml(item.observacao || "")}" placeholder="Ex: falar com Fulano, ramal 1234"></label>
+      ${restrito ? "" : `
       <label>Código na planta (ex: E2/C4)<input type="text" id="drawerCodigoPlanta" value="${escapeHtml(item.codigoPlanta || "")}" placeholder="Ex: E2/C4"></label>`}
       <div class="drawer-acoes">
         <button class="btn primary" id="drawerSalvarCadastro">${restrito ? "Salvar correção" : "Salvar cadastro"}</button>
@@ -9873,19 +9923,31 @@ async function abrirDrawerEquipamento(id) {
     const modelo = $("#drawerModelo").value.trim();
     const capacidade = $("#drawerCapacidade").value.trim();
     const tipoGas = $("#drawerTipoGas")?.value || "";
+    const ambiente = $("#drawerAmbiente").value.trim();
+    const observacao = $("#drawerObservacao")?.value.trim() || "";
 
-    // Trabalhador só mexe nos dados técnicos (ver "restrito" acima) -- o
-    // formulário nem mostra Setor/Ambiente/Prédio/Observações/Código na
-    // planta pra ele, então não toca nesses campos no banco, e o registro
-    // no Histórico usa um tipo próprio ("Correção") pra dar pra distinguir
-    // de uma edição feita por admin.
+    // Trabalhador só mexe nos dados técnicos + Ambiente/Observações (ver
+    // "restrito" acima) -- o formulário nem mostra Setor/Prédio/Código na
+    // planta pra ele (só admin decide prioridade/agenda/prédio), então não
+    // toca nesses campos no banco, e o registro no Histórico usa um tipo
+    // próprio ("Correção") pra dar pra distinguir de uma edição feita por
+    // admin. Ambiente entra na recontagem de setorPCM/prioridadeSetor
+    // (mesma regra do cadastro de admin) porque o texto dele também
+    // influencia identificarSetor(); Setor sozinho não muda, então
+    // pisoPCM (que só olha Setor) fica igual.
     if (restrito) {
+      if (!ambiente) {
+        toast("Preencha pelo menos o Ambiente.");
+        return;
+      }
+      const setorPCM = identificarSetor(item.setor, ambiente);
       try {
         await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
-          patrimonio, tag, marca, modelo, capacidade, tipoGas,
+          patrimonio, tag, marca, modelo, capacidade, tipoGas, ambiente, observacao,
+          setorPCM, prioridadeSetor: PRIORIDADE[setorPCM] || 7,
         });
         await registrarHistorico(
-          { id, patrimonio, setor: item.setor, ambiente: item.ambiente, local: item.local, equipeResponsavel: item.equipeResponsavel },
+          { id, patrimonio, setor: item.setor, ambiente, local: item.local, equipeResponsavel: item.equipeResponsavel },
           "-", "Editado", "Correção"
         );
         toast("Correção salva -- registrada no Histórico.");
@@ -9898,9 +9960,7 @@ async function abrirDrawerEquipamento(id) {
     }
 
     const setor = $("#drawerSetor").value.trim();
-    const ambiente = $("#drawerAmbiente").value.trim();
     const local = $("#drawerLocal").value;
-    const observacao = $("#drawerObservacao")?.value.trim() || "";
     const codigoPlanta = $("#drawerCodigoPlanta")?.value.trim() || "";
     if (!setor || !ambiente) {
       toast("Preencha pelo menos Setor e Ambiente.");
