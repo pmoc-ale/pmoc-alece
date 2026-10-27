@@ -813,6 +813,22 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   .alert-toast-stack { right: 16px; left: 16px; width: auto; }
 }
 
+/* No celular, a barra de navegação de baixo (.sidenav) é fixa e tem
+   z-index MAIOR que o toast -- com "bottom: 20px" sozinho, um aviso alto
+   (ex: "Aguardando agendamento" com vários prédios, cada um com seu
+   próprio botão "Agendar agora") ficava com a parte de baixo escondida
+   atrás da barra, cortado antes da pessoa conseguir ver/clicar tudo.
+   Sobe o aviso pra cima da barra (mesma altura reservada por
+   .body-layout's padding-bottom) e limita a altura dele, com rolagem
+   própria, pro aviso nunca ultrapassar o topo da tela também. */
+@media (max-width: 768px) {
+  .alert-toast-stack {
+    bottom: 92px;
+    max-height: calc(100vh - 92px - var(--altura-topbar, 96px) - 20px);
+    overflow-y: auto;
+  }
+}
+
 /* Layout geral: sidenav + conteúdo */
 .body-layout {
   display: flex;
