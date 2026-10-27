@@ -8293,7 +8293,7 @@ let candidatoSelecionadoParaConfirmar = null; // { chave, x, y } ou null
 // não arrisca escolher errado: deixa pra pessoa escolher na mão, como
 // já era. Nunca troca uma escolha que a pessoa já fez manualmente pra
 // ESSE candidato (ver dataset.selecionadoAutomaticamente).
-function tentarPreSelecionarEquipamento(planta, codigoEvaporadora) {
+function tentarPreSelecionarEquipamento(planta, codigoEvaporadora, x, y) {
   const select = $("#plantaEquipamentoSelect");
   if (!select || !codigoEvaporadora) return;
   // select.value NUNCA é vazio de verdade (um <select> sem "selected"
@@ -8306,16 +8306,39 @@ function tentarPreSelecionarEquipamento(planta, codigoEvaporadora) {
   const alvo = normalizarCodigoParaComparacao(extrairCodigoEvaporadora(codigoEvaporadora));
   if (!alvo) return;
   const localDaPlanta = planta.local || "SEDE";
-  const candidatos = ESTADO.equipamentos.filter((e) =>
+  let candidatos = ESTADO.equipamentos.filter((e) =>
     (e.local || "SEDE") === localDaPlanta &&
     !e.plantaId &&
     normalizarCodigoParaComparacao(e.tag) === alvo
   );
+  // TAG repetido entre salas (comum em prédio com vários andares com a
+  // mesma numeração local) -- antes caía direto pra escolha manual. Agora
+  // desempata pelo Setor/Ambiente do vizinho JÁ confirmado mais perto do
+  // candidato: aparelhos próximos na planta tendem a estar na mesma sala,
+  // então se só UM dos candidatos com esse TAG bate com a sala do vizinho
+  // mais próximo, usa ele. Continua caindo pra manual se isso não decidir
+  // (sem vizinho confirmado ainda, ou a sala do vizinho não bate com
+  // nenhum -- ou bate com mais de um -- dos candidatos).
+  if (candidatos.length > 1 && x != null && y != null) {
+    const vizinhoMaisProximo = ESTADO.equipamentos
+      .filter((e) => e.plantaId === planta.id && e.plantaX != null)
+      .sort((a, b) => Math.hypot(a.plantaX - x, a.plantaY - y) - Math.hypot(b.plantaX - x, b.plantaY - y))[0];
+    if (vizinhoMaisProximo) {
+      const porLocal = candidatos.filter((c) =>
+        normalizarBusca(c.setor || "") === normalizarBusca(vizinhoMaisProximo.setor || "") &&
+        normalizarBusca(c.ambiente || "") === normalizarBusca(vizinhoMaisProximo.ambiente || "")
+      );
+      if (porLocal.length === 1) candidatos = porLocal;
+    }
+  }
   if (candidatos.length !== 1) return;
 
   select.value = candidatos[0].id;
   select.dispatchEvent(new Event("change"));
-  const rotulo = candidatos[0].ambiente || candidatos[0].setor || candidatos[0].id;
+  // Setor + Ambiente (mesmo formato do rótulo da lista de aparelhos, ver
+  // renderLocalizacao) -- só Ambiente não bastava pra conferir rápido em
+  // prédio com vários andares (salas de mesmo nome em cada andar).
+  const rotulo = [candidatos[0].setor, candidatos[0].ambiente].filter(Boolean).join(" / ") || candidatos[0].id;
   toast(`Aparelho "${rotulo}" (TAG ${candidatos[0].tag}) selecionado automaticamente -- confira antes de confirmar.`);
 }
 
@@ -8375,7 +8398,7 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
       // vazio, por ainda não estar marcado) -- preenchendo o código
       // DEPOIS garante que a sugestão "E6" fique valendo por último, sem
       // ser apagada por esse efeito colateral.
-      if (!modoCondensadora) tentarPreSelecionarEquipamento(planta, sugestao);
+      if (!modoCondensadora) tentarPreSelecionarEquipamento(planta, sugestao, cand.x, cand.y);
       campoCodigo.value = sugestao;
       campoCodigo.dataset.sugeridoAutomaticamente = sugestao;
     }
@@ -8398,7 +8421,7 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
       // pré-seleciona ANTES de preencher o código, pra esse valor não
       // ser apagado pelo onchange do próprio <select> (ver
       // atualizarCodigoPlantaInput).
-      if (!modoCondensadora) tentarPreSelecionarEquipamento(planta, lido);
+      if (!modoCondensadora) tentarPreSelecionarEquipamento(planta, lido, cand.x, cand.y);
       campoCodigo.value = lido;
       campoCodigo.dataset.sugeridoAutomaticamente = lido;
       toast(`Li "${lido}" na planta -- confira antes de confirmar.`);
