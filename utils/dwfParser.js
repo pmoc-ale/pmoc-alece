@@ -22,7 +22,12 @@
 // W2X) ainda é lido, só que sem separação por camada -- tudo cai numa
 // camada só ("SEM_CAMADA").
 
-const DWF_EQUIP_LAYER_HINTS = ["EQUIP", "AC0", "ARC_", "CLIMA", "EVAP", "COND"];
+// "EQPM" -- convenção de nomenclatura de camada mecânica (NCS/AIA, comum
+// em levantamento de terceiros): "M-EQPM" = Mechanical-Equipment. Achado
+// num prédio real que tinha os símbolos certos nessa camada, mas a
+// sugestão automática nunca batia porque "EQUIP" (a dica mais parecida)
+// não é a mesma string -- faltava "P" e sobrava "UI".
+const DWF_EQUIP_LAYER_HINTS = ["EQUIP", "EQPM", "AC0", "ARC_", "CLIMA", "EVAP", "COND"];
 
 function dwfNumeroDoRefName(refName) {
   const m = /_(\d+)$/.exec(refName || "");
