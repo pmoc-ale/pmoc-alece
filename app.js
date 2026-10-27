@@ -9934,6 +9934,7 @@ async function abrirDrawerEquipamento(id) {
       ${item.plantaId ? `
         <div class="drawer-acoes">
           <button class="btn ghost" id="drawerVerNaPlanta">Ver na planta</button>
+          ${ESTADO.permissao === "admin" ? `<button class="btn ghost" id="drawerMoverAparelho" style="margin-top:6px">Mover este aparelho</button>` : ""}
         </div>
       ` : ""}
     </details>
@@ -10089,6 +10090,34 @@ async function abrirDrawerEquipamento(id) {
     // desde que o marcador virou o próprio símbolo do CAD (ou um ícone
     // <g>), então na prática não fazia nada além de trocar de aba.
     await irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => mostrarPainelPlanta(item));
+  });
+
+  // Pedido direto: trocar um aparelho de lugar hoje era espalhado em
+  // telas separadas (tirar marcação antiga, editar Setor/Ambiente/Prédio
+  // no cadastro, achar e marcar ele na planta nova). Esse botão junta o
+  // essencial: leva direto pra onde ele está marcado AGORA, já em modo
+  // de edição, com o aparelho pré-selecionado -- clicar no novo lugar já
+  // confirma a mudança (salvarPosicaoPlanta sempre sobrescreve
+  // plantaId/plantaX/plantaY do aparelho escolhido, não soma marcações,
+  // então a antiga some sozinha, mesmo que seja noutra planta). Pra
+  // mudar de PRÉDIO (não só de sala), ainda precisa trocar Prédio em
+  // "Editar cadastro" à parte -- esse botão só cobre o lado da planta.
+  $("#drawerMoverAparelho")?.addEventListener("click", async () => {
+    fecharDrawer();
+    irParaAba("localizacao");
+    await irParaMarcador(item.plantaId, item.plantaX, item.plantaY, () => {
+      ESTADO.editandoPlanta = true;
+      aplicarTipoAcaoMarcacao("evaporadora", "adicionar");
+      renderMarcadoresPlanta();
+      const select = $("#plantaEquipamentoSelect");
+      if (select) {
+        select.value = item.id;
+        select.dataset.escolhidoManualmente = "1";
+        select.dispatchEvent(new Event("change"));
+      }
+      const rotulo = item.patrimonio || item.tag || item.ambiente || item.id;
+      toast(`Clique na nova posição de "${rotulo}" na planta -- a marcação antiga sai sozinha ao confirmar. Pra mudar de prédio, ajuste "Prédio" em Editar cadastro antes.`);
+    });
   });
 
   $("#drawerEnviarFoto")?.addEventListener("click", async () => {
