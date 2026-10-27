@@ -2868,7 +2868,12 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     justify-content: center;
     position: fixed;
     right: 16px;
-    bottom: 78px;
+    /* Era 78px -- ficava colado na barra de baixo (só 1px de vão, na
+       prática encostado), e com z-index menor que ela (.sidenav é 1000,
+       o fab é 998) qualquer coisinha a mais de altura na barra já cobria
+       pedaço do botão. Mesma folga usada no aviso flutuante (ver
+       .alert-toast-stack). */
+    bottom: 92px;
     width: 52px;
     height: 52px;
     border-radius: 50%;
@@ -2885,8 +2890,9 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 
   /* 9. TOAST ACIMA DO MENU INFERIOR — bottom:28px (valor de desktop) cai
      bem atrás da barra de navegação fixa no celular; sem isso a mensagem
-     nem aparecia (escondida atrás do menu). */
-  .toast { bottom: 78px; }
+     nem aparecia (escondida atrás do menu). Mesma folga do fab acima
+     (92px) -- 78px ficava só 1px acima da barra, na prática colado. */
+  .toast { bottom: 92px; }
 }
 
 .drawer-overlay {
