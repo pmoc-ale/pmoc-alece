@@ -6884,6 +6884,8 @@ async function renderLocalizacao() {
 
   const btnNovaPlanta = $("#btnMostrarUploadPlanta");
   if (btnNovaPlanta) btnNovaPlanta.hidden = !isAdmin;
+  const btnAtualizarDesenho = $("#btnAtualizarDesenhoPlanta");
+  if (btnAtualizarDesenho) btnAtualizarDesenho.hidden = !isAdmin;
   const btnExcluirPlanta = $("#btnExcluirPlanta");
   if (btnExcluirPlanta) btnExcluirPlanta.hidden = !isAdmin;
 
@@ -8907,6 +8909,14 @@ function centralizarView(svg, x, y) {
 // arquivo "raw", igual as fotos; o Firestore só guarda o link).
 // ------------------------------------------------------------------
 let _dadosPlantaPendente = null; // resultado do parseDwf() ainda não salvo
+// Planta sendo atualizada (reenvio do desenho dela), ou null = enviando
+// planta nova. Ver alternarModoUploadPlanta/btnAtualizarDesenhoPlanta --
+// pedido direto: reenviar o desenho de uma planta que já existe criava
+// um registro NOVO do zero toda vez, perdendo candidato já descartado
+// ("não é máquina") e desconectando as marcações de equipamento já
+// feitas (plantaId apontava pro registro antigo). Agora dá pra escolher
+// atualizar o desenho de uma planta existente, mantendo tudo isso.
+let _plantaEmAtualizacao = null;
 
 function renderUploadPlanta() {
   const local = $("#uploadPlantaLocal");
@@ -8915,16 +8925,79 @@ function renderUploadPlanta() {
   }
 }
 
-ligarSeletorDeArquivo("uploadPlantaArquivo", "btnUploadPlantaEscolher", "uploadPlantaNome", "Nenhum arquivo selecionado");
+// planta = objeto da planta sendo atualizada, ou null pra voltar ao modo
+// "nova planta". Nome/Prédio ficam travados (mesma identidade, só o
+// desenho muda) -- mas continuam visíveis, pra confirmar que é a planta
+// certa antes de enviar.
+function alternarModoUploadPlanta(planta) {
+  _plantaEmAtualizacao = planta;
+  _dadosPlantaPendente = null;
+  $("#uploadPlantaArquivo").value = "";
+  const preview = $("#uploadPlantaPreviewWrap");
+  if (preview) preview.hidden = true;
+  const status = $("#uploadPlantaStatus");
+  if (status) status.textContent = "";
+
+  const titulo = $("#uploadPlantaTitulo");
+  const aviso = $("#uploadPlantaAtualizandoAviso");
+  const nome = $("#uploadPlantaNome");
+  const local = $("#uploadPlantaLocal");
+  const btnSalvar = $("#btnSalvarPlanta");
+
+  if (planta) {
+    if (titulo) titulo.textContent = "Atualizar desenho (.dwf / .dwfx)";
+    if (aviso) { aviso.hidden = false; $("#uploadPlantaAtualizandoNome").textContent = planta.nome; }
+    renderUploadPlanta();
+    if (nome) { nome.value = planta.nome; nome.disabled = true; }
+    if (local) { local.value = planta.local || "SEDE"; local.disabled = true; }
+    if (btnSalvar) btnSalvar.textContent = "Salvar desenho atualizado";
+  } else {
+    if (titulo) titulo.textContent = "Enviar planta (.dwf / .dwfx)";
+    if (aviso) aviso.hidden = true;
+    renderUploadPlanta();
+    if (nome) { nome.value = ""; nome.disabled = false; }
+    if (local) local.disabled = false;
+    if (btnSalvar) btnSalvar.textContent = "Salvar planta";
+  }
+}
+
+// [QA-FIX] "uploadPlantaNome" tinha DOIS elementos com o mesmo id (esse
+// span de exibição do nome do arquivo, e o <input> de "Nome da planta"
+// mais abaixo) -- document.querySelector sempre resolve pro PRIMEIRO
+// (esse span), então todo $("#uploadPlantaNome").value usado no resto
+// deste arquivo lia/escrevia nesse span (sem efeito real, só uma
+// propriedade "value" improvisada nele), nunca no campo de texto de
+// verdade que a pessoa vê e digita. Resultado: o nome que ela digitava
+// era sempre ignorado, e a planta salvava com o nome do ARQUIVO (sem
+// extensão) por baixo -- só não dava erro porque os dois
+// $("#uploadPlantaNome") (escrita no auto-preenchimento e leitura no
+// salvar) acertavam o mesmo span, então "funcionava" por acidente.
+ligarSeletorDeArquivo("uploadPlantaArquivo", "btnUploadPlantaEscolher", "uploadPlantaArquivoNome", "Nenhum arquivo selecionado");
 
 $("#btnMostrarUploadPlanta")?.addEventListener("click", () => {
   const painel = $("#painelUploadPlanta");
-  if (painel) painel.hidden = !painel.hidden;
+  if (!painel) return;
+  if (painel.hidden) alternarModoUploadPlanta(null);
+  painel.hidden = !painel.hidden;
 });
 
 $("#btnMostrarUploadPlantaVazio")?.addEventListener("click", () => {
   const painel = $("#painelUploadPlanta");
-  if (painel) painel.hidden = !painel.hidden;
+  if (!painel) return;
+  if (painel.hidden) alternarModoUploadPlanta(null);
+  painel.hidden = !painel.hidden;
+});
+
+$("#btnAtualizarDesenhoPlanta")?.addEventListener("click", () => {
+  const planta = plantaPorId(ESTADO.plantaSelecionada);
+  if (!planta) return;
+  alternarModoUploadPlanta(planta);
+  const painel = $("#painelUploadPlanta");
+  if (painel) painel.hidden = false;
+});
+
+$("#btnCancelarAtualizacaoPlanta")?.addEventListener("click", () => {
+  alternarModoUploadPlanta(null);
 });
 
 $("#uploadPlantaArquivo")?.addEventListener("change", async (ev) => {
@@ -9026,10 +9099,7 @@ async function enviarArquivoPlanta(dadosObjeto, nomeArquivo) {
 
 $("#btnSalvarPlanta")?.addEventListener("click", async () => {
   if (!_dadosPlantaPendente) { toast("Escolha um arquivo primeiro."); return; }
-  const nome = $("#uploadPlantaNome").value.trim();
-  const local = $("#uploadPlantaLocal").value;
   const camadaEquipamento = $("#uploadPlantaCamadaEquip").value;
-  if (!nome) { toast("Dê um nome pra essa planta."); return; }
 
   const btn = $("#btnSalvarPlanta");
   btn.disabled = true;
@@ -9040,30 +9110,55 @@ $("#btnSalvarPlanta")?.addEventListener("click", async () => {
     if (status) status.textContent = "Enviando o desenho...";
     const dadosUrl = await enviarArquivoPlanta(_dadosPlantaPendente, publicId);
 
-    const novaRef = doc(collection(db, "plantas"));
-    await setDoc(novaRef, {
-      nome, local,
-      layers: _dadosPlantaPendente.layers,
-      camadaEquipamento,
-      dadosUrl,
-      criadoEm: new Date().toISOString(),
-      criadoPor: ESTADO.usuarioNome || "",
-    });
+    if (_plantaEmAtualizacao) {
+      // Atualiza o MESMO documento -- nome/prédio ficam como já estavam
+      // (não vieram do formulário, estão travados). Nunca toca em
+      // candidatosIgnorados/limiarQtdPontos (o que já foi descartado
+      // continua descartado) nem nas marcações dos equipamentos (plantaId
+      // continua apontando pra esse mesmo documento, então quem já estava
+      // marcado continua marcado -- só o desenho embaixo mudou).
+      const plantaId = _plantaEmAtualizacao.id;
+      await updateDoc(doc(db, "plantas", plantaId), {
+        layers: _dadosPlantaPendente.layers,
+        camadaEquipamento,
+        dadosUrl,
+        atualizadoEm: new Date().toISOString(),
+        atualizadoPor: ESTADO.usuarioNome || "",
+      });
+      // Cache local (ver carregarDadosPlanta) e o SVG já desenhado
+      // precisam ser jogados fora -- sem isso continuaria mostrando o
+      // desenho ANTIGO, já que o id da planta não mudou.
+      _dadosPlantaCache.delete(plantaId);
+      const svg = $("#plantaSvg");
+      if (svg && svg.dataset.plantaId === plantaId) svg.dataset.plantaId = "";
+      toast("Desenho da planta atualizado.");
+      ESTADO.plantaSelecionada = plantaId;
+    } else {
+      const nome = $("#uploadPlantaNome").value.trim();
+      const local = $("#uploadPlantaLocal").value;
+      if (!nome) { toast("Dê um nome pra essa planta."); btn.disabled = false; btn.textContent = "Salvar planta"; return; }
+      const novaRef = doc(collection(db, "plantas"));
+      await setDoc(novaRef, {
+        nome, local,
+        layers: _dadosPlantaPendente.layers,
+        camadaEquipamento,
+        dadosUrl,
+        criadoEm: new Date().toISOString(),
+        criadoPor: ESTADO.usuarioNome || "",
+      });
+      toast("Planta salva.");
+      ESTADO.plantaSelecionada = novaRef.id;
+    }
 
-    toast("Planta salva.");
-    _dadosPlantaPendente = null;
-    $("#uploadPlantaArquivo").value = "";
-    $("#uploadPlantaNome").value = "";
-    $("#uploadPlantaPreviewWrap").hidden = true;
+    alternarModoUploadPlanta(null);
     $("#painelUploadPlanta").hidden = true;
-    ESTADO.plantaSelecionada = novaRef.id;
   } catch (err) {
     console.error(err);
     if (status) status.textContent = "Erro ao salvar: " + err.message;
     toast("Erro ao salvar planta: " + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Salvar planta";
+    btn.textContent = _plantaEmAtualizacao ? "Salvar desenho atualizado" : "Salvar planta";
   }
 });
 

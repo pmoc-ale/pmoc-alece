@@ -593,13 +593,18 @@
         <button class="btn primary" id="btnMostrarUploadPlantaVazio" hidden style="margin-top:10px;">Enviar planta</button>
       </div>
       <div class="card" id="painelUploadPlanta" hidden>
-        <h2>Enviar planta (.dwf / .dwfx)</h2>
+        <h2 id="uploadPlantaTitulo">Enviar planta (.dwf / .dwfx)</h2>
+        <p class="muted" id="uploadPlantaAtualizandoAviso" hidden>
+          Atualizando o desenho de <strong id="uploadPlantaAtualizandoNome"></strong> -- nome e prédio continuam os mesmos.
+          As marcações de equipamento e os candidatos já descartados nessa planta são mantidos (só o desenho muda).
+          <button type="button" class="btn ghost" id="btnCancelarAtualizacaoPlanta" style="font-size:11.5px;padding:3px 10px;margin-left:6px;">Cancelar e enviar como planta nova</button>
+        </p>
         <p class="muted">Exporte a planta do AutoCAD como .dwf ou .dwfx ("Plotar" ou "Exportar") e envie aqui. A leitura é feita aqui mesmo, no navegador.</p>
         <label>Arquivo
           <span class="file-picker">
             <input type="file" id="uploadPlantaArquivo" accept=".dwf,.dwfx" hidden>
             <button type="button" class="btn secondary" id="btnUploadPlantaEscolher">Selecionar arquivo</button>
-            <span class="file-picker-nome" id="uploadPlantaNome">Nenhum arquivo selecionado</span>
+            <span class="file-picker-nome" id="uploadPlantaArquivoNome">Nenhum arquivo selecionado</span>
           </span>
         </label>
         <p class="muted" id="uploadPlantaStatus"></p>
@@ -625,6 +630,7 @@
           <div style="display:flex; align-items:center; gap:10px;">
             <select id="plantaSeletor" class="plantaSeletor-compacto"></select>
             <button class="btn ghost" id="btnMostrarUploadPlanta" hidden style="font-size:12.5px;padding:6px 14px;">+ Nova planta</button>
+            <button class="btn ghost" id="btnAtualizarDesenhoPlanta" hidden style="font-size:12.5px;padding:6px 14px;">Atualizar desenho</button>
             <button class="btn danger-inverted" id="btnExcluirPlanta" hidden style="font-size:12.5px;padding:6px 14px;">Excluir esta planta</button>
           </div>
         </div>
@@ -974,7 +980,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=145"></script>
+<script type="module" src="app.js?v=146"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
