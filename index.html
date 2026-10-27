@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0B3D24">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="styles.css?v=2">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -129,32 +129,38 @@
     </button>
     <details class="sidenav-grupo" open>
       <summary class="sidenav-label">Gestão</summary>
-      <button class="tab sidenav-item" data-view="ordens">
-        <span class="sidenav-icon"></span> Ordens de serviço
-      </button>
-      <button class="tab sidenav-item" data-view="historico">
-        <span class="sidenav-icon"></span> Histórico
-      </button>
+      <div class="sidenav-grupo-itens">
+        <button class="tab sidenav-item" data-view="ordens">
+          <span class="sidenav-icon"></span> Ordens de serviço
+        </button>
+        <button class="tab sidenav-item" data-view="historico">
+          <span class="sidenav-icon"></span> Histórico
+        </button>
+      </div>
     </details>
 
     <details class="sidenav-grupo" open>
       <summary class="sidenav-label">Inventário</summary>
-      <button class="tab sidenav-item" data-view="equipamentos">
-        <span class="sidenav-icon"></span> Equipamentos
-      </button>
-      <button class="tab sidenav-item" data-view="condensadoras">
-        <span class="sidenav-icon"></span> Condensadoras
-      </button>
+      <div class="sidenav-grupo-itens">
+        <button class="tab sidenav-item" data-view="equipamentos">
+          <span class="sidenav-icon"></span> Equipamentos
+        </button>
+        <button class="tab sidenav-item" data-view="condensadoras">
+          <span class="sidenav-icon"></span> Condensadoras
+        </button>
+      </div>
     </details>
 
     <details class="sidenav-grupo" open>
       <summary class="sidenav-label">Configuração</summary>
-      <button class="tab sidenav-item" data-view="localizacao">
-        <span class="sidenav-icon"></span> Localização
-      </button>
-      <button class="tab sidenav-item" data-view="feriados">
-        <span class="sidenav-icon"></span> Feriados e férias
-      </button>
+      <div class="sidenav-grupo-itens">
+        <button class="tab sidenav-item" data-view="localizacao">
+          <span class="sidenav-icon"></span> Localização
+        </button>
+        <button class="tab sidenav-item" data-view="feriados">
+          <span class="sidenav-icon"></span> Feriados e férias
+        </button>
+      </div>
     </details>
     <div class="sidenav-spacer"></div>
     <button class="sidenav-item" id="btnSair" style="margin-top:8px">

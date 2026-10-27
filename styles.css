@@ -861,6 +861,7 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
    em app.js), senão a tela ativa podia ficar escondida dentro de um
    grupo fechado sem nenhuma pista visual do motivo. */
 .sidenav-grupo { display: flex; flex-direction: column; gap: 3px; }
+.sidenav-grupo-itens { display: flex; flex-direction: column; gap: 3px; }
 
 .sidenav-label {
   font-size: 12px;
@@ -2602,6 +2603,12 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
 
 @media (max-width: 768px) {
   /* 1. LAYOUT GERAL E ESPAÇO PRO MENU INFERIOR */
+  /* Trava a página inteira pra não dar pra arrastar de lado -- rede de
+     segurança: mesmo que algum elemento (ex: a barra de baixo, se algum
+     dia voltar a ter mais itens do que cabe) acabe estourando a largura
+     da tela, isso nunca deve virar um scroll horizontal da página
+     inteira, só (no máximo) daquele elemento específico. */
+  html, body { overflow-x: hidden; max-width: 100vw; }
   .body-layout { padding-bottom: 80px; } /* Aumentei pra garantir que nada fique escondido */
   .page { padding: 12px; gap: 16px; width: 100%; overflow-x: hidden; }
 
@@ -2665,11 +2672,28 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
   .sidenav::-webkit-scrollbar { display: none; }
   .sidenav-label, .sidenav-spacer { display: none !important; }
   /* No celular o menu vira uma barra de ícones no rodapé (sem rótulo,
-     sem recolher) -- "display:contents" faz os botões de dentro do
-     <details> virarem item direto da barra de novo, em vez de ficarem
-     empilhados dentro de uma caixinha só (que é o que <details> faz por
-     padrão, pensado pro menu em coluna do desktop). */
-  .sidenav-grupo { display: contents; }
+     sem recolher). Tentei primeiro "display:contents" e depois
+     "display:flex" DIRETO no <details> (ver .sidenav-grupo) -- as duas
+     deram errado: testado e confirmado que <details> não participa
+     direito de layout flex nesse navegador (nem com !important), os
+     botões de dentro insistiam em empilhar um embaixo do outro em vez
+     de ficar lado a lado, não importa o que mandasse no CSS. Bug
+     conhecido de <details>/<summary> com flex em vários navegadores.
+     Solução: não depender do <details> pra flex nenhum -- ele só
+     encolhe em volta do conteúdo (shrink-to-fit normal de item flex,
+     isso funciona) e quem vira a fileira de verdade é a <div> nova por
+     dentro dele (.sidenav-grupo-itens, ver index.html), que é um
+     elemento comum sem esse bug. */
+  .sidenav-grupo-itens {
+    display: flex;
+    flex-direction: row;
+    gap: inherit;
+  }
+  /* <details> é flex-item de ".sidenav" (a barra toda) -- sem
+     flex-shrink:0 aqui, ele podia ser espremido pra caber ao lado dos
+     outros 2 grupos, sobrando menos espaço do que o conteúdo (a div de
+     cima) precisa. */
+  .sidenav-grupo { flex-shrink: 0; }
   .sidenav-item {
     /* Era "flex:1" -- esticava/encolhia cada item pra caber todo mundo
        numa largura fixa (daí o texto quebrar em 2 linhas pra não
