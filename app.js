@@ -10721,9 +10721,19 @@ $("#btnExport").addEventListener("click", async () => {
     toast("Gere o cronograma primeiro.");
     return;
   }
+  // Mesmo filtro de prédio que já existe em cima do Dashboard (ver
+  // aplicarFiltroLocal) -- igual o relatório PDF já respeita há um
+  // tempo. Pedido direto: com um prédio escolhido no filtro, a planilha
+  // agora sai só dele, em vez de sempre trazer todo mundo junto; sem
+  // filtro ("Todos"), continua saindo completa como sempre foi.
+  const itens = aplicarFiltroLocal(ESTADO.equipamentos);
+  if (!itens.length) {
+    toast("Nenhum equipamento encontrado com esse filtro de prédio.");
+    return;
+  }
   toast("Montando planilha...");
   try {
-    const workbook = await montarPlanilhaOrganizada(ESTADO.equipamentos);
+    const workbook = await montarPlanilhaOrganizada(itens);
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -10731,8 +10741,9 @@ $("#btnExport").addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const agora = new Date();
+    const sufixoPredio = ESTADO.localFiltro !== "Todos" ? `_${ESTADO.localFiltro.replace(/[^\w-]+/g, "_")}` : "";
     a.href = url;
-    a.download = `PMOC_ALECE_${agora.getFullYear()}_${String(agora.getMonth() + 1).padStart(2, "0")}.xlsx`;
+    a.download = `PMOC_ALECE_${agora.getFullYear()}_${String(agora.getMonth() + 1).padStart(2, "0")}${sufixoPredio}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
