@@ -459,11 +459,46 @@
                 <p class="muted">Adicione um aparelho individualmente, sem precisar reimportar a planilha inteira.</p>
                 <div class="grid-form">
                   <label>Patrimônio<input type="text" id="eqPatrimonio" placeholder="Ex: 12345"></label>
+                  <label>TAG<input type="text" id="eqTag" placeholder="Ex: 24233"></label>
                   <label>Setor<input type="text" id="eqSetor" placeholder="Ex: Gabinete Dep. Fulano, 2º Piso"></label>
                   <label>Ambiente<input type="text" id="eqAmbiente" placeholder="Ex: Sala de reuniões"></label>
                   <label>Prédio
                     <select id="eqLocal"></select>
                    </label>
+                  <label>Tipo
+                    <select id="eqTipo">
+                      <option value="">Não informado</option>
+                      <option value="Split Hi-Wall">Split Hi-Wall</option>
+                      <option value="Cassete">Cassete</option>
+                      <option value="Split Piso/Teto">Split Piso/Teto</option>
+                      <option value="Duto">Duto</option>
+                      <option value="Multi Split / VRF">Multi Split / VRF</option>
+                      <option value="Janela">Janela</option>
+                      <option value="Portátil">Portátil</option>
+                      <option value="Exaustor">Exaustor</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </label>
+                  <label>Marca
+                    <input type="text" id="eqMarca" list="eqMarcaOpcoes" placeholder="Ex: Midea">
+                    <datalist id="eqMarcaOpcoes">
+                      <option value="Midea"><option value="LG"><option value="Hitachi">
+                      <option value="Springer"><option value="Carrier"><option value="TCL">
+                      <option value="Elgin"><option value="Komeco"><option value="Gree">
+                      <option value="Daikin"><option value="Fujitsu"><option value="Electrolux">
+                      <option value="Agratto"><option value="York">
+                    </datalist>
+                  </label>
+                  <label>Modelo<input type="text" id="eqModelo" placeholder="Ex: MSS-12CR"></label>
+                  <label>Capacidade
+                    <input type="text" id="eqCapacidade" list="eqCapacidadeOpcoes" placeholder="Ex: 12000 BTU/h">
+                    <datalist id="eqCapacidadeOpcoes">
+                      <option value="7000 BTU/h"><option value="9000 BTU/h"><option value="12000 BTU/h">
+                      <option value="18000 BTU/h"><option value="22000 BTU/h"><option value="24000 BTU/h">
+                      <option value="30000 BTU/h"><option value="36000 BTU/h"><option value="48000 BTU/h">
+                      <option value="60000 BTU/h">
+                    </datalist>
+                  </label>
                   <label>Tipo de gás
                     <select id="eqTipoGas">
                       <option value="">Não informado</option>
@@ -986,7 +1021,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=149"></script>
+<script type="module" src="app.js?v=150"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

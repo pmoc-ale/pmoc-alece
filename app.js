@@ -857,6 +857,7 @@ function prepararCadastroDoChamado(c) {
   const painel = $("#painelCadastrarEquipamento");
   if (painel) painel.open = true;
   if ($("#eqPatrimonio")) $("#eqPatrimonio").value = c.tombo || c.tag || "";
+  if ($("#eqTag")) $("#eqTag").value = c.tag || "";
 
   const anexoNormalizado = normalizarTexto(c.anexo);
   const predioCorrespondente = ESTADO.configSite.predios.find((p) => {
@@ -6588,8 +6589,13 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
 
 async function adicionarEquipamentoManual() {
   const patrimonio = $("#eqPatrimonio").value.trim();
+  const tag = $("#eqTag")?.value.trim() || "";
   const setor = $("#eqSetor").value.trim();
   const ambiente = $("#eqAmbiente").value.trim();
+  const tipo = normalizarTipoEquipamento($("#eqTipo")?.value || "");
+  const marca = $("#eqMarca")?.value.trim() || "";
+  const modelo = $("#eqModelo")?.value.trim() || "";
+  const capacidade = $("#eqCapacidade")?.value.trim() || "";
   const tipoGas = $("#eqTipoGas")?.value || "";
   const observacao = $("#eqObservacao")?.value.trim() || "";
   const arquivoFoto = $("#eqFotoInput")?.files?.[0] || null;
@@ -6628,7 +6634,7 @@ async function adicionarEquipamentoManual() {
     // reagendarTudo() não recalcula quem não está pendente).
     const podeReagendar = localMudou && itemOriginal.statusPreventiva === "Pendente";
     try {
-      const camposAtualizados = { patrimonio, setor, ambiente, local, setorPCM, prioridadeSetor, pisoPCM, tipoGas, observacao };
+      const camposAtualizados = { patrimonio, tag, setor, ambiente, local, setorPCM, prioridadeSetor, pisoPCM, tipo, marca, modelo, capacidade, tipoGas, observacao };
       if (arquivoFoto) {
         toast("Enviando foto...");
         // Aqui (edição de cadastro) ainda usa a versão que falha na hora
@@ -6693,7 +6699,7 @@ async function adicionarEquipamentoManual() {
     }
 
     const item = {
-      id, patrimonio, setor, ambiente,
+      id, patrimonio, tag, setor, ambiente,
       local,
       statusCondicao: "",
       setorPCM,
@@ -6701,6 +6707,7 @@ async function adicionarEquipamentoManual() {
       pisoPCM,
       statusPreventiva: "Pendente",
       observacao,
+      tipo, marca, modelo, capacidade,
       tipoGas,
       origem: "manual",
       ordemExecucao,
@@ -6734,6 +6741,11 @@ async function adicionarEquipamentoManual() {
   $("#eqPatrimonio").value = "";
   $("#eqSetor").value = "";
   $("#eqAmbiente").value = "";
+  if ($("#eqTag")) $("#eqTag").value = "";
+  if ($("#eqTipo")) $("#eqTipo").value = "";
+  if ($("#eqMarca")) $("#eqMarca").value = "";
+  if ($("#eqModelo")) $("#eqModelo").value = "";
+  if ($("#eqCapacidade")) $("#eqCapacidade").value = "";
   if ($("#eqTipoGas")) $("#eqTipoGas").value = "";
   if ($("#eqObservacao")) $("#eqObservacao").value = "";
   if ($("#eqFotoInput")) $("#eqFotoInput").value = "";
