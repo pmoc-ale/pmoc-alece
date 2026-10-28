@@ -4999,7 +4999,7 @@ function construirCelulaDia(iso, hojeISO, porData, datasVazias) {
       badge.className = "cal-day-badge " + classe + (ESTADO.localFiltro === "Todos" ? "" : " badge-empilhado");
       badge.innerHTML = ESTADO.localFiltro === "Todos"
         ? `<span class="badge-predio">${escapeHtml(predio)}</span><span class="badge-contagem">${itensPredio.length} ${ROTULOS_STATUS[classe]}</span>`
-        : itensPredio.map((i) => `<div class="badge-maquina-linha">${escapeHtml(i.patrimonio || i.ambiente)}</div>`).join("");
+        : itensPredio.map((i) => `<div class="badge-maquina-linha">${escapeHtml(i.ambiente || i.patrimonio)}</div>`).join("");
       badge.addEventListener("mouseenter", (e) => mostrarTooltipCalendario(e.currentTarget, predio, itensPredio));
       badge.addEventListener("mouseleave", ocultarTooltipCalendario);
       badge.addEventListener("click", (e) => {
@@ -5094,7 +5094,7 @@ function mostrarTooltipCalendario(elemento, predio, itens) {
     document.body.appendChild(tip);
   }
   const preview = itens.slice(0, 3)
-    .map((i) => `<div>${escapeHtml(i.patrimonio || i.ambiente)}</div>`)
+    .map((i) => `<div>${escapeHtml(i.ambiente || i.patrimonio)}</div>`)
     .join("");
   const resto = itens.length > 3 ? `<div class="cal-badge-tooltip-mais">+${itens.length - 3} mais</div>` : "";
   tip.innerHTML = `<strong>${escapeHtml(predio)}</strong>${preview}${resto}`;
