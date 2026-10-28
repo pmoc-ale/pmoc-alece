@@ -4936,6 +4936,16 @@ function renderDowHeader(grid) {
   });
 }
 
+// "Setor > Ambiente" pra identificar o item no calendário com mais
+// contexto do que só o nome solto do ambiente (ex: várias salas com o
+// mesmo nome -- "Sala A" -- em setores diferentes ficavam indistinguíveis).
+function descricaoLocalItem(item) {
+  const setor = (item.setor || "").trim();
+  const ambiente = (item.ambiente || "").trim();
+  if (setor && ambiente && setor !== ambiente) return `${setor} > ${ambiente}`;
+  return ambiente || setor || item.patrimonio || "";
+}
+
 // Monta a célula de um dia (número, marcador de feriado/sem-agenda,
 // etiquetas de status por prédio) -- usado tanto no grid do mês quanto
 // no da semana, já que são a mesma célula, só que em quantidades diferentes.
@@ -4999,7 +5009,7 @@ function construirCelulaDia(iso, hojeISO, porData, datasVazias) {
       badge.className = "cal-day-badge " + classe + (ESTADO.localFiltro === "Todos" ? "" : " badge-empilhado");
       badge.innerHTML = ESTADO.localFiltro === "Todos"
         ? `<span class="badge-predio">${escapeHtml(predio)}</span><span class="badge-contagem">${itensPredio.length} ${ROTULOS_STATUS[classe]}</span>`
-        : itensPredio.map((i) => `<div class="badge-maquina-linha">${escapeHtml(i.ambiente || i.patrimonio)}</div>`).join("");
+        : itensPredio.map((i) => `<div class="badge-maquina-linha">${escapeHtml(descricaoLocalItem(i))}</div>`).join("");
       badge.addEventListener("mouseenter", (e) => mostrarTooltipCalendario(e.currentTarget, predio, itensPredio));
       badge.addEventListener("mouseleave", ocultarTooltipCalendario);
       badge.addEventListener("click", (e) => {
@@ -5094,7 +5104,7 @@ function mostrarTooltipCalendario(elemento, predio, itens) {
     document.body.appendChild(tip);
   }
   const preview = itens.slice(0, 3)
-    .map((i) => `<div>${escapeHtml(i.ambiente || i.patrimonio)}</div>`)
+    .map((i) => `<div>${escapeHtml(descricaoLocalItem(i))}</div>`)
     .join("");
   const resto = itens.length > 3 ? `<div class="cal-badge-tooltip-mais">+${itens.length - 3} mais</div>` : "";
   tip.innerHTML = `<strong>${escapeHtml(predio)}</strong>${preview}${resto}`;
