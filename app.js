@@ -71,6 +71,13 @@ const CAPACIDADES_CONDENSADORA = [
 const ESPESSURAS_FIO = ["2.5mm", "4mm", "6mm"];
 const MODELOS_EVAPORADORA = ["Split Hi-Wall", "Split Inverter", "Cassete", "Piso-Teto"];
 const GASES_REFRIGERANTES = ["R22", "R410A", "R32", "R404A", "R134a"];
+// Mesmas opções do formulário de cadastro manual (ver index.html,
+// #eqTipo/#eqMarca/#eqCapacidade) -- aqui também pro "Editar cadastro"
+// do drawer, pra não ter que digitar de novo quando corrige um item já
+// existente.
+const TIPOS_EQUIPAMENTO = ["Split Hi-Wall", "Cassete", "Split Piso/Teto", "Duto", "Multi Split / VRF", "Janela", "Portátil", "Exaustor"];
+const MARCAS_COMUNS = ["Midea", "LG", "Hitachi", "Springer", "Carrier", "TCL", "Elgin", "Komeco", "Gree", "Daikin", "Fujitsu", "Electrolux", "Agratto", "York"];
+const CAPACIDADES_COMUNS = ["7000 BTU/h", "9000 BTU/h", "12000 BTU/h", "18000 BTU/h", "22000 BTU/h", "24000 BTU/h", "30000 BTU/h", "36000 BTU/h", "48000 BTU/h", "60000 BTU/h"];
 const MESES_CICLO = 4;
 
 async function calcularProximaData(item) {
@@ -9995,9 +10002,20 @@ async function abrirDrawerEquipamento(id) {
             `<option value="${escapeHtml(l)}" ${(item.local || ESTADO.configSite.predios[0]) === l ? "selected" : ""}>${escapeHtml(l)}</option>`).join("")}
         </select>
       </label>`}
-      <label>Marca<input type="text" id="drawerMarca" value="${escapeHtml(item.marca || "")}" placeholder="Vem da planilha, se tiver"></label>
+      <label>Tipo
+        <select id="drawerTipo">
+          <option value="">Não informado</option>
+          ${TIPOS_EQUIPAMENTO.map((t) => `<option value="${t}" ${item.tipo === t ? "selected" : ""}>${t}</option>`).join("")}
+          <option value="Outro" ${item.tipo && !TIPOS_EQUIPAMENTO.includes(item.tipo) ? "selected" : ""}>Outro</option>
+        </select>
+      </label>
+      <label>Marca<input type="text" id="drawerMarca" value="${escapeHtml(item.marca || "")}" list="drawerMarcaOpcoes" placeholder="Vem da planilha, se tiver">
+        <datalist id="drawerMarcaOpcoes">${MARCAS_COMUNS.map((m) => `<option value="${m}">`).join("")}</datalist>
+      </label>
       <label>Modelo<input type="text" id="drawerModelo" value="${escapeHtml(item.modelo || "")}" placeholder="Vem da planilha, se tiver"></label>
-      <label>Capacidade<input type="text" id="drawerCapacidade" value="${escapeHtml(item.capacidade || "")}" placeholder="Vem da planilha, se tiver"></label>
+      <label>Capacidade<input type="text" id="drawerCapacidade" value="${escapeHtml(item.capacidade || "")}" list="drawerCapacidadeOpcoes" placeholder="Vem da planilha, se tiver">
+        <datalist id="drawerCapacidadeOpcoes">${CAPACIDADES_COMUNS.map((c) => `<option value="${c}">`).join("")}</datalist>
+      </label>
       <label>Tipo de gás
         <select id="drawerTipoGas">
           <option value="">Não informado</option>
@@ -10037,6 +10055,7 @@ async function abrirDrawerEquipamento(id) {
   $("#drawerSalvarCadastro").addEventListener("click", async () => {
     const patrimonio = $("#drawerPatrimonio").value.trim();
     const tag = $("#drawerTag")?.value.trim() || "";
+    const tipo = normalizarTipoEquipamento($("#drawerTipo")?.value || "");
     const marca = $("#drawerMarca").value.trim();
     const modelo = $("#drawerModelo").value.trim();
     const capacidade = $("#drawerCapacidade").value.trim();
@@ -10061,7 +10080,7 @@ async function abrirDrawerEquipamento(id) {
       const setorPCM = identificarSetor(item.setor, ambiente);
       try {
         await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
-          patrimonio, tag, marca, modelo, capacidade, tipoGas, ambiente, observacao,
+          patrimonio, tag, tipo, marca, modelo, capacidade, tipoGas, ambiente, observacao,
           setorPCM, prioridadeSetor: PRIORIDADE[setorPCM] || 7,
         });
         await registrarHistorico(
@@ -10087,7 +10106,7 @@ async function abrirDrawerEquipamento(id) {
     const setorPCM = identificarSetor(setor, ambiente);
     try {
       await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), {
-        patrimonio, tag, setor, ambiente, local, setorPCM, marca, modelo, capacidade, tipoGas, observacao, codigoPlanta,
+        patrimonio, tag, tipo, setor, ambiente, local, setorPCM, marca, modelo, capacidade, tipoGas, observacao, codigoPlanta,
         prioridadeSetor: PRIORIDADE[setorPCM] || 7,
         pisoPCM: descobrirPiso(setor),
       });
