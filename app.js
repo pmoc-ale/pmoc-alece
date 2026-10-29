@@ -11978,7 +11978,7 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
   const file = $("#agGlpiInput").files?.[0];
   if (!file) return;
   $("#agGlpiNome").textContent = file.name;
-  $("#agStatusImportacao").textContent = "Lendo o CSV...";
+  $("#agResumoImportacao").textContent = "Lendo o CSV...";
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let texto = new TextDecoder("utf-8").decode(bytes);
@@ -11999,7 +11999,7 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
   } catch (err) {
     console.error(err);
     toast("Erro ao importar o CSV: " + err.message);
-    $("#agStatusImportacao").textContent = "Erro: " + err.message;
+    $("#agResumoImportacao").textContent = "Erro: " + err.message;
   }
 });
 
@@ -12016,7 +12016,7 @@ async function agAtualizarStatusImportacao() {
   partes.push(ESTADO.chamadosCorretivosCarregadosEm
     ? `Equipe de campo: sincronizado automaticamente às ${new Date(ESTADO.chamadosCorretivosCarregadosEm).toLocaleTimeString("pt-BR")} (${(ESTADO.chamadosCorretivos || []).length} registros)`
     : "Equipe de campo: aguardando sincronização automática...");
-  $("#agStatusImportacao").textContent = partes.join(" · ");
+  $("#agResumoImportacao").textContent = partes.join(" · ");
 }
 
 // --- 4) Helpers de gráfico (SVG montado na hora, mesma técnica do resto do app) ---
@@ -12430,7 +12430,7 @@ function agPopularFiltros() {
 
 async function renderAnaliseGlpi() {
   const souAdminLocal = ESTADO.permissao === "admin";
-  $("#agCardImportar").hidden = !souAdminLocal;
+  $("#agDetailsImportar").hidden = !souAdminLocal;
   agInicializarControles();
   if (souAdminLocal) agAtualizarStatusImportacao();
 

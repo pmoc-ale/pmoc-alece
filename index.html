@@ -445,28 +445,6 @@
 
     <!-- VIEW: ANÁLISE GLPI -->
     <section class="view" id="view-analiseglpi">
-      <div class="card" id="agCardImportar">
-        <div class="card-head" style="align-items: center;">
-          <p class="muted" id="agStatusImportacao" style="margin:0"></p>
-          <details class="info-popover">
-            <summary title="Importar dados" aria-label="Importar dados">⋯</summary>
-            <div class="info-popover-painel info-popover-painel-formulario">
-              <h2 style="margin-bottom:2px">Importar dados</h2>
-              <p class="muted">Exporte do GLPI (chamados, .csv) e suba aqui pra atualizar as 3 primeiras páginas. Fica salvo pra todo mundo ver, até a próxima importação. A página "Equipe de campo" não precisa de upload -- já sincroniza sozinha com a mesma planilha de corretivos usada no resto do sistema.</p>
-              <div class="grid-form">
-                <label>Chamados do GLPI (.csv)
-                  <span class="file-picker">
-                    <input type="file" accept=".csv" id="agGlpiInput" hidden>
-                    <button type="button" class="btn secondary" id="agBtnGlpiEscolher">Escolher arquivo</button>
-                    <span class="file-picker-nome" id="agGlpiNome">Nenhum selecionado</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-          </details>
-        </div>
-      </div>
-
       <div id="agConteudo" hidden>
         <div class="tabs" id="agAbas" style="margin-bottom:14px">
           <button class="btn-modo active" data-ag-pagina="visaoGeral">Visão geral</button>
@@ -580,6 +558,22 @@
           </div>
         </div>
       </div>
+
+      <details class="ciclos-discreto" id="agDetailsImportar" style="margin-top:16px">
+        <summary id="agResumoImportacao">Importar dados</summary>
+        <div class="card" style="margin-top:10px">
+          <p class="muted">Exporte do GLPI (chamados, .csv) e suba aqui pra atualizar as 3 primeiras páginas. Fica salvo pra todo mundo ver, até a próxima importação. A página "Equipe de campo" não precisa de upload -- já sincroniza sozinha com a mesma planilha de corretivos usada no resto do sistema.</p>
+          <div class="grid-form">
+            <label>Chamados do GLPI (.csv)
+              <span class="file-picker">
+                <input type="file" accept=".csv" id="agGlpiInput" hidden>
+                <button type="button" class="btn secondary" id="agBtnGlpiEscolher">Escolher arquivo</button>
+                <span class="file-picker-nome" id="agGlpiNome">Nenhum selecionado</span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </details>
     </section>
 
     <!-- VIEW 8: EQUIPAMENTOS -->
