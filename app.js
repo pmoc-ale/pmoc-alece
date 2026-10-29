@@ -11986,8 +11986,11 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
     let texto = new TextDecoder("utf-8").decode(bytes);
     if (texto.includes("�")) texto = new TextDecoder("windows-1252").decode(bytes);
     const { campos, registros } = processarCsvGlpi(texto);
+    // Firestore não aceita array-dentro-de-array (cada linha de "registros"
+    // é um array) -- guarda como texto JSON em vez de tentar gravar o
+    // array de arrays direto num campo.
     await setDoc(doc(db, "analiseGlpi", "glpi"), {
-      campos, registros,
+      campos, registrosJson: JSON.stringify(registros),
       atualizadoEm: new Date().toISOString(),
       atualizadoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
     });
@@ -12036,7 +12039,8 @@ async function agAtualizarStatusImportacao() {
     ]);
     if (snapGlpi.exists()) {
       const d = snapGlpi.data();
-      partes.push(`GLPI: ${d.registros.length} chamados, importado em ${new Date(d.atualizadoEm).toLocaleString("pt-BR")} por ${escapeHtml(d.atualizadoPor)}`);
+      const qtd = d.registrosJson ? JSON.parse(d.registrosJson).length : 0;
+      partes.push(`GLPI: ${qtd} chamados, importado em ${new Date(d.atualizadoEm).toLocaleString("pt-BR")} por ${escapeHtml(d.atualizadoPor)}`);
     }
     if (snapCampo.exists()) {
       const d = snapCampo.data();
@@ -12466,7 +12470,9 @@ async function renderAnaliseGlpi() {
       getDoc(doc(db, "analiseGlpi", "glpi")),
       getDoc(doc(db, "analiseGlpi", "campo")),
     ]);
-    ESTADO.analiseGlpi = snapGlpi.exists() ? { campos: snapGlpi.data().campos, registros: snapGlpi.data().registros } : { campos: [], registros: [] };
+    ESTADO.analiseGlpi = snapGlpi.exists()
+      ? { campos: snapGlpi.data().campos, registros: JSON.parse(snapGlpi.data().registrosJson || "[]") }
+      : { campos: [], registros: [] };
     ESTADO.analiseCampo = snapCampo.exists() ? snapCampo.data() : null;
   } catch (err) {
     console.error(err);
