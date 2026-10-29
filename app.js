@@ -171,13 +171,24 @@ async function hashRespostaSeguranca(resposta) {
 // GPS, a pessoa nega a permissão, ou demora demais, segue sem coordenada
 // em vez de travar o envio da foto por causa disso (só a data/hora nunca
 // falha, essa vem do relógio do aparelho mesmo).
+//
+// Cacheada por 2 minutos: sem isso, CADA foto (e numa ronda de preventivas
+// são dezenas ao longo do dia) pagava os até 4s inteiros de tentativa de
+// GPS de novo -- prédio fechado quase sempre estoura o prazo, então essa
+// espera repetida era boa parte do "demora muito" sentido na prática. Foto
+// tirada minutos depois, na sala vizinha, não precisa de um fix novo.
+let _localizacaoCache = null; // { valor, ts }
 function obterLocalizacaoAtual(timeoutMs = 4000) {
+  if (_localizacaoCache && Date.now() - _localizacaoCache.ts < 120000) {
+    return Promise.resolve(_localizacaoCache.valor);
+  }
   return new Promise((resolve) => {
-    if (!navigator.geolocation) { resolve(null); return; }
-    const cronometro = setTimeout(() => resolve(null), timeoutMs);
+    const guardarEResolver = (valor) => { _localizacaoCache = { valor, ts: Date.now() }; resolve(valor); };
+    if (!navigator.geolocation) { guardarEResolver(null); return; }
+    const cronometro = setTimeout(() => guardarEResolver(null), timeoutMs);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { clearTimeout(cronometro); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
-      () => { clearTimeout(cronometro); resolve(null); },
+      (pos) => { clearTimeout(cronometro); guardarEResolver({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      () => { clearTimeout(cronometro); guardarEResolver(null); },
       { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 60000 }
     );
   });
@@ -209,11 +220,15 @@ function carimbarDataHoraLocal(ctx, largura, altura, localizacao) {
 // foto de celular (4-8MB) come a cota gratuita rapidinho. Também carimba
 // data/hora (e localização, se der) direto na imagem.
 async function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
-  const localizacao = await obterLocalizacaoAtual();
+  // Não espera a localização pra começar -- ela roda em paralelo com o
+  // carregamento/desenho da imagem (que é rápido) e só é aguardada bem no
+  // fim, na hora de carimbar; assim a espera de GPS some atrás do trabalho
+  // que já ia acontecer de qualquer jeito, em vez de ficar na frente dele.
+  const promessaLocalizacao = obterLocalizacaoAtual();
   return new Promise((resolve, reject) => {
     const imagem = new Image();
     const urlTemp = URL.createObjectURL(file);
-    imagem.onload = () => {
+    imagem.onload = async () => {
       const escala = Math.min(1, larguraMax / imagem.width);
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(imagem.width * escala);
@@ -221,6 +236,7 @@ async function comprimirImagem(file, larguraMax = 1280, qualidade = 0.75) {
       const ctx = canvas.getContext("2d");
       ctx.drawImage(imagem, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(urlTemp);
+      const localizacao = await promessaLocalizacao;
       carimbarDataHoraLocal(ctx, canvas.width, canvas.height, localizacao);
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error("Falha ao comprimir a imagem."))),
