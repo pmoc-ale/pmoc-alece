@@ -3374,7 +3374,7 @@ body.modo-trabalhador .status-select {
 #view-analiseglpi .kpi-card .sublabel { font-size: 11px; margin-top: 2px; }
 
 #view-analiseglpi .tabs { margin-bottom: 10px !important; }
-#view-analiseglpi .btn-modo { padding: 6px 12px; font-size: 12.5px; }
+#view-analiseglpi .btn-modo { padding: 8px 16px; font-size: 14.5px; }
 
 #view-analiseglpi #agBarraFiltros { padding: 8px 12px; margin: 0 0 10px !important; }
 #view-analiseglpi #agBarraFiltros label { font-size: 10.5px; }
