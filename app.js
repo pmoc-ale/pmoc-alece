@@ -630,7 +630,7 @@ const INTERVALO_ATUALIZACAO_CORRETIVOS_MS = 5 * 60 * 1000;
 const COL_CORRETIVA = {
   DATA: 0, EQUIPE: 1, CHAMADO: 2, ANEXO: 4,
   GABINETE: 6, SALA: 7, NOME_SETOR: 8, SALA_SETOR: 9,
-  TOMBO: 12, TAG: 13,
+  MARCA: 10, TOMBO: 12, TAG: 13, AVALIACAO_EVAPORADORA: 16, // ver "Análise GLPI" (agRenderEquipe)
   SEDE: 23, ANEXO1: 24, ANEXO2: 25, ANEXO3: 26, ANEXO4: 27,
   SOLUCIONADO: 28, DESCRICAO_PROBLEMA: 29, PECA_FALTANTE: 30,
 };
@@ -734,6 +734,8 @@ async function carregarChamadosCorretivos(forcar) {
         localAdicional,
         tombo: String(linha[COL_CORRETIVA.TOMBO] || "").trim(),
         tag: String(linha[COL_CORRETIVA.TAG] || "").trim(),
+        marca: String(linha[COL_CORRETIVA.MARCA] || "").trim(),
+        avaliacaoEvaporadora: parseFloat(String(linha[COL_CORRETIVA.AVALIACAO_EVAPORADORA] || "").replace(",", ".")) || null,
         solucionado: linha[COL_CORRETIVA.SOLUCIONADO] || "",
         descricaoProblema: linha[COL_CORRETIVA.DESCRICAO_PROBLEMA] || "",
         pecaFaltante: linha[COL_CORRETIVA.PECA_FALTANTE] || "",
@@ -11826,7 +11828,6 @@ $("#btnLimparSelecaoHistorico")?.addEventListener("click", () => {
 // ====================================================================
 
 ESTADO.analiseGlpi = { registros: [], campos: [] }; // linha a linha, pras 3 primeiras páginas (com filtro)
-ESTADO.analiseCampo = null; // já agregado, pra página "Equipe de campo" (sem filtro)
 let _agJaInicializado = false;
 let _agPaginaAtualTabela = 1;
 let _agOrdenacaoTabela = { campo: "data", direcao: "desc" };
@@ -11911,25 +11912,27 @@ function processarCsvGlpi(texto) {
   return { campos: ["id", "titulo", "falha", "setor", "data", "status", "prioridade", "grupo"], registros };
 }
 
-// --- 2) Planilha de campo (.xlsx "Ordem de Serviço") -- já sai agregada ---
-function processarXlsxCampo(workbook) {
-  const sheet = workbook.Sheets["Ordem de Serviço"] || workbook.Sheets[workbook.SheetNames[0]];
-  if (!sheet) throw new Error("Não achei a aba 'Ordem de Serviço' nessa planilha.");
-  const linhas = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: true });
-
+// --- 2) Equipe de campo -- NÃO é upload manual: o sistema já sincroniza
+// sozinho a planilha de chamados corretivos (ver carregarChamadosCorretivos,
+// mesma fonte usada pra vincular chamado a equipamento no drawer), que é a
+// própria planilha de Ordem de Serviço de campo, só publicada como CSV e
+// atualizada a cada 5min. Reaproveita ESTADO.chamadosCorretivos em vez de
+// pedir upload de novo pra um dado que o sistema já tem ao vivo.
+function agCalcularResumoCampo() {
+  const itens = ESTADO.chamadosCorretivos || [];
   const pessoaMap = new Map(), predioMap = new Map(), marcaMap = new Map();
   const avalMarca = new Map(), avalPredio = new Map();
   const naoSolucionados = [];
-  let sim = 0, nao = 0;
+  let sim = 0, nao = 0, total = 0;
 
-  linhas.forEach((row) => {
-    const equipe = String(row["Selecione sua equipe:"] || "").trim();
-    const predio = String(row["Anexo:"] || "").trim();
-    const marca = String(row["Marca da Evaporadora:"] || "").trim().toUpperCase();
-    const aval = row["Avaliação do Funcionamento da Evaporadora:"];
-    const solucionado = String(row["Problema solucionado?"] || "").trim();
-
-    if (!equipe && !predio) return; // linha em branco
+  itens.forEach((item) => {
+    const equipe = item.equipe || "";
+    const predio = item.anexo || "";
+    const marca = (item.marca || "").toUpperCase();
+    const aval = item.avaliacaoEvaporadora;
+    const solucionado = (item.solucionado || "").trim();
+    if (!equipe && !predio) return;
+    total++;
 
     if (predio) predioMap.set(predio, (predioMap.get(predio) || 0) + 1);
     if (marca && !["", ".", "****", "NONE"].includes(marca)) {
@@ -11946,13 +11949,10 @@ function processarXlsxCampo(workbook) {
     if (solucionado === "Sim") sim++;
     else if (solucionado === "Não") {
       nao++;
-      let dataTxt = "";
-      const d = row["Coluna 1"];
-      if (d instanceof Date) dataTxt = d.toLocaleDateString("pt-BR");
       naoSolucionados.push({
-        data: dataTxt, predio,
-        local: [row["Nome do Setor:"], row["Sala do Setor:"]].filter(Boolean).join(" / "),
-        problema: String(row["Descreva o problema do chamado?"] || "").trim(),
+        data: item.dataFormatada || "", predio,
+        local: [item.nomeSetor, item.salaSetor].filter(Boolean).join(" / "),
+        problema: item.descricaoProblema || "",
       });
     }
   });
@@ -11961,8 +11961,7 @@ function processarXlsxCampo(workbook) {
   const paraLista = (mapa) => [...mapa.entries()].sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor }));
 
   return {
-    total: linhas.filter((r) => String(r["Selecione sua equipe:"] || "").trim() || String(r["Anexo:"] || "").trim()).length,
-    sim, nao,
+    total, sim, nao,
     porPessoa: paraLista(pessoaMap).slice(0, 15),
     porPredio: paraLista(predioMap),
     porMarca: paraLista(marcaMap).slice(0, 8),
@@ -11972,9 +11971,8 @@ function processarXlsxCampo(workbook) {
   };
 }
 
-// --- 3) Upload: botões + leitura dos arquivos ---
+// --- 3) Upload: só o CSV do GLPI (chamados) -- sem fonte automática hoje ---
 $("#agBtnGlpiEscolher")?.addEventListener("click", () => $("#agGlpiInput").click());
-$("#agBtnCampoEscolher")?.addEventListener("click", () => $("#agCampoInput").click());
 
 $("#agGlpiInput")?.addEventListener("change", async () => {
   const file = $("#agGlpiInput").files?.[0];
@@ -12005,49 +12003,20 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
   }
 });
 
-$("#agCampoInput")?.addEventListener("change", async () => {
-  const file = $("#agCampoInput").files?.[0];
-  if (!file) return;
-  $("#agCampoNome").textContent = file.name;
-  $("#agStatusImportacao").textContent = "Lendo a planilha...";
-  try {
-    const data = new Uint8Array(await file.arrayBuffer());
-    const wb = XLSX.read(data, { type: "array", cellDates: true });
-    const resumo = processarXlsxCampo(wb);
-    await setDoc(doc(db, "analiseGlpi", "campo"), {
-      ...resumo,
-      atualizadoEm: new Date().toISOString(),
-      atualizadoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
-    });
-    ESTADO.analiseCampo = resumo;
-    toast(`${resumo.total} ordens de serviço importadas.`);
-    agRenderTudo();
-    agAtualizarStatusImportacao();
-  } catch (err) {
-    console.error(err);
-    toast("Erro ao importar a planilha: " + err.message);
-    $("#agStatusImportacao").textContent = "Erro: " + err.message;
-  }
-});
-
 async function agAtualizarStatusImportacao() {
   const partes = [];
   try {
-    const [snapGlpi, snapCampo] = await Promise.all([
-      getDoc(doc(db, "analiseGlpi", "glpi")),
-      getDoc(doc(db, "analiseGlpi", "campo")),
-    ]);
+    const snapGlpi = await getDoc(doc(db, "analiseGlpi", "glpi"));
     if (snapGlpi.exists()) {
       const d = snapGlpi.data();
       const qtd = d.registrosJson ? JSON.parse(d.registrosJson).length : 0;
       partes.push(`GLPI: ${qtd} chamados, importado em ${new Date(d.atualizadoEm).toLocaleString("pt-BR")} por ${escapeHtml(d.atualizadoPor)}`);
     }
-    if (snapCampo.exists()) {
-      const d = snapCampo.data();
-      partes.push(`Campo: ${d.total} ordens, importado em ${new Date(d.atualizadoEm).toLocaleString("pt-BR")} por ${escapeHtml(d.atualizadoPor)}`);
-    }
   } catch (err) { console.error(err); }
-  $("#agStatusImportacao").textContent = partes.length ? partes.join(" · ") : "Nenhum dado importado ainda.";
+  partes.push(ESTADO.chamadosCorretivosCarregadosEm
+    ? `Equipe de campo: sincronizado automaticamente às ${new Date(ESTADO.chamadosCorretivosCarregadosEm).toLocaleTimeString("pt-BR")} (${(ESTADO.chamadosCorretivos || []).length} registros)`
+    : "Equipe de campo: aguardando sincronização automática...");
+  $("#agStatusImportacao").textContent = partes.join(" · ");
 }
 
 // --- 4) Helpers de gráfico (SVG montado na hora, mesma técnica do resto do app) ---
@@ -12365,8 +12334,8 @@ function agRenderTabela(filtrados) {
 }
 
 function agRenderEquipe() {
-  const d = ESTADO.analiseCampo;
-  if (!d) { $("#agPagina-equipe").innerHTML = '<p class="muted">Importe a planilha de Ordem de Serviço de campo pra ver essa página.</p>'; return; }
+  const d = agCalcularResumoCampo();
+  if (!d.total) { $("#agKpisEquipe").innerHTML = '<p class="muted">Ainda sem dados sincronizados da planilha de corretivos.</p>'; return; }
   const kpis = $("#agKpisEquipe"); kpis.innerHTML = "";
   const taxa = d.sim + d.nao ? ((d.sim / (d.sim + d.nao)) * 100).toFixed(1) : "0";
   [
@@ -12466,20 +12435,19 @@ async function renderAnaliseGlpi() {
   if (souAdminLocal) agAtualizarStatusImportacao();
 
   try {
-    const [snapGlpi, snapCampo] = await Promise.all([
-      getDoc(doc(db, "analiseGlpi", "glpi")),
-      getDoc(doc(db, "analiseGlpi", "campo")),
-    ]);
+    const snapGlpi = await getDoc(doc(db, "analiseGlpi", "glpi"));
     ESTADO.analiseGlpi = snapGlpi.exists()
       ? { campos: snapGlpi.data().campos, registros: JSON.parse(snapGlpi.data().registrosJson || "[]") }
       : { campos: [], registros: [] };
-    ESTADO.analiseCampo = snapCampo.exists() ? snapCampo.data() : null;
   } catch (err) {
     console.error(err);
     toast("Erro ao carregar o painel: " + err.message);
   }
 
-  const temDados = ESTADO.analiseGlpi.registros.length > 0 || ESTADO.analiseCampo;
+  // "Equipe de campo" não depende de upload -- sempre que o sistema já
+  // tiver sincronizado a planilha de corretivos (ver carregarChamadosCorretivos,
+  // roda sozinho desde o login), essa página já tem dado pra mostrar.
+  const temDados = ESTADO.analiseGlpi.registros.length > 0 || (ESTADO.chamadosCorretivos || []).length > 0;
   $("#agConteudo").hidden = !temDados;
   if (!temDados) return;
 

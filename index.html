@@ -449,20 +449,13 @@
         <div class="card-head">
           <h2>Importar dados</h2>
         </div>
-        <p class="muted">Exporte do GLPI (chamados, .csv) e/ou a planilha manual de Ordem de Serviço de campo (.xlsx), e suba aqui pra atualizar o painel. Fica salvo pra todo mundo ver, até a próxima importação.</p>
+        <p class="muted">Exporte do GLPI (chamados, .csv) e suba aqui pra atualizar as 3 primeiras páginas. Fica salvo pra todo mundo ver, até a próxima importação. A página "Equipe de campo" não precisa de upload -- já sincroniza sozinha com a mesma planilha de corretivos usada no resto do sistema.</p>
         <div class="grid-form">
           <label>Chamados do GLPI (.csv)
             <span class="file-picker">
               <input type="file" accept=".csv" id="agGlpiInput" hidden>
               <button type="button" class="btn secondary" id="agBtnGlpiEscolher">Escolher arquivo</button>
               <span class="file-picker-nome" id="agGlpiNome">Nenhum selecionado</span>
-            </span>
-          </label>
-          <label>Ordem de Serviço de campo (.xlsx)
-            <span class="file-picker">
-              <input type="file" accept=".xlsx" id="agCampoInput" hidden>
-              <button type="button" class="btn secondary" id="agBtnCampoEscolher">Escolher arquivo</button>
-              <span class="file-picker-nome" id="agCampoNome">Nenhum selecionado</span>
             </span>
           </label>
         </div>
@@ -556,7 +549,7 @@
 
         <!-- Página: Equipe de campo -->
         <div class="ag-pagina" id="agPagina-equipe" hidden>
-          <p class="muted">Fonte diferente das outras páginas: planilha manual de Ordem de Serviço da equipe de campo. Não tem chave em comum com o GLPI, por isso não é filtrada pela barra acima.</p>
+          <p class="muted">Fonte diferente das outras páginas: a mesma planilha de chamados corretivos que o sistema já sincroniza sozinho (atualiza a cada 5 min, sem precisar de upload). Não tem chave em comum com o GLPI, por isso não é filtrada pela barra acima.</p>
           <div class="kpi-row" id="agKpisEquipe"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <div class="card">
@@ -1165,7 +1158,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=154"></script>
+<script type="module" src="app.js?v=155"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
