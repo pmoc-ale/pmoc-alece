@@ -12106,7 +12106,12 @@ function agChartLinha(containerId, serie, cor) {
   cont.appendChild(svg);
 }
 
-function agChartBarraEmpilhada(containerId, legendaId, dados, cores) {
+// Cada item de "dados" já chega com a própria cor (d.cor) -- a cor segue a
+// IDENTIDADE da categoria, nunca a posição no array. Antes as cores vinham
+// de um array à parte indexado por posição (cores[i]); se o filtro mudasse
+// e uma categoria sumisse do recorte, as que sobravam podiam trocar de cor
+// (ex: "Em atendimento" apareceria verde numa hora, teal noutra).
+function agChartBarraEmpilhada(containerId, legendaId, dados) {
   const cont = $(`#${containerId}`);
   cont.innerHTML = "";
   const total = dados.reduce((s, d) => s + d.valor, 0);
@@ -12119,7 +12124,7 @@ function agChartBarraEmpilhada(containerId, legendaId, dados, cores) {
   dados.forEach((d, i) => {
     const w = (W * d.valor) / total;
     const larguraReal = Math.max(w - (i < dados.length - 1 ? gap : 0), d.valor > 0 ? 1 : 0);
-    const rect = agSvgEl("rect", { x: xAtual, y: 0, width: larguraReal, height: H, rx: 6, ry: 6, fill: cores[i % cores.length] });
+    const rect = agSvgEl("rect", { x: xAtual, y: 0, width: larguraReal, height: H, rx: 6, ry: 6, fill: d.cor });
     rect.style.cursor = "pointer";
     rect.addEventListener("mouseenter", (e) => agMostrarTooltip(e, d.nome, agFmt(d.valor) + " (" + ((d.valor / total) * 100).toFixed(1) + "%)"));
     rect.addEventListener("mousemove", agPosicionarTooltip);
@@ -12127,10 +12132,10 @@ function agChartBarraEmpilhada(containerId, legendaId, dados, cores) {
     svg.appendChild(rect); xAtual += w;
   });
   cont.appendChild(svg);
-  if (leg) dados.forEach((d, i) => {
+  if (leg) dados.forEach((d) => {
     const pct = ((d.valor / total) * 100).toFixed(1);
     const item = document.createElement("span"); item.className = "ag-legenda-item";
-    item.innerHTML = `<span class="ag-legenda-swatch" style="background:${cores[i % cores.length]}"></span>${escapeHtml(d.nome)} — ${agFmt(d.valor)} (${pct}%)`;
+    item.innerHTML = `<span class="ag-legenda-swatch" style="background:${d.cor}"></span>${escapeHtml(d.nome)} — ${agFmt(d.valor)} (${pct}%)`;
     leg.appendChild(item);
   });
 }
@@ -12211,6 +12216,37 @@ function agIdadeDias(dataIso) {
   return Math.max(0, (Date.now() - new Date(dataIso + "T00:00:00").getTime()) / 86400000);
 }
 
+// Cor fixa por status (nunca por posição no array -- ver agChartBarraEmpilhada)
+// -- os nomes batem com o vocabulário padrão do GLPI em pt-BR. Um status que
+// não está nessa lista (raro, mas o GLPI permite customizar) cai no hash
+// abaixo, que sempre dá a MESMA cor pra aquele nome, em vez de uma cor que
+// muda dependendo do que mais está no recorte filtrado.
+const AG_COR_STATUS = {
+  "Fechado": "var(--verde-700)",
+  "Solucionado": "var(--verde-600)",
+  "Em atendimento (atribuído)": "var(--teal-escuro)",
+  "Em atendimento (planejado)": "var(--teal)",
+  "Pendente": "var(--dourado-escuro)",
+  "Novo": "var(--vermelho)",
+};
+const AG_COR_STATUS_RESERVA = ["var(--verde-700)", "var(--teal-escuro)", "var(--dourado-escuro)", "var(--vermelho)", "var(--verde-600)", "var(--teal)"];
+function agCorStatus(status) {
+  if (AG_COR_STATUS[status]) return AG_COR_STATUS[status];
+  let h = 0; for (let i = 0; i < status.length; i++) h = (h * 31 + status.charCodeAt(i)) >>> 0;
+  return AG_COR_STATUS_RESERVA[h % AG_COR_STATUS_RESERVA.length];
+}
+
+// Prioridade é uma escala ordenada (não um ranking por volume) -- ordenar
+// pela própria escala, não por quantidade, deixa a forma da distribuição
+// visível (ex: "a maioria é Média, quase nada foge disso") em vez de só
+// mostrar "qual tem mais chamado". Nomes cobrem a escala padrão do GLPI;
+// "Critica"/"Crítica" cobre os dois jeitos que já vimos em export real.
+const AG_ORDEM_PRIORIDADE = ["Muito baixa", "Baixa", "Média", "Alta", "Muito alta", "Critica", "Crítica"];
+function agIndicePrioridade(p) {
+  const i = AG_ORDEM_PRIORIDADE.indexOf(p);
+  return i === -1 ? 999 : i;
+}
+
 function agRenderVisaoGeral(filtrados) {
   const CST = 5, CPR = 6;
   const abertos = filtrados.filter((r) => r[CST] !== "Fechado").length;
@@ -12241,11 +12277,13 @@ function agRenderVisaoGeral(filtrados) {
   const porStatus = {}; filtrados.forEach((r) => { porStatus[r[CST]] = (porStatus[r[CST]] || 0) + 1; });
   const ordemStatus = Object.keys(porStatus).sort((a, b) => (a === "Fechado" ? -1 : b === "Fechado" ? 1 : 0));
   agChartBarraEmpilhada("agChartStatus", "agLegendaStatus",
-    ordemStatus.map((s) => ({ nome: s, valor: porStatus[s] })),
-    ["var(--verde-700)", "var(--teal-escuro)", "var(--dourado-escuro)", "var(--vermelho)"]);
+    ordemStatus.map((s) => ({ nome: s, valor: porStatus[s], cor: agCorStatus(s) })));
 
   const porPrio = {}; filtrados.forEach((r) => { porPrio[r[CPR]] = (porPrio[r[CPR]] || 0) + 1; });
-  agChartBarrasH("agChartPrioridade", Object.entries(porPrio).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor })), { cor: "var(--teal-escuro)", padL: 90, W: 440, maxCharsLabel: 12 });
+  const dadosPrio = Object.entries(porPrio)
+    .sort((a, b) => agIndicePrioridade(a[0]) - agIndicePrioridade(b[0]))
+    .map(([nome, valor]) => ({ nome, valor }));
+  agChartBarrasH("agChartPrioridade", dadosPrio, { cor: "var(--teal-escuro)", padL: 90, W: 440, maxCharsLabel: 12 });
 
   const naoMedia = filtrados.filter((r) => r[CPR] !== "Média").length;
   $("#agLeituraVisaoGeral").innerHTML = filtrados.length
