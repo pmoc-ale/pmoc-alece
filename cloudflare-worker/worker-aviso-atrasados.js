@@ -337,13 +337,33 @@ async function rodarAvisoAtrasados(env) {
 }
 
 export default {
-  // Roda sozinho, no horário configurado em Settings > Triggers > Cron Triggers.
+  // Roda sozinho, no horário configurado em Settings > Triggers > Cron Triggers
+  // -- não passa pelo fetch() abaixo, então não precisa da chave.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(rodarAvisoAtrasados(env));
   },
 
-  // Também dá pra rodar manualmente visitando a URL do Worker no navegador.
+  // Também dá pra rodar manualmente visitando a URL do Worker no navegador
+  // -- mas só com a chave certa em ?chave=..., senão qualquer pessoa que
+  // descobrisse essa URL conseguiria disparar envio de e-mail/push pra
+  // todo mundo sem estar logada no sistema. Configure
+  // CHAVE_EXECUCAO_MANUAL em Settings > Variables and Secrets (tipo
+  // Secret) com um valor longo e aleatório -- pode (e deve) ser o MESMO
+  // valor usado no worker-backup.js, pra não precisar inventar dois.
   async fetch(request, env) {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ ok: false, erro: "Método não permitido." }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const chave = new URL(request.url).searchParams.get("chave");
+    if (!env.CHAVE_EXECUCAO_MANUAL || chave !== env.CHAVE_EXECUCAO_MANUAL) {
+      return new Response(JSON.stringify({ ok: false, erro: "Não autorizado. Visite a URL com ?chave=SUA_CHAVE (configurada nas Variables and Secrets do Worker)." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     try {
       const resumo = await rodarAvisoAtrasados(env);
       return new Response(JSON.stringify({ ok: true, ...resumo }, null, 2), {

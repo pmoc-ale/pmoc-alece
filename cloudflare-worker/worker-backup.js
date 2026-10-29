@@ -303,14 +303,33 @@ async function rodarBackup(env) {
 }
 
 export default {
-  // Roda sozinho, no horário configurado em Settings > Triggers > Cron Triggers.
+  // Roda sozinho, no horário configurado em Settings > Triggers > Cron Triggers
+  // -- não passa pelo fetch() abaixo, então não precisa da chave.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(rodarBackup(env));
   },
 
   // Também dá pra rodar manualmente visitando a URL do Worker no navegador
-  // (útil pra testar sem esperar o horário programado).
+  // (útil pra testar sem esperar o horário programado) -- mas só com a
+  // chave certa em ?chave=..., senão qualquer pessoa que descobrisse essa
+  // URL conseguiria disparar o backup (ler o Firestore, escrever na
+  // planilha, baixar fotos) sem estar logada no sistema. Configure
+  // CHAVE_EXECUCAO_MANUAL em Settings > Variables and Secrets (tipo
+  // Secret) com um valor longo e aleatório.
   async fetch(request, env) {
+    if (request.method !== "GET") {
+      return new Response(JSON.stringify({ ok: false, erro: "Método não permitido." }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const chave = new URL(request.url).searchParams.get("chave");
+    if (!env.CHAVE_EXECUCAO_MANUAL || chave !== env.CHAVE_EXECUCAO_MANUAL) {
+      return new Response(JSON.stringify({ ok: false, erro: "Não autorizado. Visite a URL com ?chave=SUA_CHAVE (configurada nas Variables and Secrets do Worker)." }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     try {
       const resumo = await rodarBackup(env);
       return new Response(JSON.stringify({ ok: true, resumo }, null, 2), {

@@ -171,12 +171,23 @@ service cloud.firestore {
 
     // Inscrição de notificação push do navegador (ver ativarNotificacoesPush
     // em app.js) -- um documento por pessoa (id = o próprio uid), só ela
-    // pode criar/atualizar/apagar a própria. [QA-FIX BUG-QA-004] A leitura
-    // em massa (list) usada pelo Worker de avisos de atraso (que loga
-    // como um "trabalhador" comum, não admin) continua igual -- agora
-    // explícita aqui em vez de vir do catch-all genérico.
+    // pode criar/atualizar/apagar a própria. [QA-FIX BUG-QA-004]
+    //
+    // [AUDIT-FIX] A leitura em massa (list), usada pelo Worker de avisos de
+    // atraso pra mandar notificação pra todo mundo, agora exige que a conta
+    // que está lendo seja ADMIN -- antes qualquer pessoa logada (trabalhador
+    // comum incluído) conseguia listar o endpoint/chave de notificação de
+    // todo mundo, que não é senha mas também não precisa ser público pra
+    // outro usuário. Pra isso continuar funcionando: a conta "robô" que o
+    // Worker usa pra logar (ROBO_EMAIL/ROBO_SENHA, ver
+    // cloudflare-worker/worker-aviso-atrasados.js) PRECISA estar cadastrada
+    // em usuarios/{uid} com permissao == "admin" -- confira isso no painel
+    // de Usuários do sistema antes de publicar esta regra, senão os avisos
+    // de atraso param de ser enviados silenciosamente (o Worker não quebra,
+    // só manda 0 notificações, ver o .catch() em
+    // enviarNotificacoesPush()).
     match /pushSubscriptions/{uid} {
-      allow read: if autenticadoENaoBloqueado();
+      allow read: if souAdmin() || (request.auth != null && request.auth.uid == uid);
       allow create, update, delete: if request.auth != null && request.auth.uid == uid;
     }
 
@@ -187,10 +198,30 @@ service cloud.firestore {
     // hasOnly(["nomes"]) trava a escrita só nesse campo, pra um usuário
     // mal-intencionado não poder usar esse documento pra gravar outra
     // coisa qualquer.
+    //
+    // [AUDIT-FIX] app.js só mexe nessa lista via arrayUnion/arrayRemove de
+    // UM nome por vez (ver registrarUsuarioEmUso/removerUsuarioEmUso) --
+    // nunca manda a lista inteira de uma vez. mudancaDeUmNomeSo() usa isso:
+    // só deixa passar um update cuja diferença pro valor antigo seja, no
+    // máximo, 1 nome adicionado e 1 nome removido. Isso fecha a brecha de
+    // alguém mandar uma lista qualquer (apagando/trocando todo mundo) --
+    // antes só o nome do CAMPO era validado, nunca o conteúdo.
+    function mudancaDeUmNomeSo() {
+      let antigo = resource.data.nomes;
+      let novo = request.resource.data.nomes;
+      return novo is list && novo.size() <= 1000
+        && antigo.toSet().difference(novo.toSet()).size() <= 1
+        && novo.toSet().difference(antigo.toSet()).size() <= 1;
+    }
     match /configuracoes/usuariosEmUso {
       allow read: if autenticadoENaoBloqueado();
-      allow write: if autenticadoENaoBloqueado()
-        && request.resource.data.keys().hasOnly(["nomes"]);
+      allow create: if autenticadoENaoBloqueado()
+        && request.resource.data.keys().hasOnly(["nomes"])
+        && request.resource.data.nomes is list
+        && request.resource.data.nomes.size() <= 1;
+      allow update: if autenticadoENaoBloqueado()
+        && request.resource.data.keys().hasOnly(["nomes"])
+        && mudancaDeUmNomeSo();
     }
 
     // A regra genérica (hoje removida, ver bloco final) só deixava ADMIN
@@ -202,9 +233,24 @@ service cloud.firestore {
     // pra admin -- [QA-FIX BUG-QA-004] essa era a SEGUNDA coleção onde o
     // catch-all genérico anulava a restrição de leitura (só admin lê);
     // sem um catch-all genérico, essa restrição agora vale de verdade.
+    //
+    // [AUDIT-FIX] A criação continua aberta pra qualquer um (precisa ser
+    // assim, ver acima), mas agora valida o conteúdo: só os 4 campos que
+    // registrarAuditoria() manda (app.js), com tamanho limitado, e o campo
+    // "usuario" tem que bater com o usuário de quem tá autenticado -- antes
+    // dava pra criar um registro de auditoria se passando por qualquer
+    // outra pessoa. Não dá pra exigir uid junto porque o app nunca manda
+    // esse campo (só o nome de usuário) -- ver registrarAuditoria() em
+    // app.js.
     match /auditoria/{id} {
       allow read: if souAdmin();
-      allow create: if autenticadoENaoBloqueado();
+      allow create: if autenticadoENaoBloqueado()
+        && request.resource.data.keys().hasOnly(["acao", "detalhes", "usuario", "registradoEm"])
+        && request.resource.data.acao is string && request.resource.data.acao.size() <= 200
+        && request.resource.data.detalhes is string && request.resource.data.detalhes.size() <= 2000
+        && request.resource.data.usuario is string
+        && request.resource.data.usuario == meuPerfil().usuario
+        && request.resource.data.registradoEm is string;
     }
 
     match /equipes/{id} {
