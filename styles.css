@@ -3342,3 +3342,35 @@ body.modo-trabalhador .status-select {
 #agBarraFiltros label { display: flex; flex-direction: column; gap: 3px; color: var(--texto-suave); }
 #agBarraFiltros input, #agBarraFiltros select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borda-forte); background: var(--fundo); color: var(--texto); font-size: 13px; }
 .ag-pagina svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* --- Layout compacto, pra caber na tela sem rolar demais --- */
+.ag-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 820px) { .ag-grid-2 { grid-template-columns: 1fr; } }
+
+#view-analiseglpi .ag-pagina > .card,
+#view-analiseglpi .ag-pagina > .ag-grid-2,
+#view-analiseglpi .ag-pagina > .kpi-row,
+#view-analiseglpi .ag-pagina > p.muted {
+  margin-bottom: 10px;
+}
+#view-analiseglpi .ag-pagina > *:last-child { margin-bottom: 0; }
+
+#view-analiseglpi .card { padding: 12px 14px; box-shadow: none; }
+#view-analiseglpi .card h2 { font-size: 13px; margin: 0 0 6px; }
+
+#view-analiseglpi .kpi-row { gap: 8px; }
+#view-analiseglpi .kpi-card {
+  padding: 10px 8px; border-top-width: 2px; box-shadow: none; transition: none;
+}
+#view-analiseglpi .kpi-card:hover { transform: none; box-shadow: none; }
+#view-analiseglpi .kpi-card .num { font-size: 20px; margin-bottom: 2px; }
+#view-analiseglpi .kpi-card .label { font-size: 10px; letter-spacing: 0.03em; }
+#view-analiseglpi .kpi-card .sublabel { font-size: 10px; margin-top: 2px; }
+
+#view-analiseglpi .tabs { margin-bottom: 10px !important; }
+#view-analiseglpi .btn-modo { padding: 6px 12px; font-size: 12.5px; }
+
+#view-analiseglpi #agBarraFiltros { padding: 8px 12px; margin: 0 0 10px !important; }
+#view-analiseglpi #agBarraFiltros label { font-size: 10.5px; }
+#view-analiseglpi #agBarraFiltros input,
+#view-analiseglpi #agBarraFiltros select { padding: 4px 6px; font-size: 12.5px; }

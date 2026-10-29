@@ -12051,7 +12051,7 @@ function agChartBarrasH(containerId, dados, opts) {
   cont.innerHTML = "";
   if (!dados.length) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
   const n = dados.length;
-  const W = opts.W || 500, rowH = 28, padL = opts.padL || 190, padR = 46, padT = 6, padB = 6;
+  const W = opts.W || 500, rowH = 24, padL = opts.padL || 190, padR = 46, padT = 4, padB = 4;
   const plotW = W - padL - padR, H = padT + padB + n * rowH;
   const max = Math.max(...dados.map((d) => d.valor), 1);
   const barW = (v) => (plotW * v) / max;
@@ -12062,7 +12062,7 @@ function agChartBarrasH(containerId, dados, opts) {
     const label = agSvgEl("text", { x: padL - 10, y: cy + 4, class: "ag-nome-label", "text-anchor": "end" });
     label.textContent = agTruncar(d.nome, opts.maxCharsLabel || 26);
     svg.appendChild(label);
-    svg.appendChild(agSvgEl("rect", { x: padL, y: cy - 9, width: bw, height: 18, rx: 4, ry: 4, fill: cor }));
+    svg.appendChild(agSvgEl("rect", { x: padL, y: cy - 8, width: bw, height: 16, rx: 3, ry: 3, fill: cor }));
     const val = agSvgEl("text", { x: padL + bw + 8, y: cy + 4, class: "ag-valor-label" });
     val.textContent = opts.formatador ? opts.formatador(d.valor) : agFmt(d.valor);
     svg.appendChild(val);
@@ -12080,7 +12080,7 @@ function agChartLinha(containerId, serie, cor) {
   if (!cont) return;
   cont.innerHTML = "";
   if (serie.length < 2) { cont.innerHTML = '<p class="muted">Período insuficiente pra gráfico.</p>'; return; }
-  const W = 1000, H = 200, padL = 36, padR = 12, padT = 14, padB = 26;
+  const W = 1000, H = 130, padL = 36, padR = 12, padT = 10, padB = 22;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const max = Math.max(...serie.map((d) => d.valor), 1);
   const maxEixo = Math.ceil(max / 20) * 20 || 10;
@@ -12154,7 +12154,7 @@ function agChartPareto(containerId, legendaId, dados) {
   let acc = 0;
   const comPct = dados.map((d) => { acc += d.valor; return { ...d, pctAcc: (acc / total) * 100 }; });
   const n = comPct.length;
-  const W = Math.max(640, n * 46), H = 320, padL = 42, padR = 42, padT = 16, padB = 110;
+  const W = Math.max(640, n * 40), H = 260, padL = 42, padR = 42, padT = 12, padB = 95;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const maxQtd = Math.max(...comPct.map((d) => d.valor));
   const maxEixo = Math.ceil(maxQtd / 50) * 50 || 10;
