@@ -12226,13 +12226,18 @@ function agRenderVisaoGeral(filtrados) {
   const fechados = filtrados.length - abertos;
   const kpis = $("#agKpisVisaoGeral"); kpis.innerHTML = "";
   [
-    { label: "Chamados no recorte", valor: agFmt(filtrados.length), nota: "respeita os filtros acima" },
-    { label: "Em aberto", valor: agFmt(abertos), nota: `${filtrados.length ? ((abertos / filtrados.length) * 100).toFixed(1) : "0"}% do recorte` },
-    { label: "Encerrados", valor: agFmt(fechados), nota: `${filtrados.length ? ((fechados / filtrados.length) * 100).toFixed(1) : "0"}% do recorte` },
-    { label: "Setores distintos", valor: agFmt(new Set(filtrados.map((r) => r[3])).size), nota: "no recorte atual" },
+    { label: "Chamados no recorte", valor: agFmt(filtrados.length), nota: "respeita os filtros acima", info: "Total de chamados do GLPI que caem dentro do período e dos filtros escolhidos acima." },
+    { label: "Em aberto", valor: agFmt(abertos), nota: `${filtrados.length ? ((abertos / filtrados.length) * 100).toFixed(1) : "0"}% do recorte`, info: "Chamados do recorte cujo status ainda não é \"Fechado\" no GLPI." },
+    { label: "Encerrados", valor: agFmt(fechados), nota: `${filtrados.length ? ((fechados / filtrados.length) * 100).toFixed(1) : "0"}% do recorte`, info: "Chamados do recorte com status \"Fechado\" no GLPI." },
+    { label: "Setores distintos", valor: agFmt(new Set(filtrados.map((r) => r[3])).size), nota: "no recorte atual", info: "Quantidade de setores diferentes que abriram ao menos um chamado dentro do recorte atual." },
   ].forEach((it) => {
     const div = document.createElement("div"); div.className = "kpi-card";
     div.innerHTML = `<div class="num">${it.valor}</div><div class="label">${it.label}</div>${it.nota ? `<div class="sublabel">${it.nota}</div>` : ""}`;
+    if (it.info) {
+      div.addEventListener("mouseenter", (e) => agMostrarTooltip(e, it.label, it.info));
+      div.addEventListener("mousemove", agPosicionarTooltip);
+      div.addEventListener("mouseleave", agEsconderTooltip);
+    }
     kpis.appendChild(div);
   });
 
@@ -12339,13 +12344,18 @@ function agRenderEquipe() {
   const kpis = $("#agKpisEquipe"); kpis.innerHTML = "";
   const taxa = d.sim + d.nao ? ((d.sim / (d.sim + d.nao)) * 100).toFixed(1) : "0";
   [
-    { label: "Ordens de serviço de campo", valor: agFmt(d.total) },
-    { label: "Taxa de resolução", valor: taxa + "%", nota: `${agFmt(d.sim)} de ${agFmt(d.sim + d.nao)} com resposta` },
-    { label: "Pessoas distintas na escala", valor: agFmt(d.porPessoa.length) },
-    { label: "Prédios atendidos", valor: agFmt(d.porPredio.length) },
+    { label: "Ordens de serviço de campo", valor: agFmt(d.total), info: "Total de ordens registradas na planilha de chamados corretivos (sincronização automática)." },
+    { label: "Taxa de resolução", valor: taxa + "%", nota: `${agFmt(d.sim)} de ${agFmt(d.sim + d.nao)} com resposta`, info: "Proporção de ordens marcadas como solucionadas entre as que já têm resposta registrada." },
+    { label: "Pessoas distintas na escala", valor: agFmt(d.porPessoa.length), info: "Quantidade de pessoas da equipe de campo que aparecem atendendo ao menos uma ordem." },
+    { label: "Prédios atendidos", valor: agFmt(d.porPredio.length), info: "Quantidade de prédios/anexos distintos com ao menos uma ordem registrada." },
   ].forEach((it) => {
     const div = document.createElement("div"); div.className = "kpi-card";
     div.innerHTML = `<div class="num">${it.valor}</div><div class="label">${it.label}</div>${it.nota ? `<div class="sublabel">${it.nota}</div>` : ""}`;
+    if (it.info) {
+      div.addEventListener("mouseenter", (e) => agMostrarTooltip(e, it.label, it.info));
+      div.addEventListener("mousemove", agPosicionarTooltip);
+      div.addEventListener("mouseleave", agEsconderTooltip);
+    }
     kpis.appendChild(div);
   });
   agChartBarrasH("agChartEquipePessoa", d.porPessoa, { cor: "var(--verde-700)", maxCharsLabel: 22 });

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0B3D24">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -459,7 +459,7 @@
           <label style="font-size:11px">Setor<br><select id="agFSetor"><option value="">Todos</option></select></label>
           <label style="font-size:11px">Prioridade<br><select id="agFPrioridade"><option value="">Todas</option></select></label>
           <label style="font-size:11px">Status<br><select id="agFStatus"><option value="">Todos</option></select></label>
-          <button class="btn ghost" id="agBtnLimparFiltros">Limpar filtros</button>
+          <span class="ag-filtro-btn-wrap"><span class="ag-filtro-btn-spacador">&nbsp;</span><button class="btn ghost" id="agBtnLimparFiltros">Limpar filtros</button></span>
           <span class="muted" id="agContagemFiltro" style="margin-left:auto"></span>
         </div>
 
@@ -1157,7 +1157,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=156"></script>
+<script type="module" src="app.js?v=157"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
