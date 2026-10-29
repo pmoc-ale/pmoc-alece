@@ -481,10 +481,6 @@
               <div id="agChartPrioridade"></div>
             </div>
           </div>
-          <div class="card">
-            <h2>Chamados por dia da semana</h2>
-            <div id="agChartDiaSemana"></div>
-          </div>
           <div class="card" id="agLeituraVisaoGeral" style="font-size:13px"></div>
         </div>
 
@@ -495,13 +491,15 @@
             <div id="agChartPareto"></div>
             <div id="agLegendaPareto" style="margin-top:8px;font-size:12px"></div>
           </div>
-          <div class="card">
-            <h2>Setores com mais chamados</h2>
-            <div id="agChartSetores"></div>
-          </div>
-          <div class="card">
-            <h2>Distribuição por grupo técnico</h2>
-            <div id="agChartGrupo"></div>
+          <div class="ag-grid-2">
+            <div class="card">
+              <h2>Setores com mais chamados</h2>
+              <div id="agChartSetores"></div>
+            </div>
+            <div class="card">
+              <h2>Chamados por dia da semana</h2>
+              <div id="agChartDiaSemana"></div>
+            </div>
           </div>
           <div class="card" id="agLeituraFalhas" style="font-size:13px"></div>
         </div>
@@ -1158,7 +1156,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=161"></script>
+<script type="module" src="app.js?v=162"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
