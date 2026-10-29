@@ -11922,7 +11922,6 @@ function agCalcularResumoCampo() {
   const itens = ESTADO.chamadosCorretivos || [];
   const pessoaMap = new Map(), predioMap = new Map(), marcaMap = new Map();
   const avalMarca = new Map(), avalPredio = new Map();
-  const naoSolucionados = [];
   let sim = 0, nao = 0, total = 0;
 
   itens.forEach((item) => {
@@ -11947,14 +11946,7 @@ function agCalcularResumoCampo() {
     });
 
     if (solucionado === "Sim") sim++;
-    else if (solucionado === "Não") {
-      nao++;
-      naoSolucionados.push({
-        data: item.dataFormatada || "", predio,
-        local: [item.nomeSetor, item.salaSetor].filter(Boolean).join(" / "),
-        problema: item.descricaoProblema || "",
-      });
-    }
+    else if (solucionado === "Não") nao++;
   });
 
   const media = (arr) => Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 100) / 100;
@@ -11967,7 +11959,6 @@ function agCalcularResumoCampo() {
     porMarca: paraLista(marcaMap).slice(0, 8),
     notaMarca: [...avalMarca.entries()].filter(([, v]) => v.length >= 10).map(([nome, v]) => ({ nome, valor: media(v), n: v.length })).sort((a, b) => a.valor - b.valor),
     notaPredio: [...avalPredio.entries()].map(([nome, v]) => ({ nome, valor: media(v), n: v.length })).sort((a, b) => a.valor - b.valor),
-    naoSolucionados,
   };
 }
 
@@ -12051,7 +12042,7 @@ function agChartBarrasH(containerId, dados, opts) {
   cont.innerHTML = "";
   if (!dados.length) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
   const n = dados.length;
-  const W = opts.W || 500, rowH = 24, padL = opts.padL || 190, padR = 46, padT = 4, padB = 4;
+  const W = opts.W || 500, rowH = 19, padL = opts.padL || 190, padR = 46, padT = 3, padB = 3;
   const plotW = W - padL - padR, H = padT + padB + n * rowH;
   const max = Math.max(...dados.map((d) => d.valor), 1);
   const barW = (v) => (plotW * v) / max;
@@ -12062,7 +12053,7 @@ function agChartBarrasH(containerId, dados, opts) {
     const label = agSvgEl("text", { x: padL - 10, y: cy + 4, class: "ag-nome-label", "text-anchor": "end" });
     label.textContent = agTruncar(d.nome, opts.maxCharsLabel || 26);
     svg.appendChild(label);
-    svg.appendChild(agSvgEl("rect", { x: padL, y: cy - 8, width: bw, height: 16, rx: 3, ry: 3, fill: cor }));
+    svg.appendChild(agSvgEl("rect", { x: padL, y: cy - 6.5, width: bw, height: 13, rx: 3, ry: 3, fill: cor }));
     const val = agSvgEl("text", { x: padL + bw + 8, y: cy + 4, class: "ag-valor-label" });
     val.textContent = opts.formatador ? opts.formatador(d.valor) : agFmt(d.valor);
     svg.appendChild(val);
@@ -12371,14 +12362,6 @@ function agRenderEquipe() {
   const fmtNota = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   agChartBarrasH("agChartEquipeNotaMarca", d.notaMarca, { cor: "var(--teal-escuro)", padL: 110, maxCharsLabel: 14, formatador: fmtNota });
   agChartBarrasH("agChartEquipeNotaPredio", d.notaPredio, { cor: "var(--teal-escuro)", padL: 90, maxCharsLabel: 12, formatador: fmtNota });
-
-  const lista = $("#agListaEquipePendencias"); lista.innerHTML = "";
-  if (!d.naoSolucionados.length) lista.innerHTML = '<p class="muted">Nenhum registro marcado como não resolvido.</p>';
-  d.naoSolucionados.forEach((p) => {
-    const div = document.createElement("div"); div.className = "ag-pendencia-card";
-    div.innerHTML = `<div class="ag-ped-meta">${escapeHtml(p.data)} · ${escapeHtml(p.predio)} · ${escapeHtml(p.local)}</div><div>${escapeHtml(p.problema || "(sem descrição)")}</div>`;
-    lista.appendChild(div);
-  });
 }
 
 function agPaginaAtiva() { return $("#agAbas .btn-modo.active")?.dataset.agPagina || "visaoGeral"; }

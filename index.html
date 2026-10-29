@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0B3D24">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -532,7 +532,6 @@
 
         <!-- Página: Equipe de campo -->
         <div class="ag-pagina" id="agPagina-equipe" hidden>
-          <p class="muted">Fonte diferente das outras páginas: a mesma planilha de chamados corretivos que o sistema já sincroniza sozinho (atualiza a cada 5 min, sem precisar de upload). Não tem chave em comum com o GLPI, por isso não é filtrada pela barra acima.</p>
           <div class="kpi-row" id="agKpisEquipe"></div>
           <div class="ag-grid-2">
             <div class="card">
@@ -551,10 +550,6 @@
               <div id="agChartEquipeNotaMarca"></div>
               <div id="agChartEquipeNotaPredio"></div>
             </div>
-          </div>
-          <div class="card">
-            <h2>Ordens marcadas como não resolvidas</h2>
-            <div id="agListaEquipePendencias"></div>
           </div>
         </div>
       </div>
@@ -1157,7 +1152,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=157"></script>
+<script type="module" src="app.js?v=158"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
