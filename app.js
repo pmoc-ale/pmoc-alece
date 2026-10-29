@@ -11920,7 +11920,7 @@ function processarCsvGlpi(texto) {
 // pedir upload de novo pra um dado que o sistema já tem ao vivo.
 function agCalcularResumoCampo() {
   const itens = ESTADO.chamadosCorretivos || [];
-  const pessoaMap = new Map(), predioMap = new Map(), marcaMap = new Map(), pessoaPredioMap = new Map();
+  const pessoaMap = new Map(), predioMap = new Map(), marcaMap = new Map();
   const avalMarca = new Map(), avalPredio = new Map();
   let sim = 0, nao = 0, total = 0;
 
@@ -11943,10 +11943,6 @@ function agCalcularResumoCampo() {
     const semPrefixo = equipe.replace(/^Equipe\s*\d+\s*:\s*/i, "");
     semPrefixo.split(/\s+e\s+|\s*,\s*/).map((n) => n.trim()).filter(Boolean).forEach((nome) => {
       pessoaMap.set(nome, (pessoaMap.get(nome) || 0) + 1);
-      if (predio) {
-        const chave = nome + "|" + predio;
-        pessoaPredioMap.set(chave, (pessoaPredioMap.get(chave) || 0) + 1);
-      }
     });
 
     if (solucionado === "Sim") sim++;
@@ -11963,7 +11959,6 @@ function agCalcularResumoCampo() {
     porMarca: paraLista(marcaMap).slice(0, 8),
     notaMarca: [...avalMarca.entries()].filter(([, v]) => v.length >= 10).map(([nome, v]) => ({ nome, valor: media(v), n: v.length })).sort((a, b) => a.valor - b.valor),
     notaPredio: [...avalPredio.entries()].map(([nome, v]) => ({ nome, valor: media(v), n: v.length })).sort((a, b) => a.valor - b.valor),
-    pessoaPredioMap,
   };
 }
 
@@ -12145,50 +12140,6 @@ function agChartBarraEmpilhada(containerId, legendaId, dados) {
   });
 }
 
-// Heatmap -- um hue só (sequencial), claro->escuro conforme o valor da
-// célula, via color-mix() contra a superfície (em vez de um ramp de 5-7
-// tons fixos). Compara duas dimensões cruzadas de uma vez (ex: setor ×
-// tipo de falha), o que nenhum dos gráficos de barra da página já mostra
-// sozinho.
-function agChartHeatmap(containerId, linhas, colunas, matriz, corBase) {
-  const cont = $(`#${containerId}`);
-  cont.innerHTML = "";
-  if (!linhas.length || !colunas.length) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
-  let max = 0;
-  matriz.forEach((linha) => linha.forEach((v) => { if (v > max) max = v; }));
-  const padL = 170, padT = 86, cellW = 46, cellH = 24, gap = 2;
-  const W = padL + colunas.length * cellW;
-  const H = padT + linhas.length * cellH;
-  const svg = agSvgEl("svg", { viewBox: `0 0 ${W} ${H}` });
-  colunas.forEach((c, j) => {
-    const x = padL + j * cellW + cellW / 2;
-    const t = agSvgEl("text", { x, y: padT - 10, class: "ag-eixo-label", "text-anchor": "start", transform: `rotate(-40 ${x} ${padT - 10})` });
-    t.textContent = agTruncar(c, 24);
-    svg.appendChild(t);
-  });
-  linhas.forEach((l, i) => {
-    const y = padT + i * cellH;
-    const label = agSvgEl("text", { x: padL - 10, y: y + cellH / 2 + 4, class: "ag-nome-label", "text-anchor": "end" });
-    label.textContent = agTruncar(l, 28);
-    svg.appendChild(label);
-    colunas.forEach((c, j) => {
-      const v = matriz[i][j] || 0;
-      const pct = max ? Math.round((v / max) * 100) : 0;
-      const fill = v > 0 ? `color-mix(in srgb, ${corBase} ${Math.max(pct, 14)}%, var(--superficie))` : "var(--fundo)";
-      const x = padL + j * cellW;
-      const rect = agSvgEl("rect", { x: x + gap / 2, y: y + gap / 2, width: cellW - gap, height: cellH - gap, rx: 3, ry: 3, fill });
-      if (v > 0) {
-        rect.style.cursor = "pointer";
-        rect.addEventListener("mouseenter", (e) => agMostrarTooltip(e, `${l} · ${c}`, agFmt(v)));
-        rect.addEventListener("mousemove", agPosicionarTooltip);
-        rect.addEventListener("mouseleave", agEsconderTooltip);
-      }
-      svg.appendChild(rect);
-    });
-  });
-  cont.appendChild(svg);
-}
-
 function agChartPareto(containerId, legendaId, dados) {
   const cont = $(`#${containerId}`);
   cont.innerHTML = "";
@@ -12358,17 +12309,6 @@ function agRenderFalhas(filtrados) {
   agChartBarrasH("agChartDiaSemana", NOMES_DIA.map((nome, i) => ({ nome, valor: porDia[i] })),
     { cor: "var(--verde-700)", padL: 50, W: 440 });
 
-  // Setor × tipo de falha: cruza as duas dimensões que os gráficos de barra
-  // acima só mostram separadas (setor sozinho, falha sozinha) -- reaproveita
-  // os mesmos top 10 setores/top 8 falhas que já aparecem em "Setores com
-  // mais chamados" e no Pareto, pra não introduzir um recorte diferente.
-  const topSetoresHeat = topSetores.slice(0, 10).map((d) => d.nome);
-  const topFalhasHeat = dadosFalha.slice(0, 8).map((d) => d.nome);
-  const contagemSetorFalha = {};
-  classificaveis.forEach((r) => { const k = r[CSE] + "|" + r[CF]; contagemSetorFalha[k] = (contagemSetorFalha[k] || 0) + 1; });
-  const matrizSetorFalha = topSetoresHeat.map((setor) => topFalhasHeat.map((falha) => contagemSetorFalha[setor + "|" + falha] || 0));
-  agChartHeatmap("agChartHeatmapSetorFalha", topSetoresHeat, topFalhasHeat, matrizSetorFalha, "var(--verde-700)");
-
   $("#agLeituraFalhas").innerHTML = dadosFalha.length ? (() => {
     let acc = 0, i = 0;
     for (; i < dadosFalha.length; i++) { acc += dadosFalha[i].valor; if (acc / classificaveis.length >= 0.8) { i++; break; } }
@@ -12451,14 +12391,6 @@ function agRenderEquipe() {
   });
   agChartBarrasH("agChartEquipePessoa", d.porPessoa, { cor: "var(--verde-700)", maxCharsLabel: 22 });
   agChartBarrasH("agChartEquipePredio", d.porPredio, { cor: "var(--teal-escuro)", padL: 110, maxCharsLabel: 16 });
-
-  // Cruza as duas dimensões que os gráficos acima mostram separadas (quem
-  // atende mais no total, e qual prédio recebe mais ordem) numa coisa só --
-  // mostra se a carga de uma pessoa está concentrada num prédio ou espalhada.
-  const nomesPessoa = d.porPessoa.map((p) => p.nome);
-  const nomesPredio = d.porPredio.map((p) => p.nome);
-  const matrizPessoaPredio = nomesPessoa.map((nome) => nomesPredio.map((predio) => d.pessoaPredioMap.get(nome + "|" + predio) || 0));
-  agChartHeatmap("agChartHeatmapPessoaPredio", nomesPessoa, nomesPredio, matrizPessoaPredio, "var(--teal-escuro)");
 
   if (d.porPessoa.length) {
     const maisCarregado = d.porPessoa[0];
