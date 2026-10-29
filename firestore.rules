@@ -215,6 +215,13 @@ service cloud.firestore {
       allow read: if autenticadoENaoBloqueado(); // [QA-FIX BUG-QA-004]
       allow write: if souAdmin();
     }
+    // Snapshot do painel de análise GLPI/campo (ver "Análise GLPI" em
+    // app.js) -- qualquer logado pode VER (é pra mostrar ao supervisor),
+    // só admin pode importar/sobrescrever (botões de upload do CSV/xlsx).
+    match /analiseGlpi/{id} {
+      allow read: if autenticadoENaoBloqueado();
+      allow write: if souAdmin();
+    }
     match /config/{id} {
       // [QA-FIX BUG-QA-004] Coleção "config" (docs "site" e "cronograma",
       // lidos em toda inicialização do app, por qualquer perfil) --

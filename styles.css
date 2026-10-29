@@ -3312,3 +3312,33 @@ body.modo-trabalhador .status-select {
     align-items: stretch;
   }
 }
+
+/* ===================== Análise GLPI (painel de chamados) ===================== */
+/* Classes próprias (prefixo ag-) pros gráficos em SVG montados na hora pelo
+   JS (ver renderAnaliseGlpi em app.js) -- mesma técnica de "montar com
+   createElementNS" já usada no resto do app (ver plantas/calendário), só
+   que reaproveitando as cores institucionais já definidas lá em cima. */
+.ag-eixo-label { font-size: 10.5px; fill: var(--texto-fraco); }
+.ag-valor-label { font-size: 11px; fill: var(--texto-suave); font-weight: 500; }
+.ag-nome-label { font-size: 11.5px; fill: var(--texto); }
+.ag-linha-grade { stroke: var(--borda); stroke-width: 1; }
+.ag-tooltip {
+  position: fixed; pointer-events: none; background: var(--superficie);
+  border: 1px solid var(--borda-forte); border-radius: 8px; padding: 8px 10px;
+  font-size: 12.5px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); z-index: 80;
+  opacity: 0; transition: opacity 0.1s; max-width: 260px;
+}
+.ag-tooltip.ag-visivel { opacity: 1; }
+.ag-tooltip .ag-tt-nome { color: var(--texto-suave); margin-bottom: 2px; }
+.ag-tooltip .ag-tt-valor { font-weight: 600; font-size: 14px; }
+.ag-legenda-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; color: var(--texto-suave); }
+.ag-legenda-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.ag-pilula { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid var(--borda-forte); color: var(--texto-suave); }
+.ag-pilula.fechado { color: var(--texto-suave); }
+.ag-pilula.andamento { color: var(--dourado-escuro, #9C7B2E); border-color: var(--dourado-escuro, #9C7B2E); }
+.ag-pilula.pendente { color: var(--vermelho); border-color: var(--vermelho); }
+.ag-pendencia-card { border: 1px solid var(--borda); border-left: 3px solid var(--vermelho); border-radius: 0 8px 8px 0; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; }
+.ag-pendencia-card .ag-ped-meta { font-size: 11.5px; color: var(--texto-suave); margin-bottom: 3px; }
+#agBarraFiltros label { display: flex; flex-direction: column; gap: 3px; color: var(--texto-suave); }
+#agBarraFiltros input, #agBarraFiltros select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--borda-forte); background: var(--fundo); color: var(--texto); font-size: 13px; }
+.ag-pagina svg { display: block; width: 100%; height: auto; overflow: visible; }

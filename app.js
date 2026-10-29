@@ -1181,6 +1181,7 @@ $all(".tab").forEach((btn) => {
     if (btn.dataset.view === "feriados") renderFeriados();
     if (btn.dataset.view === "ordens") renderOrdens();
     if (btn.dataset.view === "historico") renderHistorico();
+    if (btn.dataset.view === "analiseglpi") renderAnaliseGlpi();
     if (btn.dataset.view === "config") { renderCapacidadesPorPredio(); atualizarVisualModoAdicionarPredio(); }
     if (btn.dataset.view === "auditoria") renderAuditoria();
     if (btn.dataset.view === "config-site") preencherFormularioConfigSite();
@@ -3987,7 +3988,7 @@ function abaPermitida(nome, permissao) {
   if (nome === "hoje") return permissao === "trabalhador";
   if (permissao === "admin") return true;
   if (["upload", "config"].includes(nome)) return false;
-  if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "condensadoras", "feriados"].includes(nome)) return false;
+  if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "condensadoras", "feriados", "analiseglpi"].includes(nome)) return false;
   return true;
 }
 
@@ -11814,3 +11815,668 @@ $("#btnLimparSelecaoHistorico")?.addEventListener("click", () => {
   atualizarBarraSelecao("selecaoHistorico", "selecaoHistorico", "selecaoHistoricoTexto");
   renderHistorico(); 
 });
+
+// ====================================================================
+// ANÁLISE GLPI -- painel de chamados (GLPI) cruzado com a planilha
+// manual de Ordem de Serviço de campo. Dados entram por upload (botão
+// "Importar dados" na própria aba, só admin), ficam salvos em
+// analiseGlpi/{glpi,campo} no Firestore (qualquer logado lê, só admin
+// escreve -- ver firestore.rules), e todo mundo com acesso ao sistema
+// vê o mesmo painel sem precisar reimportar nada.
+// ====================================================================
+
+ESTADO.analiseGlpi = { registros: [], campos: [] }; // linha a linha, pras 3 primeiras páginas (com filtro)
+ESTADO.analiseCampo = null; // já agregado, pra página "Equipe de campo" (sem filtro)
+let _agJaInicializado = false;
+let _agPaginaAtualTabela = 1;
+let _agOrdenacaoTabela = { campo: "data", direcao: "desc" };
+
+// --- 1) Classificação do tipo de falha a partir do título do chamado ---
+// Mesma regra usada na análise em Python feita antes (ver
+// docs/fase2_analise_exploratoria.md do projeto de dados): só classifica
+// o que segue o padrão "Serviços diversos em ar condicionado - PROBLEMA -
+// nome"; o resto cai numa categoria de revisão em vez de arriscar.
+function categorizarFalhaGlpi(titulo) {
+  if (/engenharia civil/i.test(titulo)) return "Fora de escopo (não é AC)";
+  const m = titulo.match(/^Serviços diversos em ar condicionado - (.+?) - [^-]+$/);
+  if (!m) return "Não classificado (revisar)";
+  let bruto = m[1].trim();
+  if (bruto.toUpperCase() === "MÁQUINA VAZANDO") bruto = "AR CONDICIONADO VAZANDO"; // sinônimo confirmado
+  return bruto.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+}
+
+// Parser de CSV ";"-delimitado com aspas (formato do export do GLPI) --
+// não reaproveita XLSX.read aqui porque esse export tem uma coluna extra
+// vazia no fim do cabeçalho (separador sobrando) e preferimos controlar
+// isso explicitamente em vez de confiar na auto-detecção de delimitador.
+function parseCsvGlpi(texto) {
+  const linhas = [];
+  let campo = "", linha = [], dentroAspas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (dentroAspas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; }
+        else dentroAspas = false;
+      } else campo += c;
+    } else if (c === '"') dentroAspas = true;
+    else if (c === ";") { linha.push(campo); campo = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && texto[i + 1] === "\n") i++;
+      linha.push(campo); campo = "";
+      if (linha.some((v) => v !== "")) linhas.push(linha);
+      linha = [];
+    } else campo += c;
+  }
+  if (campo !== "" || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+function parseDataGlpi(txt) {
+  // "DD-MM-AAAA HH:MM" -> Date
+  const m = (txt || "").trim().match(/^(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2})$/);
+  if (!m) return null;
+  return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]);
+}
+
+function processarCsvGlpi(texto) {
+  const linhas = parseCsvGlpi(texto.replace(/^﻿/, ""));
+  if (!linhas.length) throw new Error("CSV vazio.");
+  const cabecalho = linhas[0].map((c) => c.trim());
+  const idx = (nome) => cabecalho.indexOf(nome);
+  const iTitulo = idx("Título"), iEntidade = idx("Entidade"), iAbertura = idx("Data de abertura"),
+    iStatus = idx("Status"), iPrioridade = idx("Prioridade"), iGrupo = idx("Atribuído - Grupo técnico"),
+    iId = idx("ID");
+  if (iTitulo < 0 || iEntidade < 0 || iAbertura < 0) {
+    throw new Error("Não achei as colunas esperadas do GLPI (Título/Entidade/Data de abertura). Confira se é mesmo o export de chamados.");
+  }
+  const registros = [];
+  for (let i = 1; i < linhas.length; i++) {
+    const l = linhas[i];
+    if (!l[iId]) continue;
+    const dt = parseDataGlpi(l[iAbertura]);
+    if (!dt) continue;
+    const titulo = l[iTitulo] || "";
+    const entidade = l[iEntidade] || "";
+    const partes = entidade.split(">").map((p) => p.trim());
+    const setor = partes.length > 1 ? partes[1] : "";
+    const falha = categorizarFalhaGlpi(titulo);
+    registros.push([
+      l[iId].trim(), titulo, falha, setor,
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`,
+      (l[iStatus] || "").trim(), (l[iPrioridade] || "").trim(), (l[iGrupo] || "").trim() || "(sem grupo atribuído)",
+    ]);
+  }
+  if (!registros.length) throw new Error("Nenhuma linha válida encontrada no CSV.");
+  return { campos: ["id", "titulo", "falha", "setor", "data", "status", "prioridade", "grupo"], registros };
+}
+
+// --- 2) Planilha de campo (.xlsx "Ordem de Serviço") -- já sai agregada ---
+function processarXlsxCampo(workbook) {
+  const sheet = workbook.Sheets["Ordem de Serviço"] || workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error("Não achei a aba 'Ordem de Serviço' nessa planilha.");
+  const linhas = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: true });
+
+  const pessoaMap = new Map(), predioMap = new Map(), marcaMap = new Map();
+  const avalMarca = new Map(), avalPredio = new Map();
+  const naoSolucionados = [];
+  let sim = 0, nao = 0;
+
+  linhas.forEach((row) => {
+    const equipe = String(row["Selecione sua equipe:"] || "").trim();
+    const predio = String(row["Anexo:"] || "").trim();
+    const marca = String(row["Marca da Evaporadora:"] || "").trim().toUpperCase();
+    const aval = row["Avaliação do Funcionamento da Evaporadora:"];
+    const solucionado = String(row["Problema solucionado?"] || "").trim();
+
+    if (!equipe && !predio) return; // linha em branco
+
+    if (predio) predioMap.set(predio, (predioMap.get(predio) || 0) + 1);
+    if (marca && !["", ".", "****", "NONE"].includes(marca)) {
+      marcaMap.set(marca, (marcaMap.get(marca) || 0) + 1);
+      if (typeof aval === "number") (avalMarca.get(marca) || avalMarca.set(marca, []).get(marca)).push(aval);
+    }
+    if (typeof aval === "number" && predio) (avalPredio.get(predio) || avalPredio.set(predio, []).get(predio)).push(aval);
+
+    const semPrefixo = equipe.replace(/^Equipe\s*\d+\s*:\s*/i, "");
+    semPrefixo.split(/\s+e\s+|\s*,\s*/).map((n) => n.trim()).filter(Boolean).forEach((nome) => {
+      pessoaMap.set(nome, (pessoaMap.get(nome) || 0) + 1);
+    });
+
+    if (solucionado === "Sim") sim++;
+    else if (solucionado === "Não") {
+      nao++;
+      let dataTxt = "";
+      const d = row["Coluna 1"];
+      if (d instanceof Date) dataTxt = d.toLocaleDateString("pt-BR");
+      naoSolucionados.push({
+        data: dataTxt, predio,
+        local: [row["Nome do Setor:"], row["Sala do Setor:"]].filter(Boolean).join(" / "),
+        problema: String(row["Descreva o problema do chamado?"] || "").trim(),
+      });
+    }
+  });
+
+  const media = (arr) => Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 100) / 100;
+  const paraLista = (mapa) => [...mapa.entries()].sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor }));
+
+  return {
+    total: linhas.filter((r) => String(r["Selecione sua equipe:"] || "").trim() || String(r["Anexo:"] || "").trim()).length,
+    sim, nao,
+    porPessoa: paraLista(pessoaMap).slice(0, 15),
+    porPredio: paraLista(predioMap),
+    porMarca: paraLista(marcaMap).slice(0, 8),
+    notaMarca: [...avalMarca.entries()].filter(([, v]) => v.length >= 10).map(([nome, v]) => ({ nome, valor: media(v), n: v.length })).sort((a, b) => a.valor - b.valor),
+    notaPredio: [...avalPredio.entries()].map(([nome, v]) => ({ nome, valor: media(v), n: v.length })).sort((a, b) => a.valor - b.valor),
+    naoSolucionados,
+  };
+}
+
+// --- 3) Upload: botões + leitura dos arquivos ---
+$("#agBtnGlpiEscolher")?.addEventListener("click", () => $("#agGlpiInput").click());
+$("#agBtnCampoEscolher")?.addEventListener("click", () => $("#agCampoInput").click());
+
+$("#agGlpiInput")?.addEventListener("change", async () => {
+  const file = $("#agGlpiInput").files?.[0];
+  if (!file) return;
+  $("#agGlpiNome").textContent = file.name;
+  $("#agStatusImportacao").textContent = "Lendo o CSV...";
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let texto = new TextDecoder("utf-8").decode(bytes);
+    if (texto.includes("�")) texto = new TextDecoder("windows-1252").decode(bytes);
+    const { campos, registros } = processarCsvGlpi(texto);
+    await setDoc(doc(db, "analiseGlpi", "glpi"), {
+      campos, registros,
+      atualizadoEm: new Date().toISOString(),
+      atualizadoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
+    });
+    ESTADO.analiseGlpi = { campos, registros };
+    toast(`${registros.length} chamados importados.`);
+    agRenderTudo();
+    agAtualizarStatusImportacao();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao importar o CSV: " + err.message);
+    $("#agStatusImportacao").textContent = "Erro: " + err.message;
+  }
+});
+
+$("#agCampoInput")?.addEventListener("change", async () => {
+  const file = $("#agCampoInput").files?.[0];
+  if (!file) return;
+  $("#agCampoNome").textContent = file.name;
+  $("#agStatusImportacao").textContent = "Lendo a planilha...";
+  try {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const wb = XLSX.read(data, { type: "array", cellDates: true });
+    const resumo = processarXlsxCampo(wb);
+    await setDoc(doc(db, "analiseGlpi", "campo"), {
+      ...resumo,
+      atualizadoEm: new Date().toISOString(),
+      atualizadoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
+    });
+    ESTADO.analiseCampo = resumo;
+    toast(`${resumo.total} ordens de serviço importadas.`);
+    agRenderTudo();
+    agAtualizarStatusImportacao();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao importar a planilha: " + err.message);
+    $("#agStatusImportacao").textContent = "Erro: " + err.message;
+  }
+});
+
+async function agAtualizarStatusImportacao() {
+  const partes = [];
+  try {
+    const [snapGlpi, snapCampo] = await Promise.all([
+      getDoc(doc(db, "analiseGlpi", "glpi")),
+      getDoc(doc(db, "analiseGlpi", "campo")),
+    ]);
+    if (snapGlpi.exists()) {
+      const d = snapGlpi.data();
+      partes.push(`GLPI: ${d.registros.length} chamados, importado em ${new Date(d.atualizadoEm).toLocaleString("pt-BR")} por ${escapeHtml(d.atualizadoPor)}`);
+    }
+    if (snapCampo.exists()) {
+      const d = snapCampo.data();
+      partes.push(`Campo: ${d.total} ordens, importado em ${new Date(d.atualizadoEm).toLocaleString("pt-BR")} por ${escapeHtml(d.atualizadoPor)}`);
+    }
+  } catch (err) { console.error(err); }
+  $("#agStatusImportacao").textContent = partes.length ? partes.join(" · ") : "Nenhum dado importado ainda.";
+}
+
+// --- 4) Helpers de gráfico (SVG montado na hora, mesma técnica do resto do app) ---
+const AG_NS = "http://www.w3.org/2000/svg";
+function agSvgEl(tag, attrs) { const el = document.createElementNS(AG_NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); return el; }
+function agTruncar(s, max) { return s.length > max ? s.slice(0, max - 1) + "…" : s; }
+function agFmt(n) { return n.toLocaleString("pt-BR"); }
+
+function agMostrarTooltip(evt, nome, valor) {
+  let tip = document.getElementById("agTooltip");
+  if (!tip) { tip = document.createElement("div"); tip.id = "agTooltip"; tip.className = "ag-tooltip"; document.body.appendChild(tip); }
+  tip.innerHTML = `<div class="ag-tt-nome">${escapeHtml(nome)}</div><div class="ag-tt-valor">${valor}</div>`;
+  tip.classList.add("ag-visivel");
+  agPosicionarTooltip(evt);
+}
+function agPosicionarTooltip(evt) {
+  const tip = document.getElementById("agTooltip");
+  if (!tip) return;
+  const x = evt.clientX, y = evt.clientY, m = 14;
+  let left = x + m, top = y + m;
+  if (left + 260 > window.innerWidth) left = x - 260 - m;
+  if (top + 60 > window.innerHeight) top = y - 60 - m;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+function agEsconderTooltip() { document.getElementById("agTooltip")?.classList.remove("ag-visivel"); }
+
+function agChartBarrasH(containerId, dados, opts) {
+  opts = opts || {};
+  const cor = opts.cor || "var(--verde-700)";
+  const cont = $(`#${containerId}`);
+  if (!cont) return;
+  cont.innerHTML = "";
+  if (!dados.length) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
+  const n = dados.length;
+  const W = opts.W || 500, rowH = 28, padL = opts.padL || 190, padR = 46, padT = 6, padB = 6;
+  const plotW = W - padL - padR, H = padT + padB + n * rowH;
+  const max = Math.max(...dados.map((d) => d.valor), 1);
+  const barW = (v) => (plotW * v) / max;
+  const svg = agSvgEl("svg", { viewBox: `0 0 ${W} ${H}` });
+  dados.forEach((d, i) => {
+    const cy = padT + i * rowH + rowH / 2;
+    const bw = Math.max(barW(d.valor), 2);
+    const label = agSvgEl("text", { x: padL - 10, y: cy + 4, class: "ag-nome-label", "text-anchor": "end" });
+    label.textContent = agTruncar(d.nome, opts.maxCharsLabel || 26);
+    svg.appendChild(label);
+    svg.appendChild(agSvgEl("rect", { x: padL, y: cy - 9, width: bw, height: 18, rx: 4, ry: 4, fill: cor }));
+    const val = agSvgEl("text", { x: padL + bw + 8, y: cy + 4, class: "ag-valor-label" });
+    val.textContent = opts.formatador ? opts.formatador(d.valor) : agFmt(d.valor);
+    svg.appendChild(val);
+    const hit = agSvgEl("rect", { x: 0, y: padT + i * rowH, width: W, height: rowH, fill: "transparent", style: "cursor:pointer" });
+    hit.addEventListener("mouseenter", (e) => agMostrarTooltip(e, d.nome, (opts.formatador ? opts.formatador(d.valor) : agFmt(d.valor)) + (d.n ? ` (n=${d.n})` : "")));
+    hit.addEventListener("mousemove", agPosicionarTooltip);
+    hit.addEventListener("mouseleave", agEsconderTooltip);
+    svg.appendChild(hit);
+  });
+  cont.appendChild(svg);
+}
+
+function agChartLinha(containerId, serie, cor) {
+  const cont = $(`#${containerId}`);
+  if (!cont) return;
+  cont.innerHTML = "";
+  if (serie.length < 2) { cont.innerHTML = '<p class="muted">Período insuficiente pra gráfico.</p>'; return; }
+  const W = 1000, H = 200, padL = 36, padR = 12, padT = 14, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const max = Math.max(...serie.map((d) => d.valor), 1);
+  const maxEixo = Math.ceil(max / 20) * 20 || 10;
+  const n = serie.length;
+  const x = (i) => padL + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
+  const y = (v) => padT + plotH - (plotH * v) / maxEixo;
+  const svg = agSvgEl("svg", { viewBox: `0 0 ${W} ${H}` });
+  [0, maxEixo / 2, maxEixo].forEach((v) => {
+    const ly = y(v);
+    svg.appendChild(agSvgEl("line", { x1: padL, x2: W - padR, y1: ly, y2: ly, class: "ag-linha-grade" }));
+    const t = agSvgEl("text", { x: padL - 8, y: ly + 4, class: "ag-eixo-label", "text-anchor": "end" });
+    t.textContent = Math.round(v); svg.appendChild(t);
+  });
+  const passo = Math.max(1, Math.ceil(n / 12));
+  serie.forEach((d, i) => {
+    if (i % passo !== 0 && i !== n - 1) return;
+    const t = agSvgEl("text", { x: x(i), y: H - 6, class: "ag-eixo-label", "text-anchor": "middle" });
+    t.textContent = d.rotulo; svg.appendChild(t);
+  });
+  let areaPath = `M ${x(0)} ${y(0)} `, linePath = `M ${x(0)} ${y(serie[0].valor)} `;
+  serie.forEach((d, i) => { areaPath += `L ${x(i)} ${y(d.valor)} `; if (i > 0) linePath += `L ${x(i)} ${y(d.valor)} `; });
+  areaPath += `L ${x(n - 1)} ${y(0)} Z`;
+  svg.appendChild(agSvgEl("path", { d: areaPath, fill: cor, opacity: "0.12", stroke: "none" }));
+  svg.appendChild(agSvgEl("path", { d: linePath, fill: "none", stroke: cor, "stroke-width": "2", "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  serie.forEach((d, i) => {
+    const hit = agSvgEl("circle", { cx: x(i), cy: y(d.valor), r: "10", fill: "transparent", style: "cursor:pointer" });
+    hit.addEventListener("mouseenter", (e) => agMostrarTooltip(e, d.rotulo, agFmt(d.valor) + " chamados"));
+    hit.addEventListener("mousemove", agPosicionarTooltip);
+    hit.addEventListener("mouseleave", agEsconderTooltip);
+    svg.appendChild(hit);
+  });
+  cont.appendChild(svg);
+}
+
+function agChartBarraEmpilhada(containerId, legendaId, dados, cores) {
+  const cont = $(`#${containerId}`);
+  cont.innerHTML = "";
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const leg = $(`#${legendaId}`);
+  if (leg) leg.innerHTML = "";
+  if (!total) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
+  const W = 500, H = 38;
+  const svg = agSvgEl("svg", { viewBox: `0 0 ${W} ${H}` });
+  let xAtual = 0; const gap = 2;
+  dados.forEach((d, i) => {
+    const w = (W * d.valor) / total;
+    const larguraReal = Math.max(w - (i < dados.length - 1 ? gap : 0), d.valor > 0 ? 1 : 0);
+    const rect = agSvgEl("rect", { x: xAtual, y: 0, width: larguraReal, height: H, rx: 6, ry: 6, fill: cores[i % cores.length] });
+    rect.style.cursor = "pointer";
+    rect.addEventListener("mouseenter", (e) => agMostrarTooltip(e, d.nome, agFmt(d.valor) + " (" + ((d.valor / total) * 100).toFixed(1) + "%)"));
+    rect.addEventListener("mousemove", agPosicionarTooltip);
+    rect.addEventListener("mouseleave", agEsconderTooltip);
+    svg.appendChild(rect); xAtual += w;
+  });
+  cont.appendChild(svg);
+  if (leg) dados.forEach((d, i) => {
+    const pct = ((d.valor / total) * 100).toFixed(1);
+    const item = document.createElement("span"); item.className = "ag-legenda-item";
+    item.innerHTML = `<span class="ag-legenda-swatch" style="background:${cores[i % cores.length]}"></span>${escapeHtml(d.nome)} — ${agFmt(d.valor)} (${pct}%)`;
+    leg.appendChild(item);
+  });
+}
+
+function agChartPareto(containerId, legendaId, dados) {
+  const cont = $(`#${containerId}`);
+  cont.innerHTML = "";
+  const leg = $(`#${legendaId}`);
+  if (leg) leg.innerHTML = "";
+  if (!dados.length) { cont.innerHTML = '<p class="muted">Sem dados classificáveis no recorte atual.</p>'; return; }
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  let acc = 0;
+  const comPct = dados.map((d) => { acc += d.valor; return { ...d, pctAcc: (acc / total) * 100 }; });
+  const n = comPct.length;
+  const W = Math.max(640, n * 46), H = 320, padL = 42, padR = 42, padT = 16, padB = 110;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxQtd = Math.max(...comPct.map((d) => d.valor));
+  const maxEixo = Math.ceil(maxQtd / 50) * 50 || 10;
+  const barW = plotW / n * 0.62;
+  const xCentro = (i) => padL + (plotW * (i + 0.5)) / n;
+  const yQtd = (v) => padT + plotH - (plotH * v) / maxEixo;
+  const yPct = (v) => padT + plotH - (plotH * v) / 100;
+  const margemRotulo = 48;
+  const svg = agSvgEl("svg", { viewBox: `-${margemRotulo} 0 ${W + margemRotulo} ${H}` });
+  [0, maxEixo / 2, maxEixo].forEach((v) => {
+    const ly = yQtd(v);
+    svg.appendChild(agSvgEl("line", { x1: padL, x2: W - padR, y1: ly, y2: ly, class: "ag-linha-grade" }));
+    const t = agSvgEl("text", { x: padL - 8, y: ly + 4, class: "ag-eixo-label", "text-anchor": "end" });
+    t.textContent = Math.round(v); svg.appendChild(t);
+  });
+  const y80 = yPct(80);
+  svg.appendChild(agSvgEl("line", { x1: padL, x2: W - padR, y1: y80, y2: y80, stroke: "var(--dourado)", "stroke-width": "1", "stroke-dasharray": "4 3", opacity: "0.7" }));
+  const t80 = agSvgEl("text", { x: W - padR, y: y80 - 4, class: "ag-valor-label", "text-anchor": "end" });
+  t80.setAttribute("fill", "var(--dourado-escuro)"); t80.textContent = "80%"; svg.appendChild(t80);
+  comPct.forEach((d, i) => {
+    const bx = xCentro(i) - barW / 2, bh = plotH - (yQtd(d.valor) - padT), by = yQtd(d.valor);
+    const rect = agSvgEl("rect", { x: bx, y: by, width: barW, height: bh, rx: 3, ry: 3, fill: "var(--verde-700)" });
+    rect.style.cursor = "pointer";
+    rect.addEventListener("mouseenter", (e) => agMostrarTooltip(e, d.nome, `${agFmt(d.valor)} chamados · ${d.pctAcc.toFixed(1)}% acumulado`));
+    rect.addEventListener("mousemove", agPosicionarTooltip);
+    rect.addEventListener("mouseleave", agEsconderTooltip);
+    svg.appendChild(rect);
+    const rot = agSvgEl("text", { x: xCentro(i), y: H - padB + 14, class: "ag-eixo-label", "text-anchor": "end", transform: `rotate(-40 ${xCentro(i)} ${H - padB + 14})` });
+    rot.textContent = agTruncar(d.nome, 22); svg.appendChild(rot);
+  });
+  let linePath = "";
+  comPct.forEach((d, i) => { linePath += (i === 0 ? "M " : "L ") + xCentro(i) + " " + yPct(d.pctAcc) + " "; });
+  svg.appendChild(agSvgEl("path", { d: linePath, fill: "none", stroke: "var(--dourado-escuro)", "stroke-width": "2", "stroke-linejoin": "round" }));
+  comPct.forEach((d, i) => svg.appendChild(agSvgEl("circle", { cx: xCentro(i), cy: yPct(d.pctAcc), r: "3.5", fill: "var(--dourado-escuro)", stroke: "var(--superficie)", "stroke-width": "1.5" })));
+  [0, 50, 100].forEach((v) => {
+    const t = agSvgEl("text", { x: W - padR + 8, y: yPct(v) + 4, class: "ag-eixo-label" });
+    t.textContent = v + "%"; svg.appendChild(t);
+  });
+  const scrollWrap = document.createElement("div"); scrollWrap.style.overflowX = "auto"; scrollWrap.appendChild(svg);
+  cont.appendChild(scrollWrap);
+  if (leg) {
+    leg.innerHTML = `<span class="ag-legenda-item"><span class="ag-legenda-swatch" style="background:var(--verde-700)"></span>Quantidade de chamados</span>` +
+      `<span class="ag-legenda-item"><span class="ag-legenda-swatch" style="background:var(--dourado-escuro)"></span>% acumulado</span>`;
+  }
+}
+
+// --- 5) Filtro + páginas ---
+function agFiltrar() {
+  const dIni = $("#agFDataIni")?.value, dFim = $("#agFDataFim")?.value;
+  const setor = $("#agFSetor")?.value, prio = $("#agFPrioridade")?.value, status = $("#agFStatus")?.value;
+  return ESTADO.analiseGlpi.registros.filter((r) => {
+    const [, , , rSetor, rData, rStatus, rPrio] = r;
+    if (dIni && rData < dIni) return false;
+    if (dFim && rData > dFim) return false;
+    if (setor && rSetor !== setor) return false;
+    if (prio && rPrio !== prio) return false;
+    if (status && rStatus !== status) return false;
+    return true;
+  });
+}
+
+function agIdadeDias(dataIso) {
+  return Math.max(0, (Date.now() - new Date(dataIso + "T00:00:00").getTime()) / 86400000);
+}
+
+function agRenderVisaoGeral(filtrados) {
+  const CST = 5, CPR = 6;
+  const abertos = filtrados.filter((r) => r[CST] !== "Fechado").length;
+  const fechados = filtrados.length - abertos;
+  const kpis = $("#agKpisVisaoGeral"); kpis.innerHTML = "";
+  [
+    { label: "Chamados no recorte", valor: agFmt(filtrados.length), nota: "respeita os filtros acima" },
+    { label: "Em aberto", valor: agFmt(abertos), nota: `${filtrados.length ? ((abertos / filtrados.length) * 100).toFixed(1) : "0"}% do recorte` },
+    { label: "Encerrados", valor: agFmt(fechados), nota: `${filtrados.length ? ((fechados / filtrados.length) * 100).toFixed(1) : "0"}% do recorte` },
+    { label: "Setores distintos", valor: agFmt(new Set(filtrados.map((r) => r[3])).size), nota: "no recorte atual" },
+  ].forEach((it) => {
+    const div = document.createElement("div"); div.className = "kpi-card";
+    div.innerHTML = `<div class="num">${it.valor}</div><div class="label">${it.label}</div>${it.nota ? `<div class="sublabel">${it.nota}</div>` : ""}`;
+    kpis.appendChild(div);
+  });
+
+  const porMes = {};
+  filtrados.forEach((r) => { const m = r[4].slice(0, 7); porMes[m] = (porMes[m] || 0) + 1; });
+  const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const serieMensal = Object.keys(porMes).sort().map((k) => { const [a, m] = k.split("-"); return { rotulo: `${MESES[+m - 1]}/${a.slice(2)}`, valor: porMes[k] }; });
+  agChartLinha("agChartEvolucao", serieMensal, "var(--verde-700)");
+
+  const porStatus = {}; filtrados.forEach((r) => { porStatus[r[CST]] = (porStatus[r[CST]] || 0) + 1; });
+  const ordemStatus = Object.keys(porStatus).sort((a, b) => (a === "Fechado" ? -1 : b === "Fechado" ? 1 : 0));
+  agChartBarraEmpilhada("agChartStatus", "agLegendaStatus",
+    ordemStatus.map((s) => ({ nome: s, valor: porStatus[s] })),
+    ["var(--verde-700)", "var(--teal-escuro)", "var(--dourado-escuro)", "var(--vermelho)"]);
+
+  const porPrio = {}; filtrados.forEach((r) => { porPrio[r[CPR]] = (porPrio[r[CPR]] || 0) + 1; });
+  agChartBarrasH("agChartPrioridade", Object.entries(porPrio).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor })), { cor: "var(--teal-escuro)", padL: 90, W: 440, maxCharsLabel: 12 });
+
+  const naoMedia = filtrados.filter((r) => r[CPR] !== "Média").length;
+  $("#agLeituraVisaoGeral").innerHTML = filtrados.length
+    ? `<strong>${((abertos / filtrados.length) * 100 || 0).toFixed(1)}%</strong> dos chamados do recorte seguem em aberto. Da prioridade atribuída, <strong>${naoMedia}</strong> de ${agFmt(filtrados.length)} saíram de "Média".`
+    : "";
+}
+
+function agRenderFalhas(filtrados) {
+  const CF = 2, CSE = 3;
+  const classificaveis = filtrados.filter((r) => r[CF] !== "Não classificado (revisar)" && r[CF] !== "Fora de escopo (não é AC)");
+  const naoClassif = filtrados.filter((r) => r[CF] === "Não classificado (revisar)").length;
+  const porFalha = {}; classificaveis.forEach((r) => { porFalha[r[CF]] = (porFalha[r[CF]] || 0) + 1; });
+  const dadosFalha = Object.entries(porFalha).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor }));
+  agChartPareto("agChartPareto", "agLegendaPareto", dadosFalha);
+
+  const porSetor = {}; filtrados.forEach((r) => { if (r[CSE]) porSetor[r[CSE]] = (porSetor[r[CSE]] || 0) + 1; });
+  const topSetores = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([nome, valor]) => ({ nome, valor }));
+  agChartBarrasH("agChartSetores", topSetores, { cor: "var(--verde-700)", padL: 200, maxCharsLabel: 32 });
+
+  const top8 = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const contCruzada = $("#agTabelaCruzada");
+  if (!top8.length) contCruzada.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>';
+  else {
+    let html = '<table class="tabela-cards-mobile"><thead><tr><th>Setor</th><th>Total</th><th>Falha predominante</th></tr></thead><tbody>';
+    top8.forEach(([setor, total]) => {
+      const sub = {}; classificaveis.filter((r) => r[CSE] === setor).forEach((r) => { sub[r[CF]] = (sub[r[CF]] || 0) + 1; });
+      const entradas = Object.entries(sub).sort((a, b) => b[1] - a[1]);
+      html += `<tr><td>${escapeHtml(agTruncar(setor, 34))}</td><td>${agFmt(total)}</td><td>${entradas.length ? escapeHtml(entradas[0][0] + " (" + entradas[0][1] + ")") : "—"}</td></tr>`;
+    });
+    contCruzada.innerHTML = html + "</tbody></table>";
+  }
+
+  $("#agLeituraFalhas").innerHTML = dadosFalha.length ? (() => {
+    let acc = 0, i = 0;
+    for (; i < dadosFalha.length; i++) { acc += dadosFalha[i].valor; if (acc / classificaveis.length >= 0.8) { i++; break; } }
+    return `<strong>${i}</strong> de ${dadosFalha.length} categorias de falha já respondem por cerca de 80% do volume classificável deste recorte. ${naoClassif} chamados do recorte ficaram fora do gráfico por não terem o tipo de problema identificável no título.`;
+  })() : "";
+}
+
+function agPilula(status) {
+  const classe = status === "Fechado" ? "fechado" : /pendente/i.test(status) ? "pendente" : "andamento";
+  return `<span class="ag-pilula ${classe}">${escapeHtml(status)}</span>`;
+}
+
+function agRenderTabela(filtrados) {
+  const CI = 0, CT = 1, CSE = 3, CD = 4, CST = 5, CPR = 6, CG = 7;
+  const busca = ($("#agBuscaTexto")?.value || "").trim().toLowerCase();
+  let linhas = filtrados;
+  if (busca) linhas = linhas.filter((r) => r[CT].toLowerCase().includes(busca) || (r[CSE] || "").toLowerCase().includes(busca) || r[CI].toLowerCase().includes(busca));
+
+  const idxCampo = { id: CI, titulo: CT, data: CD, status: CST, prioridade: CPR, setor: CSE, grupo: CG, idadeDias: -1 }[_agOrdenacaoTabela.campo];
+  linhas = [...linhas].sort((a, b) => {
+    let va = idxCampo === -1 ? agIdadeDias(a[CD]) : a[idxCampo], vb = idxCampo === -1 ? agIdadeDias(b[CD]) : b[idxCampo];
+    if (typeof va === "number") return _agOrdenacaoTabela.direcao === "asc" ? va - vb : vb - va;
+    va = String(va); vb = String(vb);
+    return _agOrdenacaoTabela.direcao === "asc" ? va.localeCompare(vb, "pt-BR") : vb.localeCompare(va, "pt-BR");
+  });
+
+  const LINHAS_POR_PAGINA = 50;
+  const totalPaginas = Math.max(1, Math.ceil(linhas.length / LINHAS_POR_PAGINA));
+  if (_agPaginaAtualTabela > totalPaginas) _agPaginaAtualTabela = totalPaginas;
+  const inicio = (_agPaginaAtualTabela - 1) * LINHAS_POR_PAGINA;
+  const pagina = linhas.slice(inicio, inicio + LINHAS_POR_PAGINA);
+
+  $("#agCorpoTabela").innerHTML = pagina.map((r) => `<tr>
+      <td>${escapeHtml(r[CI])}</td><td>${escapeHtml(agTruncar(r[CT], 70))}</td>
+      <td>${r[CD].split("-").reverse().join("/")}</td><td>${agPilula(r[CST])}</td>
+      <td>${escapeHtml(r[CPR])}</td><td>${escapeHtml(agTruncar(r[CSE] || "—", 28))}</td>
+      <td>${escapeHtml(r[CG])}</td><td>${agIdadeDias(r[CD]).toFixed(0)}</td>
+    </tr>`).join("");
+
+  const pagCont = $("#agPaginacaoTabela");
+  pagCont.innerHTML = "";
+  const info = document.createElement("span");
+  info.textContent = linhas.length ? `${agFmt(inicio + 1)}–${agFmt(Math.min(inicio + LINHAS_POR_PAGINA, linhas.length))} de ${agFmt(linhas.length)}  ` : "0 resultados";
+  pagCont.appendChild(info);
+  const btnAnt = document.createElement("button"); btnAnt.className = "btn ghost"; btnAnt.textContent = "‹ Anterior"; btnAnt.disabled = _agPaginaAtualTabela <= 1;
+  btnAnt.addEventListener("click", () => { _agPaginaAtualTabela--; agRenderTudo(); });
+  const btnProx = document.createElement("button"); btnProx.className = "btn ghost"; btnProx.textContent = "Próxima ›"; btnProx.disabled = _agPaginaAtualTabela >= totalPaginas;
+  btnProx.addEventListener("click", () => { _agPaginaAtualTabela++; agRenderTudo(); });
+  pagCont.appendChild(btnAnt); pagCont.appendChild(btnProx);
+}
+
+function agRenderEquipe() {
+  const d = ESTADO.analiseCampo;
+  if (!d) { $("#agPagina-equipe").innerHTML = '<p class="muted">Importe a planilha de Ordem de Serviço de campo pra ver essa página.</p>'; return; }
+  const kpis = $("#agKpisEquipe"); kpis.innerHTML = "";
+  const taxa = d.sim + d.nao ? ((d.sim / (d.sim + d.nao)) * 100).toFixed(1) : "0";
+  [
+    { label: "Ordens de serviço de campo", valor: agFmt(d.total) },
+    { label: "Taxa de resolução", valor: taxa + "%", nota: `${agFmt(d.sim)} de ${agFmt(d.sim + d.nao)} com resposta` },
+    { label: "Pessoas distintas na escala", valor: agFmt(d.porPessoa.length) },
+    { label: "Prédios atendidos", valor: agFmt(d.porPredio.length) },
+  ].forEach((it) => {
+    const div = document.createElement("div"); div.className = "kpi-card";
+    div.innerHTML = `<div class="num">${it.valor}</div><div class="label">${it.label}</div>${it.nota ? `<div class="sublabel">${it.nota}</div>` : ""}`;
+    kpis.appendChild(div);
+  });
+  agChartBarrasH("agChartEquipePessoa", d.porPessoa, { cor: "var(--verde-700)", maxCharsLabel: 22 });
+  agChartBarrasH("agChartEquipePredio", d.porPredio, { cor: "var(--teal-escuro)", padL: 110, maxCharsLabel: 16 });
+
+  if (d.porPessoa.length) {
+    const maisCarregado = d.porPessoa[0];
+    const valores = d.porPessoa.map((x) => x.valor).sort((a, b) => a - b);
+    const mediana = valores[Math.floor(valores.length / 2)];
+    $("#agLeituraEquipe").innerHTML = `Desmembrando as duplas ("Equipe X: Fulano e Beltrano"), <strong>${escapeHtml(maisCarregado.nome)}</strong> aparece em <strong>${agFmt(maisCarregado.valor)}</strong> ordens de serviço — acima da mediana do grupo (${agFmt(mediana)}).`;
+  }
+
+  const fmtNota = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  agChartBarrasH("agChartEquipeNotaMarca", d.notaMarca, { cor: "var(--teal-escuro)", padL: 110, maxCharsLabel: 14, formatador: fmtNota });
+  agChartBarrasH("agChartEquipeNotaPredio", d.notaPredio, { cor: "var(--teal-escuro)", padL: 90, maxCharsLabel: 12, formatador: fmtNota });
+
+  const lista = $("#agListaEquipePendencias"); lista.innerHTML = "";
+  if (!d.naoSolucionados.length) lista.innerHTML = '<p class="muted">Nenhum registro marcado como não resolvido.</p>';
+  d.naoSolucionados.forEach((p) => {
+    const div = document.createElement("div"); div.className = "ag-pendencia-card";
+    div.innerHTML = `<div class="ag-ped-meta">${escapeHtml(p.data)} · ${escapeHtml(p.predio)} · ${escapeHtml(p.local)}</div><div>${escapeHtml(p.problema || "(sem descrição)")}</div>`;
+    lista.appendChild(div);
+  });
+}
+
+function agPaginaAtiva() { return $("#agAbas .btn-modo.active")?.dataset.agPagina || "visaoGeral"; }
+
+function agRenderTudo() {
+  const pag = agPaginaAtiva();
+  if (pag === "equipe") { agRenderEquipe(); return; }
+  const filtrados = agFiltrar();
+  $("#agContagemFiltro").textContent = `${agFmt(filtrados.length)} de ${agFmt(ESTADO.analiseGlpi.registros.length)} chamados`;
+  if (pag === "visaoGeral") agRenderVisaoGeral(filtrados);
+  else if (pag === "falhas") agRenderFalhas(filtrados);
+  else if (pag === "acompanhamento") agRenderTabela(filtrados);
+}
+
+function agInicializarControles() {
+  if (_agJaInicializado) return;
+  _agJaInicializado = true;
+
+  $all("#agAbas .btn-modo").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $all("#agAbas .btn-modo").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      $all(".ag-pagina").forEach((p) => (p.hidden = true));
+      $(`#agPagina-${btn.dataset.agPagina}`).hidden = false;
+      $("#agBarraFiltros").hidden = btn.dataset.agPagina === "equipe";
+      agRenderTudo();
+    });
+  });
+
+  ["agFDataIni", "agFDataFim", "agFSetor", "agFPrioridade", "agFStatus"].forEach((id) => {
+    $(`#${id}`)?.addEventListener("change", () => { _agPaginaAtualTabela = 1; agRenderTudo(); });
+  });
+  $("#agBtnLimparFiltros")?.addEventListener("click", () => {
+    $("#agFDataIni").value = ""; $("#agFDataFim").value = "";
+    $("#agFSetor").value = ""; $("#agFPrioridade").value = ""; $("#agFStatus").value = "";
+    _agPaginaAtualTabela = 1; agRenderTudo();
+  });
+  $("#agBuscaTexto")?.addEventListener("input", () => { _agPaginaAtualTabela = 1; agRenderTudo(); });
+  $all("#agTabelaOrdens thead th[data-ag-campo]").forEach((th) => {
+    th.style.cursor = "pointer";
+    th.addEventListener("click", () => {
+      const campo = th.dataset.agCampo;
+      if (_agOrdenacaoTabela.campo === campo) _agOrdenacaoTabela.direcao = _agOrdenacaoTabela.direcao === "asc" ? "desc" : "asc";
+      else { _agOrdenacaoTabela.campo = campo; _agOrdenacaoTabela.direcao = "asc"; }
+      _agPaginaAtualTabela = 1; agRenderTudo();
+    });
+  });
+}
+
+function agPopularFiltros() {
+  const setores = [...new Set(ESTADO.analiseGlpi.registros.map((r) => r[3]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const prioridades = [...new Set(ESTADO.analiseGlpi.registros.map((r) => r[6]))].sort();
+  const statusList = [...new Set(ESTADO.analiseGlpi.registros.map((r) => r[5]))].sort();
+  const selSetor = $("#agFSetor"), selPrio = $("#agFPrioridade"), selStatus = $("#agFStatus");
+  if (selSetor) { selSetor.innerHTML = '<option value="">Todos</option>'; setores.forEach((s) => selSetor.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)); }
+  if (selPrio) { selPrio.innerHTML = '<option value="">Todas</option>'; prioridades.forEach((s) => selPrio.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)); }
+  if (selStatus) { selStatus.innerHTML = '<option value="">Todos</option>'; statusList.forEach((s) => selStatus.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)); }
+}
+
+async function renderAnaliseGlpi() {
+  const souAdminLocal = ESTADO.permissao === "admin";
+  $("#agCardImportar").hidden = !souAdminLocal;
+  agInicializarControles();
+  if (souAdminLocal) agAtualizarStatusImportacao();
+
+  try {
+    const [snapGlpi, snapCampo] = await Promise.all([
+      getDoc(doc(db, "analiseGlpi", "glpi")),
+      getDoc(doc(db, "analiseGlpi", "campo")),
+    ]);
+    ESTADO.analiseGlpi = snapGlpi.exists() ? { campos: snapGlpi.data().campos, registros: snapGlpi.data().registros } : { campos: [], registros: [] };
+    ESTADO.analiseCampo = snapCampo.exists() ? snapCampo.data() : null;
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao carregar o painel: " + err.message);
+  }
+
+  const temDados = ESTADO.analiseGlpi.registros.length > 0 || ESTADO.analiseCampo;
+  $("#agConteudo").hidden = !temDados;
+  if (!temDados) return;
+
+  agPopularFiltros();
+  agRenderTudo();
+}

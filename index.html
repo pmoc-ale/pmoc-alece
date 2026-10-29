@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0B3D24">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -135,6 +135,9 @@
         </button>
         <button class="tab sidenav-item" data-view="historico">
           <span class="sidenav-icon"></span> Histórico
+        </button>
+        <button class="tab sidenav-item" data-view="analiseglpi">
+          <span class="sidenav-icon"></span> Análise GLPI
         </button>
       </div>
     </details>
@@ -439,6 +442,147 @@
         </div>
     </div>
 </section>
+
+    <!-- VIEW: ANÁLISE GLPI -->
+    <section class="view" id="view-analiseglpi">
+      <div class="card" id="agCardImportar">
+        <div class="card-head">
+          <h2>Importar dados</h2>
+        </div>
+        <p class="muted">Exporte do GLPI (chamados, .csv) e/ou a planilha manual de Ordem de Serviço de campo (.xlsx), e suba aqui pra atualizar o painel. Fica salvo pra todo mundo ver, até a próxima importação.</p>
+        <div class="grid-form">
+          <label>Chamados do GLPI (.csv)
+            <span class="file-picker">
+              <input type="file" accept=".csv" id="agGlpiInput" hidden>
+              <button type="button" class="btn secondary" id="agBtnGlpiEscolher">Escolher arquivo</button>
+              <span class="file-picker-nome" id="agGlpiNome">Nenhum selecionado</span>
+            </span>
+          </label>
+          <label>Ordem de Serviço de campo (.xlsx)
+            <span class="file-picker">
+              <input type="file" accept=".xlsx" id="agCampoInput" hidden>
+              <button type="button" class="btn secondary" id="agBtnCampoEscolher">Escolher arquivo</button>
+              <span class="file-picker-nome" id="agCampoNome">Nenhum selecionado</span>
+            </span>
+          </label>
+        </div>
+        <p class="muted" id="agStatusImportacao" style="margin-top:10px"></p>
+      </div>
+
+      <div id="agConteudo" hidden>
+        <div class="tabs" id="agAbas" style="margin-bottom:14px">
+          <button class="btn-modo active" data-ag-pagina="visaoGeral">Visão geral</button>
+          <button class="btn-modo" data-ag-pagina="falhas">Análise das falhas</button>
+          <button class="btn-modo" data-ag-pagina="acompanhamento">Acompanhamento das ordens</button>
+          <button class="btn-modo" data-ag-pagina="equipe">Equipe de campo</button>
+        </div>
+
+        <div class="local-filtro" id="agBarraFiltros" style="flex-wrap:wrap; gap:10px; align-items:flex-end;">
+          <label style="font-size:11px">Abertura de<br><input type="date" id="agFDataIni"></label>
+          <label style="font-size:11px">até<br><input type="date" id="agFDataFim"></label>
+          <label style="font-size:11px">Setor<br><select id="agFSetor"><option value="">Todos</option></select></label>
+          <label style="font-size:11px">Prioridade<br><select id="agFPrioridade"><option value="">Todas</option></select></label>
+          <label style="font-size:11px">Status<br><select id="agFStatus"><option value="">Todos</option></select></label>
+          <button class="btn ghost" id="agBtnLimparFiltros">Limpar filtros</button>
+          <span class="muted" id="agContagemFiltro" style="margin-left:auto"></span>
+        </div>
+
+        <!-- Página: Visão geral -->
+        <div class="ag-pagina" id="agPagina-visaoGeral">
+          <div class="kpi-row" id="agKpisVisaoGeral"></div>
+          <div class="card">
+            <h2>Evolução das aberturas</h2>
+            <div id="agChartEvolucao"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="card">
+              <h2>Distribuição por status</h2>
+              <div id="agChartStatus"></div>
+              <div id="agLegendaStatus" style="margin-top:8px;font-size:12px"></div>
+            </div>
+            <div class="card">
+              <h2>Distribuição por prioridade</h2>
+              <div id="agChartPrioridade"></div>
+            </div>
+          </div>
+          <div class="card" id="agLeituraVisaoGeral" style="font-size:13px"></div>
+        </div>
+
+        <!-- Página: Análise das falhas -->
+        <div class="ag-pagina" id="agPagina-falhas" hidden>
+          <div class="card">
+            <h2>Pareto dos tipos de falha</h2>
+            <div id="agChartPareto"></div>
+            <div id="agLegendaPareto" style="margin-top:8px;font-size:12px"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="card">
+              <h2>Setores com mais chamados</h2>
+              <div id="agChartSetores"></div>
+            </div>
+            <div class="card">
+              <h2>Falha predominante por setor</h2>
+              <div id="agTabelaCruzada"></div>
+            </div>
+          </div>
+          <div class="card" id="agLeituraFalhas" style="font-size:13px"></div>
+        </div>
+
+        <!-- Página: Acompanhamento -->
+        <div class="ag-pagina" id="agPagina-acompanhamento" hidden>
+          <div class="card">
+            <h2>Ordens de serviço — acompanhamento</h2>
+            <input type="search" id="agBuscaTexto" placeholder="Buscar por título, setor, ID…" style="width:100%;margin-bottom:10px">
+            <div class="table-wrap">
+              <table id="agTabelaOrdens" class="tabela-cards-mobile">
+                <thead>
+                  <tr>
+                    <th data-ag-campo="id">ID</th>
+                    <th data-ag-campo="titulo">Título</th>
+                    <th data-ag-campo="data">Abertura</th>
+                    <th data-ag-campo="status">Status</th>
+                    <th data-ag-campo="prioridade">Prioridade</th>
+                    <th data-ag-campo="setor">Setor</th>
+                    <th data-ag-campo="grupo">Grupo técnico</th>
+                    <th data-ag-campo="idadeDias">Idade (dias)</th>
+                  </tr>
+                </thead>
+                <tbody id="agCorpoTabela"></tbody>
+              </table>
+            </div>
+            <div id="agPaginacaoTabela" style="margin-top:10px;font-size:12.5px"></div>
+          </div>
+        </div>
+
+        <!-- Página: Equipe de campo -->
+        <div class="ag-pagina" id="agPagina-equipe" hidden>
+          <p class="muted">Fonte diferente das outras páginas: planilha manual de Ordem de Serviço da equipe de campo. Não tem chave em comum com o GLPI, por isso não é filtrada pela barra acima.</p>
+          <div class="kpi-row" id="agKpisEquipe"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="card">
+              <h2>Carga real por pessoa</h2>
+              <div id="agChartEquipePessoa"></div>
+            </div>
+            <div class="card">
+              <h2>Ordens de serviço por prédio</h2>
+              <div id="agChartEquipePredio"></div>
+            </div>
+          </div>
+          <div class="card" id="agLeituraEquipe" style="font-size:13px"></div>
+          <div class="card">
+            <h2>Nota de funcionamento em campo</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div id="agChartEquipeNotaMarca"></div>
+              <div id="agChartEquipeNotaPredio"></div>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Ordens marcadas como não resolvidas</h2>
+            <div id="agListaEquipePendencias"></div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- VIEW 8: EQUIPAMENTOS -->
     <section class="view" id="view-equipamentos">
@@ -1021,7 +1165,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=152"></script>
+<script type="module" src="app.js?v=153"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
