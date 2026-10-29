@@ -1,14 +1,18 @@
 // Worker Cloudflare — cópia automática dos dados do PMOC pra uma Planilha
-// Google. Roda sozinho todo dia (Cron Trigger, configurado no painel da
-// Cloudflare, não aqui no código) e serve três coisas de uma vez:
+// Google, E das fotos pra uma pasta do Google Drive. Roda sozinho todo dia
+// (Cron Trigger, configurado no painel da Cloudflare, não aqui no código) e
+// serve quatro coisas de uma vez:
 //   1. Uma "visão de banco de dados" de tudo que está no sistema, em
 //      formato de planilha, filtrável.
-//   2. Um backup fora do Firebase, atualizado automaticamente.
-//   3. Uma fonte de dados pronta pra plugar no Looker Studio (BI) depois.
+//   2. Um backup dos DADOS fora do Firebase, atualizado automaticamente.
+//   3. Um backup das FOTOS fora do Cloudinary, numa pasta do Drive que é
+//      sua (independe da conta/plano do Cloudinary continuar existindo).
+//   4. Uma fonte de dados pronta pra plugar no Looker Studio (BI) depois.
 //
 // Como funciona: usa uma "conta de serviço" do Google (Service Account) —
 // diferente do login de uma pessoa, é uma credencial de robô que a gente
-// autoriza a ler o Firestore inteiro e escrever numa planilha específica.
+// autoriza a ler o Firestore inteiro, escrever numa planilha específica e
+// enviar arquivo pra uma pasta específica do Drive.
 //
 // Variáveis de ambiente que esse Worker precisa (Settings > Variables and
 // Secrets, todas como "Secret", exceto a última que pode ser texto normal):
@@ -18,17 +22,30 @@
 //   FIREBASE_PROJECT_ID            (= "pcm-alece")
 //   GOOGLE_SHEET_ID                (o ID da planilha — vem no link dela,
 //                                    entre "/d/" e "/edit")
+//   GOOGLE_DRIVE_FOLDER_ID         (o ID da pasta do Drive pras fotos —
+//                                    vem no link dela, depois de "/folders/")
 //
 // A planilha precisa ter 6 abas, com esses nomes exatos:
 //   Equipamentos, Historico, Ordens, Auditoria, Feriados, Equipes
 //
-// E precisa estar COMPARTILHADA (botão "Compartilhar" na planilha) com o
-// e-mail da conta de serviço, com permissão de Editor.
+// A planilha E a pasta do Drive precisam estar COMPARTILHADAS (botão
+// "Compartilhar") com o e-mail da conta de serviço, com permissão de Editor.
+//
+// O backup de fotos é incremental: cada dia só baixa e reenvia as fotos que
+// ainda não estão na pasta (confere pelo nome do arquivo antes de reenviar),
+// e processa no máximo MAX_FOTOS_POR_EXECUCAO novas por vez, pra não
+// estourar o tempo de execução do Worker num dia em que tiver muita coisa
+// nova de uma vez -- o que sobrar fica pro próximo dia, sem perder nada.
 
 // Escopo "datastore" (não ".readonly") porque a API do Firestore precisa
 // dele mesmo só pra ler -- quem realmente impede escrita é o papel "Cloud
 // Datastore Viewer" dado à conta de serviço no IAM, não o escopo em si.
-const ESCOPOS_GOOGLE = "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/spreadsheets";
+// "drive" (não "drive.file") porque precisa LISTAR o que já existe na pasta
+// antes de decidir o que falta enviar -- "drive.file" só enxergaria os
+// arquivos que o próprio Worker criou nessa sessão, não os de execuções
+// anteriores.
+const ESCOPOS_GOOGLE = "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive";
+const MAX_FOTOS_POR_EXECUCAO = 60;
 
 function base64Url(bytes) {
   let binario = "";
@@ -147,6 +164,90 @@ async function escreverAba(nomeAba, colunas, linhas, token, env) {
   }
 }
 
+// Lista os nomes de arquivo já presentes na pasta do Drive (paginado --
+// uma pasta com muita foto não cabe numa página só). Só o nome, que é
+// tudo que precisamos pra decidir o que já foi feito.
+async function nomesJaNaPasta(token, env) {
+  const nomes = new Set();
+  let pageToken = "";
+  do {
+    const q = encodeURIComponent(`'${env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=nextPageToken,files(name)&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ""}`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const dados = await resp.json();
+    if (!resp.ok) throw new Error("Falha ao listar a pasta do Drive: " + (dados.error?.message || resp.status));
+    (dados.files || []).forEach((f) => nomes.add(f.name));
+    pageToken = dados.nextPageToken || "";
+  } while (pageToken);
+  return nomes;
+}
+
+// Baixa a foto (URL pública do Cloudinary, sem precisar de autenticação) e
+// sobe pro Drive via upload multipart (metadado + bytes na mesma
+// requisição) -- mais simples que o upload resumível, e o tamanho de uma
+// foto já comprimida pelo app (ver comprimirImagem em app.js) é pequeno o
+// bastante pra não precisar dele.
+async function copiarFotoParaDrive(url, nomeArquivo, token, env) {
+  const respFoto = await fetch(url);
+  if (!respFoto.ok) throw new Error(`Falha ao baixar a foto (${respFoto.status})`);
+  const bytes = await respFoto.arrayBuffer();
+
+  const metadados = { name: nomeArquivo, parents: [env.GOOGLE_DRIVE_FOLDER_ID] };
+  const boundary = "pmocbackup" + Date.now();
+  const partes = [
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadados)}\r\n`,
+    `--${boundary}\r\nContent-Type: image/jpeg\r\n\r\n`,
+  ];
+  const corpo = new Blob([partes[0], partes[1], bytes, `\r\n--${boundary}--`]);
+
+  const resp = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+    body: corpo,
+  });
+  if (!resp.ok) {
+    const erro = await resp.json().catch(() => ({}));
+    throw new Error(`Falha ao enviar ${nomeArquivo} pro Drive: ${erro.error?.message || resp.status}`);
+  }
+}
+
+// Reúne as fotos de equipamentos/histórico/ordens, acha quais ainda não
+// foram copiadas pro Drive, e copia até o limite de uma execução. O nome
+// do arquivo é estável (baseado no id do documento) -- rodar de novo não
+// duplica nada, só preenche o que faltou.
+async function backupFotos(equipamentos, historico, ordens, token, env) {
+  if (!env.GOOGLE_DRIVE_FOLDER_ID) return { pulado: "GOOGLE_DRIVE_FOLDER_ID não configurado" };
+
+  const candidatos = [
+    ...equipamentos.filter((e) => e.fotoUrl).map((e) => ({ url: e.fotoUrl, nome: `equipamento_${e.patrimonio || e.id}.jpg` })),
+    ...historico.filter((h) => h.fotoUrl).map((h) => ({ url: h.fotoUrl, nome: `historico_${h.id}.jpg` })),
+    ...ordens.filter((o) => o.fotoUrl).map((o) => ({ url: o.fotoUrl, nome: `ordem_${o.id}.jpg` })),
+  ];
+
+  const jaExistentes = await nomesJaNaPasta(token, env);
+  const faltando = candidatos.filter((c) => !jaExistentes.has(c.nome));
+  const paraEnviarAgora = faltando.slice(0, MAX_FOTOS_POR_EXECUCAO);
+
+  let enviadas = 0;
+  const falhas = [];
+  for (const foto of paraEnviarAgora) {
+    try {
+      await copiarFotoParaDrive(foto.url, foto.nome, token, env);
+      enviadas++;
+    } catch (err) {
+      falhas.push({ nome: foto.nome, erro: err.message });
+    }
+  }
+
+  return {
+    totalNoSistema: candidatos.length,
+    jaBackupeadas: jaExistentes.size,
+    enviadasAgora: enviadas,
+    aindaFaltando: Math.max(0, faltando.length - enviadas),
+    falhas,
+  };
+}
+
 async function rodarBackup(env) {
   const token = await obterAccessTokenGoogle(env);
   const cicloId = await cicloAtualId(token, env);
@@ -188,6 +289,8 @@ async function rodarBackup(env) {
     "id", "predio", "ordem", "nome",
   ], equipes, token, env);
 
+  const fotos = await backupFotos(equipamentos, historico, ordens, token, env);
+
   return {
     equipamentos: equipamentos.length,
     historico: historico.length,
@@ -195,6 +298,7 @@ async function rodarBackup(env) {
     auditoria: auditoria.length,
     feriados: feriados.length,
     equipes: equipes.length,
+    fotos,
   };
 }
 
