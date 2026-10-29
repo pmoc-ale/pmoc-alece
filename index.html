@@ -481,6 +481,16 @@
               <div id="agChartPrioridade"></div>
             </div>
           </div>
+          <div class="ag-grid-2">
+            <div class="card">
+              <h2>Chamados por dia da semana</h2>
+              <div id="agChartDiaSemana"></div>
+            </div>
+            <div class="card">
+              <h2>Em aberto há mais tempo</h2>
+              <div id="agListaAntigos"></div>
+            </div>
+          </div>
           <div class="card" id="agLeituraVisaoGeral" style="font-size:13px"></div>
         </div>
 
@@ -497,9 +507,13 @@
               <div id="agChartSetores"></div>
             </div>
             <div class="card">
-              <h2>Falha predominante por setor</h2>
-              <div id="agTabelaCruzada"></div>
+              <h2>Distribuição por grupo técnico</h2>
+              <div id="agChartGrupo"></div>
             </div>
+          </div>
+          <div class="card">
+            <h2>Falha predominante por setor</h2>
+            <div id="agTabelaCruzada"></div>
           </div>
           <div class="card" id="agLeituraFalhas" style="font-size:13px"></div>
         </div>
@@ -1152,7 +1166,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=158"></script>
+<script type="module" src="app.js?v=159"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

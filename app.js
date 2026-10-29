@@ -12247,6 +12247,21 @@ function agRenderVisaoGeral(filtrados) {
   const porPrio = {}; filtrados.forEach((r) => { porPrio[r[CPR]] = (porPrio[r[CPR]] || 0) + 1; });
   agChartBarrasH("agChartPrioridade", Object.entries(porPrio).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor })), { cor: "var(--teal-escuro)", padL: 90, W: 440, maxCharsLabel: 12 });
 
+  const NOMES_DIA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+  const porDia = new Array(7).fill(0);
+  filtrados.forEach((r) => { const d = new Date(r[4] + "T00:00:00").getDay(); porDia[(d + 6) % 7]++; });
+  agChartBarrasH("agChartDiaSemana", NOMES_DIA.map((nome, i) => ({ nome, valor: porDia[i] })),
+    { cor: "var(--verde-700)", padL: 50, W: 440 });
+
+  const lista = $("#agListaAntigos"); lista.innerHTML = "";
+  const abertosOrdenados = filtrados.filter((r) => r[CST] !== "Fechado").sort((a, b) => a[4].localeCompare(b[4])).slice(0, 8);
+  if (!abertosOrdenados.length) lista.innerHTML = '<p class="muted">Nenhum chamado em aberto no recorte atual.</p>';
+  abertosOrdenados.forEach((r) => {
+    const div = document.createElement("div"); div.className = "ag-pendencia-card";
+    div.innerHTML = `<div class="ag-ped-meta">${agIdadeDias(r[4]).toFixed(0)} dias em aberto · ${escapeHtml(agTruncar(r[3] || "—", 30))} · ${agPilula(r[CST])}</div><div>${escapeHtml(agTruncar(r[1], 70))}</div>`;
+    lista.appendChild(div);
+  });
+
   const naoMedia = filtrados.filter((r) => r[CPR] !== "Média").length;
   $("#agLeituraVisaoGeral").innerHTML = filtrados.length
     ? `<strong>${((abertos / filtrados.length) * 100 || 0).toFixed(1)}%</strong> dos chamados do recorte seguem em aberto. Da prioridade atribuída, <strong>${naoMedia}</strong> de ${agFmt(filtrados.length)} saíram de "Média".`
@@ -12254,7 +12269,7 @@ function agRenderVisaoGeral(filtrados) {
 }
 
 function agRenderFalhas(filtrados) {
-  const CF = 2, CSE = 3;
+  const CF = 2, CSE = 3, CG = 7;
   const classificaveis = filtrados.filter((r) => r[CF] !== "Não classificado (revisar)" && r[CF] !== "Fora de escopo (não é AC)");
   const naoClassif = filtrados.filter((r) => r[CF] === "Não classificado (revisar)").length;
   const porFalha = {}; classificaveis.forEach((r) => { porFalha[r[CF]] = (porFalha[r[CF]] || 0) + 1; });
@@ -12264,6 +12279,10 @@ function agRenderFalhas(filtrados) {
   const porSetor = {}; filtrados.forEach((r) => { if (r[CSE]) porSetor[r[CSE]] = (porSetor[r[CSE]] || 0) + 1; });
   const topSetores = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([nome, valor]) => ({ nome, valor }));
   agChartBarrasH("agChartSetores", topSetores, { cor: "var(--verde-700)", padL: 200, maxCharsLabel: 32 });
+
+  const porGrupo = {}; filtrados.forEach((r) => { porGrupo[r[CG]] = (porGrupo[r[CG]] || 0) + 1; });
+  const dadosGrupo = Object.entries(porGrupo).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor }));
+  agChartBarrasH("agChartGrupo", dadosGrupo, { cor: "var(--teal-escuro)", padL: 190, maxCharsLabel: 28 });
 
   const top8 = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const contCruzada = $("#agTabelaCruzada");
