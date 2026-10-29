@@ -12253,15 +12253,6 @@ function agRenderVisaoGeral(filtrados) {
   agChartBarrasH("agChartDiaSemana", NOMES_DIA.map((nome, i) => ({ nome, valor: porDia[i] })),
     { cor: "var(--verde-700)", padL: 50, W: 440 });
 
-  const lista = $("#agListaAntigos"); lista.innerHTML = "";
-  const abertosOrdenados = filtrados.filter((r) => r[CST] !== "Fechado").sort((a, b) => a[4].localeCompare(b[4])).slice(0, 8);
-  if (!abertosOrdenados.length) lista.innerHTML = '<p class="muted">Nenhum chamado em aberto no recorte atual.</p>';
-  abertosOrdenados.forEach((r) => {
-    const div = document.createElement("div"); div.className = "ag-pendencia-card";
-    div.innerHTML = `<div class="ag-ped-meta">${agIdadeDias(r[4]).toFixed(0)} dias em aberto · ${escapeHtml(agTruncar(r[3] || "—", 30))} · ${agPilula(r[CST])}</div><div>${escapeHtml(agTruncar(r[1], 70))}</div>`;
-    lista.appendChild(div);
-  });
-
   const naoMedia = filtrados.filter((r) => r[CPR] !== "Média").length;
   $("#agLeituraVisaoGeral").innerHTML = filtrados.length
     ? `<strong>${((abertos / filtrados.length) * 100 || 0).toFixed(1)}%</strong> dos chamados do recorte seguem em aberto. Da prioridade atribuída, <strong>${naoMedia}</strong> de ${agFmt(filtrados.length)} saíram de "Média".`
@@ -12284,59 +12275,11 @@ function agRenderFalhas(filtrados) {
   const dadosGrupo = Object.entries(porGrupo).sort((a, b) => b[1] - a[1]).map(([nome, valor]) => ({ nome, valor }));
   agChartBarrasH("agChartGrupo", dadosGrupo, { cor: "var(--teal-escuro)", padL: 190, maxCharsLabel: 28 });
 
-  const top8 = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const contCruzada = $("#agTabelaCruzada");
-  if (!top8.length) contCruzada.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>';
-  else {
-    let html = '<table class="tabela-cards-mobile"><thead><tr><th>Setor</th><th>Total</th><th>Falha predominante</th></tr></thead><tbody>';
-    top8.forEach(([setor, total]) => {
-      const sub = {}; classificaveis.filter((r) => r[CSE] === setor).forEach((r) => { sub[r[CF]] = (sub[r[CF]] || 0) + 1; });
-      const entradas = Object.entries(sub).sort((a, b) => b[1] - a[1]);
-      html += `<tr><td>${escapeHtml(agTruncar(setor, 34))}</td><td>${agFmt(total)}</td><td>${entradas.length ? escapeHtml(entradas[0][0] + " (" + entradas[0][1] + ")") : "—"}</td></tr>`;
-    });
-    contCruzada.innerHTML = html + "</tbody></table>";
-  }
-
   $("#agLeituraFalhas").innerHTML = dadosFalha.length ? (() => {
     let acc = 0, i = 0;
     for (; i < dadosFalha.length; i++) { acc += dadosFalha[i].valor; if (acc / classificaveis.length >= 0.8) { i++; break; } }
     return `<strong>${i}</strong> de ${dadosFalha.length} categorias de falha já respondem por cerca de 80% do volume classificável deste recorte. ${naoClassif} chamados do recorte ficaram fora do gráfico por não terem o tipo de problema identificável no título.`;
   })() : "";
-
-  // Cruza volume aberto + idade das pendências + prioridade por setor, pra
-  // apontar onde a manutenção está acumulando problema -- sem inventar um
-  // "score" opaco: ordena pelos próprios números (chamados em aberto, e
-  // idade média deles como desempate), que já contam a história sozinhos.
-  const CST = 5, CPR = 6, CD = 4;
-  const porSetorDetalhe = {};
-  filtrados.forEach((r) => {
-    const setor = r[CSE]; if (!setor) return;
-    if (!porSetorDetalhe[setor]) porSetorDetalhe[setor] = { total: 0, abertos: [], prioridadeNaoMediaAberta: 0 };
-    const d = porSetorDetalhe[setor];
-    d.total++;
-    if (r[CST] !== "Fechado") {
-      d.abertos.push(agIdadeDias(r[CD]));
-      if (r[CPR] !== "Média") d.prioridadeNaoMediaAberta++;
-    }
-  });
-  const linhasCriticidade = Object.entries(porSetorDetalhe)
-    .filter(([, d]) => d.abertos.length > 0)
-    .map(([setor, d]) => ({
-      setor, total: d.total, abertos: d.abertos.length,
-      idadeMedia: d.abertos.reduce((s, v) => s + v, 0) / d.abertos.length,
-      prioridadeNaoMediaAberta: d.prioridadeNaoMediaAberta,
-    }))
-    .sort((a, b) => b.abertos - a.abertos || b.idadeMedia - a.idadeMedia)
-    .slice(0, 15);
-  const contCriticidade = $("#agTabelaCriticidade");
-  if (!linhasCriticidade.length) contCriticidade.innerHTML = '<p class="muted">Nenhum setor com chamado em aberto no recorte atual.</p>';
-  else {
-    let html = '<table class="tabela-cards-mobile"><thead><tr><th>Setor</th><th>Em aberto</th><th>Idade média (dias)</th><th>Prioridade não-média aberta</th></tr></thead><tbody>';
-    linhasCriticidade.forEach((l) => {
-      html += `<tr><td>${escapeHtml(agTruncar(l.setor, 34))}</td><td>${agFmt(l.abertos)}</td><td>${l.idadeMedia.toFixed(0)}</td><td>${l.prioridadeNaoMediaAberta ? agFmt(l.prioridadeNaoMediaAberta) : "—"}</td></tr>`;
-    });
-    contCriticidade.innerHTML = html + "</tbody></table>";
-  }
 }
 
 function agPilula(status) {
@@ -12381,6 +12324,15 @@ function agRenderTabela(filtrados) {
   const btnProx = document.createElement("button"); btnProx.className = "btn ghost"; btnProx.textContent = "Próxima ›"; btnProx.disabled = _agPaginaAtualTabela >= totalPaginas;
   btnProx.addEventListener("click", () => { _agPaginaAtualTabela++; agRenderTudo(); });
   pagCont.appendChild(btnAnt); pagCont.appendChild(btnProx);
+
+  const lista = $("#agListaAntigos"); lista.innerHTML = "";
+  const abertosOrdenados = filtrados.filter((r) => r[CST] !== "Fechado").sort((a, b) => a[CD].localeCompare(b[CD])).slice(0, 8);
+  if (!abertosOrdenados.length) lista.innerHTML = '<p class="muted">Nenhum chamado em aberto no recorte atual.</p>';
+  abertosOrdenados.forEach((r) => {
+    const div = document.createElement("div"); div.className = "ag-pendencia-card";
+    div.innerHTML = `<div class="ag-ped-meta">${agIdadeDias(r[CD]).toFixed(0)} dias em aberto · ${escapeHtml(agTruncar(r[CSE] || "—", 30))} · ${agPilula(r[CST])}</div><div>${escapeHtml(agTruncar(r[CT], 70))}</div>`;
+    lista.appendChild(div);
+  });
 }
 
 function agRenderEquipe() {
