@@ -12302,6 +12302,41 @@ function agRenderFalhas(filtrados) {
     for (; i < dadosFalha.length; i++) { acc += dadosFalha[i].valor; if (acc / classificaveis.length >= 0.8) { i++; break; } }
     return `<strong>${i}</strong> de ${dadosFalha.length} categorias de falha já respondem por cerca de 80% do volume classificável deste recorte. ${naoClassif} chamados do recorte ficaram fora do gráfico por não terem o tipo de problema identificável no título.`;
   })() : "";
+
+  // Cruza volume aberto + idade das pendências + prioridade por setor, pra
+  // apontar onde a manutenção está acumulando problema -- sem inventar um
+  // "score" opaco: ordena pelos próprios números (chamados em aberto, e
+  // idade média deles como desempate), que já contam a história sozinhos.
+  const CST = 5, CPR = 6, CD = 4;
+  const porSetorDetalhe = {};
+  filtrados.forEach((r) => {
+    const setor = r[CSE]; if (!setor) return;
+    if (!porSetorDetalhe[setor]) porSetorDetalhe[setor] = { total: 0, abertos: [], prioridadeNaoMediaAberta: 0 };
+    const d = porSetorDetalhe[setor];
+    d.total++;
+    if (r[CST] !== "Fechado") {
+      d.abertos.push(agIdadeDias(r[CD]));
+      if (r[CPR] !== "Média") d.prioridadeNaoMediaAberta++;
+    }
+  });
+  const linhasCriticidade = Object.entries(porSetorDetalhe)
+    .filter(([, d]) => d.abertos.length > 0)
+    .map(([setor, d]) => ({
+      setor, total: d.total, abertos: d.abertos.length,
+      idadeMedia: d.abertos.reduce((s, v) => s + v, 0) / d.abertos.length,
+      prioridadeNaoMediaAberta: d.prioridadeNaoMediaAberta,
+    }))
+    .sort((a, b) => b.abertos - a.abertos || b.idadeMedia - a.idadeMedia)
+    .slice(0, 15);
+  const contCriticidade = $("#agTabelaCriticidade");
+  if (!linhasCriticidade.length) contCriticidade.innerHTML = '<p class="muted">Nenhum setor com chamado em aberto no recorte atual.</p>';
+  else {
+    let html = '<table class="tabela-cards-mobile"><thead><tr><th>Setor</th><th>Em aberto</th><th>Idade média (dias)</th><th>Prioridade não-média aberta</th></tr></thead><tbody>';
+    linhasCriticidade.forEach((l) => {
+      html += `<tr><td>${escapeHtml(agTruncar(l.setor, 34))}</td><td>${agFmt(l.abertos)}</td><td>${l.idadeMedia.toFixed(0)}</td><td>${l.prioridadeNaoMediaAberta ? agFmt(l.prioridadeNaoMediaAberta) : "—"}</td></tr>`;
+    });
+    contCriticidade.innerHTML = html + "</tbody></table>";
+  }
 }
 
 function agPilula(status) {

@@ -515,6 +515,11 @@
             <h2>Falha predominante por setor</h2>
             <div id="agTabelaCruzada"></div>
           </div>
+          <div class="card">
+            <h2>Setores que mais precisam de atenção</h2>
+            <p class="muted" style="margin-top:-4px;margin-bottom:8px">Ordenado por quantidade de chamados em aberto; empate desempatado pela idade média deles. Só entram setores com pelo menos 1 chamado em aberto no recorte atual.</p>
+            <div id="agTabelaCriticidade"></div>
+          </div>
           <div class="card" id="agLeituraFalhas" style="font-size:13px"></div>
         </div>
 
@@ -1166,7 +1171,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=159"></script>
+<script type="module" src="app.js?v=160"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
