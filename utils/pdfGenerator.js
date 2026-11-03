@@ -415,7 +415,13 @@ function baixarRelatorioPDF(equipamentos, cicloInfo, historico) {
 
   // 2. Configura as margens e a qualidade do PDF
   const opt = {
-    margin: [10, 10, 10, 10],
+    // 15mm (não 10mm) -- em testes, texto perto do fim de uma linha
+    // (ex: a data no "Emissão: ... Período: ...") às vezes encostava
+    // exatamente na borda da área capturada e saía cortado; a fonte real
+    // ('Segoe UI', só existe no Windows) pode renderizar um pouco mais
+    // larga do que a fonte de reserva usada aqui nos testes, então essa
+    // margem extra é uma folga de segurança, não só estética.
+    margin: [15, 15, 15, 15],
     filename: `Relatorio_PMOC_ALECE_${new Date().toISOString().split('T')[0]}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
@@ -628,7 +634,13 @@ function gerarRelatorioAnaliseGlpi(ctx) {
 function baixarRelatorioAnaliseGlpi(ctx) {
   const html = gerarRelatorioAnaliseGlpi(ctx);
   const opt = {
-    margin: [10, 10, 10, 10],
+    // 15mm (não 10mm) -- em testes, texto perto do fim de uma linha
+    // (ex: a data no "Emissão: ... Período: ...") às vezes encostava
+    // exatamente na borda da área capturada e saía cortado; a fonte real
+    // ('Segoe UI', só existe no Windows) pode renderizar um pouco mais
+    // larga do que a fonte de reserva usada aqui nos testes, então essa
+    // margem extra é uma folga de segurança, não só estética.
+    margin: [15, 15, 15, 15],
     filename: `Relatorio_Analise_GLPI_ALECE_${new Date().toISOString().split('T')[0]}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
