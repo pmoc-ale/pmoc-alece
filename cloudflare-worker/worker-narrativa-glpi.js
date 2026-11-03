@@ -131,21 +131,29 @@ export default {
     try {
       const prompt = montarPrompt(corpo);
       // [2026-11] @cf/meta/llama-3.1-8b-instruct foi descontinuado pela
-      // Cloudflare -- se esse modelo também sumir do catálogo no futuro,
-      // troque aqui por outro da lista em
-      // https://developers.cloudflare.com/workers-ai/models/ (categoria
-      // "Text Generation"), um de porte pequeno/médio já basta pra
-      // resumir alguns números em 2-4 frases.
-      const resultado = await env.AI.run("@cf/openai/gpt-oss-20b", {
+      // Cloudflare. Tentei @cf/openai/gpt-oss-20b em seguida, mas é um
+      // modelo "reasoning" (gasta parte do max_tokens "pensando" antes de
+      // responder) e voltava sem texto nenhum com um limite baixo -- troquei
+      // pro glm-4.7-flash, que é um modelo de diálogo direto (sem essa
+      // etapa escondida), mais previsível pra essa tarefa simples. Se esse
+      // também sumir do catálogo no futuro, troque aqui por outro da lista
+      // em https://developers.cloudflare.com/workers-ai/models/ (categoria
+      // "Text Generation") -- evite os marcados como "reasoning"/"thinking"
+      // pra esse tipo de resumo curto.
+      const resultado = await env.AI.run("@cf/zai-org/glm-4.7-flash", {
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 300,
+        max_tokens: 400,
       });
       // A interface do Workers AI é padronizada (resultado.response), mas
       // alguns modelos (ex: os "reasoning" como o gpt-oss) às vezes vêm
       // num formato de resposta de chat -- os dois fallbacks cobrem isso
       // sem precisar trocar esse trecho de novo se o modelo mudar.
       const texto = (resultado?.response || resultado?.choices?.[0]?.message?.content || (typeof resultado === "string" ? resultado : "") || "").trim();
-      if (!texto) return respostaJson({ erro: "A IA não devolveu nenhum texto." }, 500);
+      // Se vier vazio de novo, mostra um pedaço do que a IA realmente
+      // devolveu (em vez de só "não devolveu nada") -- ajuda a descobrir
+      // em qual campo o texto está vindo, sem precisar abrir o log do
+      // Worker na Cloudflare pra cada tentativa.
+      if (!texto) return respostaJson({ erro: "A IA não devolveu nenhum texto. Resposta crua: " + JSON.stringify(resultado).slice(0, 300) }, 500);
       return respostaJson({ ok: true, texto });
     } catch (err) {
       return respostaJson({ erro: "Erro ao gerar o resumo: " + err.message }, 500);
