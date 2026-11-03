@@ -466,7 +466,7 @@
         <!-- Página: Visão geral -->
         <div class="ag-pagina" id="agPagina-visaoGeral">
           <div class="card" id="agCardNarrativaIA" hidden>
-            <h2>Resumo <span class="ag-pilula" style="margin-left:6px">Gerado por IA</span></h2>
+            <h2>Resumo</h2>
             <p id="agNarrativaIA" style="font-size:13.5px"></p>
           </div>
           <div class="kpi-row" id="agKpisVisaoGeral"></div>
@@ -490,6 +490,10 @@
 
         <!-- Página: Análise das falhas -->
         <div class="ag-pagina" id="agPagina-falhas" hidden>
+          <div class="card" id="agCardNarrativaFalhasIA" hidden>
+            <h2>Resumo</h2>
+            <p id="agNarrativaFalhasIA" style="font-size:13.5px"></p>
+          </div>
           <div class="card">
             <h2>Pareto dos tipos de falha</h2>
             <div id="agChartPareto"></div>
@@ -1160,7 +1164,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=168"></script>
+<script type="module" src="app.js?v=169"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

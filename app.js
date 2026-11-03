@@ -11989,6 +11989,9 @@ function agMontarResumoParaNarrativa(registros) {
   };
 }
 
+// Devolve { textoGeral, textoFalhas } -- um resumo geral (Visão geral) e
+// um focado em tipos de falha (Análise das falhas), gerados numa única
+// chamada ao Worker (ele mesmo faz as 2 chamadas de IA por dentro).
 async function agGerarNarrativaIA(registros) {
   const idToken = await auth.currentUser.getIdToken();
   const resp = await fetch(URL_NARRATIVA_GLPI, {
@@ -11998,7 +12001,7 @@ async function agGerarNarrativaIA(registros) {
   });
   const dados = await resp.json().catch(() => ({}));
   if (!resp.ok || !dados.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
-  return dados.texto;
+  return { textoGeral: dados.textoGeral, textoFalhas: dados.textoFalhas };
 }
 
 // --- 3) Upload: só o CSV do GLPI (chamados) -- sem fonte automática hoje ---
@@ -12022,7 +12025,7 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
       atualizadoEm: new Date().toISOString(),
       atualizadoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
     });
-    ESTADO.analiseGlpi = { campos, registros, narrativaIA: "", narrativaGeradaEm: "" };
+    ESTADO.analiseGlpi = { campos, registros, narrativaIA: "", narrativaFalhasIA: "", narrativaGeradaEm: "" };
     toast(`${registros.length} chamados importados.`);
     agRenderTudo();
     agAtualizarStatusImportacao();
@@ -12030,12 +12033,17 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
     // Resumo por IA é "nice to have" -- nunca deixa a importação em si
     // parecer quebrada se isso falhar (ex: Worker ainda não configurado).
     try {
-      $("#agResumoImportacao").textContent = "Chamados importados. Gerando resumo por IA...";
-      const textoIA = await agGerarNarrativaIA(registros);
-      await updateDoc(doc(db, "analiseGlpi", "glpi"), { narrativaIA: textoIA, narrativaGeradaEm: new Date().toISOString() });
-      ESTADO.analiseGlpi.narrativaIA = textoIA;
+      $("#agResumoImportacao").textContent = "Chamados importados. Gerando resumo...";
+      const { textoGeral, textoFalhas } = await agGerarNarrativaIA(registros);
+      await updateDoc(doc(db, "analiseGlpi", "glpi"), {
+        narrativaIA: textoGeral, narrativaFalhasIA: textoFalhas, narrativaGeradaEm: new Date().toISOString(),
+      });
+      ESTADO.analiseGlpi.narrativaIA = textoGeral;
+      ESTADO.analiseGlpi.narrativaFalhasIA = textoFalhas;
       const cardNarrativa = $("#agCardNarrativaIA");
-      if (cardNarrativa) { cardNarrativa.hidden = false; $("#agNarrativaIA").textContent = textoIA; }
+      if (cardNarrativa) { cardNarrativa.hidden = false; $("#agNarrativaIA").textContent = textoGeral; }
+      const cardNarrativaFalhas = $("#agCardNarrativaFalhasIA");
+      if (cardNarrativaFalhas) { cardNarrativaFalhas.hidden = false; $("#agNarrativaFalhasIA").textContent = textoFalhas; }
     } catch (err) {
       console.error("Resumo por IA:", err);
     } finally {
@@ -12526,9 +12534,10 @@ async function renderAnaliseGlpi() {
     ESTADO.analiseGlpi = snapGlpi.exists()
       ? {
           campos: snapGlpi.data().campos, registros: JSON.parse(snapGlpi.data().registrosJson || "[]"),
-          narrativaIA: snapGlpi.data().narrativaIA || "", narrativaGeradaEm: snapGlpi.data().narrativaGeradaEm || "",
+          narrativaIA: snapGlpi.data().narrativaIA || "", narrativaFalhasIA: snapGlpi.data().narrativaFalhasIA || "",
+          narrativaGeradaEm: snapGlpi.data().narrativaGeradaEm || "",
         }
-      : { campos: [], registros: [], narrativaIA: "", narrativaGeradaEm: "" };
+      : { campos: [], registros: [], narrativaIA: "", narrativaFalhasIA: "", narrativaGeradaEm: "" };
   } catch (err) {
     console.error(err);
     toast("Erro ao carregar o painel: " + err.message);
@@ -12548,6 +12557,12 @@ async function renderAnaliseGlpi() {
     cardNarrativa.hidden = !ESTADO.analiseGlpi.narrativaIA;
     const p = $("#agNarrativaIA");
     if (p) p.textContent = ESTADO.analiseGlpi.narrativaIA || "";
+  }
+  const cardNarrativaFalhas = $("#agCardNarrativaFalhasIA");
+  if (cardNarrativaFalhas) {
+    cardNarrativaFalhas.hidden = !ESTADO.analiseGlpi.narrativaFalhasIA;
+    const pf = $("#agNarrativaFalhasIA");
+    if (pf) pf.textContent = ESTADO.analiseGlpi.narrativaFalhasIA || "";
   }
 
   agPopularFiltros();

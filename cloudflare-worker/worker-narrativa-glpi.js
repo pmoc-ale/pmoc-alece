@@ -82,15 +82,17 @@ function listaFormatada(itens, max) {
   return itens.slice(0, 8).map((it) => `${textoSeguro(it.nome, 80)}: ${Number(it.valor) || 0}`).join("; ") || "(nenhum)";
 }
 
-function montarPrompt(r) {
-  const pctAberto = r.totalChamados ? ((r.abertos / r.totalChamados) * 100).toFixed(1) : "0";
-  return `Você resume dados de manutenção de ar-condicionado pro gestor de uma assembleia legislativa (PMOC ALECE). Escreva um resumo em português do Brasil, de 2 a 4 frases, tom direto e profissional, SEM markdown, SEM listas, SEM saudação.
-
-Regras importantes:
-- Use SOMENTE os números abaixo. Não invente nenhum dado que não esteja aqui.
+const REGRAS_COMUNS = `Regras importantes:
+- Use SOMENTE os números dados. Não invente nenhum dado que não esteja aqui.
 - Não fale de prazo, SLA ou atraso -- esse sistema não tem prazo definido.
 - Não afirme a CAUSA de nada (ex: não diga "por falta de manutenção") -- aponte o padrão, não a causa.
-- Se algum número parecer pequeno ou irrelevante, não force uma conclusão em cima dele.
+- Se algum número parecer pequeno ou irrelevante, não force uma conclusão em cima dele.`;
+
+function montarPromptGeral(r) {
+  const pctAberto = r.totalChamados ? ((r.abertos / r.totalChamados) * 100).toFixed(1) : "0";
+  return `Você resume dados de manutenção de ar-condicionado pro gestor de uma assembleia legislativa (PMOC ALECE). Escreva um resumo GERAL em português do Brasil, de 2 a 4 frases, tom direto e profissional, SEM markdown, SEM listas, SEM saudação.
+
+${REGRAS_COMUNS}
 
 Dados do recorte (${textoSeguro(r.periodoInicio, 20)} a ${textoSeguro(r.periodoFim, 20)}):
 - Total de chamados: ${Number(r.totalChamados) || 0}
@@ -99,6 +101,17 @@ Dados do recorte (${textoSeguro(r.periodoInicio, 20)} a ${textoSeguro(r.periodoF
 - Setores com mais chamados: ${listaFormatada(r.topSetores)}
 - Tipos de falha mais comuns: ${listaFormatada(r.topFalhas)}
 - Distribuição por prioridade: ${listaFormatada(r.porPrioridade)}`;
+}
+
+function montarPromptFalhas(r) {
+  return `Você resume o padrão dos TIPOS DE FALHA de chamados de manutenção de ar-condicionado pro gestor de uma assembleia legislativa (PMOC ALECE). Escreva um resumo em português do Brasil, de 2 a 4 frases, tom direto e profissional, SEM markdown, SEM listas, SEM saudação. Foque em quais tipos de falha concentram mais chamados, e se os setores com mais chamados parecem estar concentrados em poucos lugares ou espalhados.
+
+${REGRAS_COMUNS}
+
+Dados do recorte (${textoSeguro(r.periodoInicio, 20)} a ${textoSeguro(r.periodoFim, 20)}):
+- Total de chamados classificáveis: ${Number(r.totalChamados) || 0}
+- Tipos de falha mais comuns: ${listaFormatada(r.topFalhas)}
+- Setores com mais chamados: ${listaFormatada(r.topSetores)}`;
 }
 
 export default {
@@ -128,36 +141,40 @@ export default {
       return respostaJson({ erro: "Faltam os números resumidos (totalChamados etc)." }, 400);
     }
 
-    try {
-      const prompt = montarPrompt(corpo);
-      // [2026-11] @cf/meta/llama-3.1-8b-instruct foi descontinuado pela
-      // Cloudflare. Tentei @cf/openai/gpt-oss-20b e depois glm-4.7-flash,
-      // mas os dois são modelos "reasoning" -- gastam o max_tokens numa
-      // etapa de "pensar" escondida (aparece como campo "reasoning" na
-      // resposta) e só escrevem o texto final DEPOIS, então com um limite
-      // baixo voltavam com content: null. O llama-3.3-70b abaixo é um
-      // modelo de instrução "clássico" (mesma família do 3.1 que
-      // descontinuaram, sem essa etapa escondida), bem mais previsível pra
-      // essa tarefa simples. Se esse também sumir do catálogo no futuro,
-      // troque aqui por outro da lista em
-      // https://developers.cloudflare.com/workers-ai/models/ (categoria
-      // "Text Generation") -- evite qualquer um descrito como
-      // "reasoning"/"thinking".
-      const resultado = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 500,
-      });
+    // [2026-11] @cf/meta/llama-3.1-8b-instruct foi descontinuado pela
+    // Cloudflare. Tentei @cf/openai/gpt-oss-20b e depois glm-4.7-flash,
+    // mas os dois são modelos "reasoning" -- gastam o max_tokens numa
+    // etapa de "pensar" escondida (aparece como campo "reasoning" na
+    // resposta) e só escrevem o texto final DEPOIS, então com um limite
+    // baixo voltavam com content: null. O llama-3.3-70b abaixo é um
+    // modelo de instrução "clássico" (mesma família do 3.1 que
+    // descontinuaram, sem essa etapa escondida), bem mais previsível pra
+    // essa tarefa simples. Se esse também sumir do catálogo no futuro,
+    // troque aqui por outro da lista em
+    // https://developers.cloudflare.com/workers-ai/models/ (categoria
+    // "Text Generation") -- evite qualquer um descrito como
+    // "reasoning"/"thinking".
+    const MODELO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+    async function gerarTexto(prompt) {
+      const resultado = await env.AI.run(MODELO, { messages: [{ role: "user", content: prompt }], max_tokens: 500 });
       // A interface do Workers AI é padronizada (resultado.response), mas
-      // alguns modelos (ex: os "reasoning" como o gpt-oss) às vezes vêm
-      // num formato de resposta de chat -- os dois fallbacks cobrem isso
-      // sem precisar trocar esse trecho de novo se o modelo mudar.
+      // alguns modelos (ex: os "reasoning") às vezes vêm num formato de
+      // resposta de chat -- os dois fallbacks cobrem isso sem precisar
+      // trocar esse trecho de novo se o modelo mudar.
       const texto = (resultado?.response || resultado?.choices?.[0]?.message?.content || (typeof resultado === "string" ? resultado : "") || "").trim();
-      // Se vier vazio de novo, mostra um pedaço do que a IA realmente
-      // devolveu (em vez de só "não devolveu nada") -- ajuda a descobrir
-      // em qual campo o texto está vindo, sem precisar abrir o log do
-      // Worker na Cloudflare pra cada tentativa.
-      if (!texto) return respostaJson({ erro: "A IA não devolveu nenhum texto. Resposta crua: " + JSON.stringify(resultado).slice(0, 300) }, 500);
-      return respostaJson({ ok: true, texto });
+      if (!texto) throw new Error("A IA não devolveu nenhum texto. Resposta crua: " + JSON.stringify(resultado).slice(0, 300));
+      return texto;
+    }
+
+    try {
+      // Duas chamadas separadas (não uma só pedindo "escreva os dois") --
+      // mais fácil de usar cada texto no lugar certo sem depender de um
+      // separador frágil dentro da resposta da IA.
+      const [textoGeral, textoFalhas] = await Promise.all([
+        gerarTexto(montarPromptGeral(corpo)),
+        gerarTexto(montarPromptFalhas(corpo)),
+      ]);
+      return respostaJson({ ok: true, textoGeral, textoFalhas });
     } catch (err) {
       return respostaJson({ erro: "Erro ao gerar o resumo: " + err.message }, 500);
     }
