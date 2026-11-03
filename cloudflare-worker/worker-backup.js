@@ -1,22 +1,27 @@
 // Worker Cloudflare — cópia automática dos dados do PMOC pra uma Planilha
-// Google, E das fotos pra um bucket Cloudflare R2. Roda sozinho todo dia
+// Google, E das fotos pra uma pasta do Google Drive. Roda sozinho todo dia
 // (Cron Trigger, configurado no painel da Cloudflare, não aqui no código) e
 // serve quatro coisas de uma vez:
 //   1. Uma "visão de banco de dados" de tudo que está no sistema, em
 //      formato de planilha, filtrável.
 //   2. Um backup dos DADOS fora do Firebase, atualizado automaticamente.
-//   3. Um backup das FOTOS fora do Cloudinary, num bucket R2 que é seu
-//      (independe da conta/plano do Cloudinary continuar existindo).
+//   3. Um backup das FOTOS fora do Cloudinary, numa pasta do Drive que é
+//      sua (independe da conta/plano do Cloudinary continuar existindo).
 //   4. Uma fonte de dados pronta pra plugar no Looker Studio (BI) depois.
 //
-// Como funciona: usa uma "conta de serviço" do Google (Service Account) —
-// diferente do login de uma pessoa, é uma credencial de robô que a gente
-// autoriza a ler o Firestore inteiro e escrever numa planilha específica.
-// As fotos usam um mecanismo separado (um "binding" R2 da própria
-// Cloudflare) -- [2026-11] trocado do Google Drive pro R2 porque uma conta
-// de serviço do Google NUNCA tem cota de armazenamento própria no Drive
-// (só em "Shared Drives", que exige Google Workspace pago; confirmado em
-// produção com o erro "Service Accounts do not have storage quota").
+// Como funciona: DUAS credenciais diferentes, cada uma pro que faz mais
+// sentido:
+//  - Planilha/Firestore: uma "conta de serviço" do Google (Service
+//    Account) -- credencial de robô, só de leitura no Firestore e escrita
+//    só na planilha específica que você compartilhar com ela.
+//  - Fotos: [2026-11] NÃO usa a conta de serviço -- ela nunca tem cota de
+//    armazenamento própria no Drive (confirmado em produção: erro
+//    "Service Accounts do not have storage quota"; só funcionaria com
+//    "Shared Drives", que exige Google Workspace pago, que o Gmail da
+//    ALECE não tem). Em vez disso, usa OAuth "como se fosse" a própria
+//    conta pmoc.alece.sistemas@gmail.com (um "refresh token" gerado uma
+//    vez, ver guia de configuração) -- as fotos usam a cota GRÁTIS de
+//    15 GB dessa conta, sem precisar de cartão de crédito nem R2.
 //
 // Variáveis de ambiente que esse Worker precisa (Settings > Variables and
 // Secrets, todas como "Secret", exceto FIREBASE_PROJECT_ID que pode ser
@@ -27,21 +32,26 @@
 //   FIREBASE_PROJECT_ID            (= "pcm-alece")
 //   GOOGLE_SHEET_ID                (o ID da planilha — vem no link dela,
 //                                    entre "/d/" e "/edit")
+//   GOOGLE_OAUTH_CLIENT_ID         (do OAuth Client criado no Google Cloud)
+//   GOOGLE_OAUTH_CLIENT_SECRET     (idem)
+//   GOOGLE_OAUTH_REFRESH_TOKEN     (gerado 1x via OAuth Playground, logado
+//                                    como pmoc.alece.sistemas@gmail.com)
+//   GOOGLE_DRIVE_FOLDER_ID         (pasta no Drive DESSA conta Gmail, não
+//                                    precisa compartilhar com ninguém --
+//                                    já é dela mesma)
 //   CHAVE_EXECUCAO_MANUAL          (senha inventada por você, pra proteger
 //                                    o endpoint -- ver fetch() lá embaixo)
-//
-// Além dos secrets, esse Worker precisa de um BINDING (Settings > Bindings
-// > Add > R2 bucket, nome do binding: "BUCKET") apontando pro bucket R2
-// onde as fotos vão ficar. Crie o bucket antes em R2 > Create bucket.
 //
 // A planilha precisa ter 6 abas, com esses nomes exatos:
 //   Equipamentos, Historico, Ordens, Auditoria, Feriados, Equipes
 //
 // A planilha precisa estar COMPARTILHADA (botão "Compartilhar") com o
-// e-mail da conta de serviço, com permissão de Editor.
+// e-mail da conta de serviço, com permissão de Editor. A pasta do Drive
+// NÃO precisa ser compartilhada com nada -- já pertence à conta que vai
+// gravar nela.
 //
 // O backup de fotos é incremental: cada dia só baixa e reenvia as fotos que
-// ainda não estão no bucket (confere pelo nome do arquivo antes de
+// ainda não estão na pasta (confere pelo nome do arquivo antes de
 // reenviar), e processa no máximo MAX_FOTOS_POR_EXECUCAO novas por vez,
 // pra não estourar o tempo de execução do Worker num dia em que tiver
 // muita coisa nova de uma vez -- o que sobrar fica pro próximo dia, sem
@@ -112,6 +122,29 @@ async function obterAccessTokenGoogle(env) {
   return dados.access_token;
 }
 
+// Token de acesso pras FOTOS -- não é a conta de serviço (ela não tem cota
+// de Drive, ver nota no topo do arquivo), é um "refresh token" obtido uma
+// vez só (via OAuth Playground, ver guia) autorizando como a própria conta
+// pmoc.alece.sistemas@gmail.com. Esse token dura só 1h, mas o refresh
+// token em si não expira (desde que o app OAuth esteja com o status
+// "In production", não "Testing", no Google Cloud -- em "Testing" ele
+// expiraria em 7 dias).
+async function obterAccessTokenOAuthUsuario(env) {
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.GOOGLE_OAUTH_CLIENT_ID,
+      client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+      refresh_token: env.GOOGLE_OAUTH_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+  });
+  const dados = await resp.json();
+  if (!resp.ok) throw new Error("Falha ao renovar o token de fotos: " + (dados.error_description || dados.error));
+  return dados.access_token;
+}
+
 // Converte o formato "tipado" do Firestore (campo.stringValue,
 // campo.integerValue etc) num objeto JS comum.
 function lerValorFirestore(valor) {
@@ -172,45 +205,67 @@ async function escreverAba(nomeAba, colunas, linhas, token, env) {
   }
 }
 
-// [2026-11] Trocado de Google Drive pra Cloudflare R2: uma conta de
-// serviço do Google NUNCA tem cota de armazenamento própria (mesmo com a
-// pasta compartilhada como Editor) -- só consegue gravar em "Shared
-// Drives", que só existe em contas Google Workspace pagas. Como o
-// pmoc.alece.sistemas@gmail.com é um Gmail comum, não tinha como salvar
-// foto no Drive de jeito nenhum. R2 resolve isso: é um espaço de arquivo
-// da própria Cloudflare (10 GB grátis), acessado via "binding" (ver
-// "BUCKET" no fetch() lá embaixo), sem precisar de token nem conta do
-// Google pra essa parte.
+// [2026-11] Fotos usam OAuth como pmoc.alece.sistemas@gmail.com (ver nota
+// no topo do arquivo) em vez da conta de serviço -- essa conta Gmail tem
+// 15 GB grátis próprios, sem precisar de cartão de crédito nem Google
+// Workspace.
 
-// Lista os nomes de arquivo já presentes no bucket (paginado -- um bucket
-// com muita foto não cabe numa página só). Só o nome, que é tudo que
-// precisamos pra decidir o que já foi feito.
-async function nomesJaNoBucket(env) {
+// Lista os nomes de arquivo já presentes na pasta do Drive (paginado --
+// uma pasta com muita foto não cabe numa página só). Só o nome, que é
+// tudo que precisamos pra decidir o que já foi feito.
+async function nomesJaNaPasta(token, env) {
   const nomes = new Set();
-  let cursor;
+  let pageToken = "";
   do {
-    const pagina = await env.BUCKET.list({ cursor });
-    pagina.objects.forEach((o) => nomes.add(o.key));
-    cursor = pagina.truncated ? pagina.cursor : undefined;
-  } while (cursor);
+    const q = encodeURIComponent(`'${env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=nextPageToken,files(name)&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ""}`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const dados = await resp.json();
+    if (!resp.ok) throw new Error("Falha ao listar a pasta do Drive: " + (dados.error?.message || resp.status));
+    (dados.files || []).forEach((f) => nomes.add(f.name));
+    pageToken = dados.nextPageToken || "";
+  } while (pageToken);
   return nomes;
 }
 
 // Baixa a foto (URL pública do Cloudinary, sem precisar de autenticação) e
-// grava no bucket R2 com esse mesmo nome.
-async function copiarFotoParaR2(url, nomeArquivo, env) {
+// sobe pro Drive via upload multipart (metadado + bytes na mesma
+// requisição) -- mais simples que o upload resumível, e o tamanho de uma
+// foto já comprimida pelo app (ver comprimirImagem em app.js) é pequeno o
+// bastante pra não precisar dele.
+async function copiarFotoParaDrive(url, nomeArquivo, token, env) {
   const respFoto = await fetch(url);
   if (!respFoto.ok) throw new Error(`Falha ao baixar a foto (${respFoto.status})`);
   const bytes = await respFoto.arrayBuffer();
-  await env.BUCKET.put(nomeArquivo, bytes, { httpMetadata: { contentType: "image/jpeg" } });
+
+  const metadados = { name: nomeArquivo, parents: [env.GOOGLE_DRIVE_FOLDER_ID] };
+  const boundary = "pmocbackup" + Date.now();
+  const partes = [
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadados)}\r\n`,
+    `--${boundary}\r\nContent-Type: image/jpeg\r\n\r\n`,
+  ];
+  const corpo = new Blob([partes[0], partes[1], bytes, `\r\n--${boundary}--`]);
+
+  const resp = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` },
+    body: corpo,
+  });
+  if (!resp.ok) {
+    const erro = await resp.json().catch(() => ({}));
+    throw new Error(`Falha ao enviar ${nomeArquivo} pro Drive: ${erro.error?.message || resp.status}`);
+  }
 }
 
 // Reúne as fotos de equipamentos/histórico/ordens, acha quais ainda não
-// foram copiadas pro R2, e copia até o limite de uma execução. O nome
+// foram copiadas pro Drive, e copia até o limite de uma execução. O nome
 // do arquivo é estável (baseado no id do documento) -- rodar de novo não
 // duplica nada, só preenche o que faltou.
 async function backupFotos(equipamentos, historico, ordens, env) {
-  if (!env.BUCKET) return { pulado: "Bucket R2 não configurado (falta o binding \"BUCKET\" em Settings > Bindings)" };
+  if (!env.GOOGLE_DRIVE_FOLDER_ID || !env.GOOGLE_OAUTH_REFRESH_TOKEN) {
+    return { pulado: "Faltam os secrets de OAuth das fotos (GOOGLE_OAUTH_* / GOOGLE_DRIVE_FOLDER_ID)" };
+  }
+  const token = await obterAccessTokenOAuthUsuario(env);
 
   const candidatos = [
     ...equipamentos.filter((e) => e.fotoUrl).map((e) => ({ url: e.fotoUrl, nome: `equipamento_${e.patrimonio || e.id}.jpg` })),
@@ -218,7 +273,7 @@ async function backupFotos(equipamentos, historico, ordens, env) {
     ...ordens.filter((o) => o.fotoUrl).map((o) => ({ url: o.fotoUrl, nome: `ordem_${o.id}.jpg` })),
   ];
 
-  const jaExistentes = await nomesJaNoBucket(env);
+  const jaExistentes = await nomesJaNaPasta(token, env);
   const faltando = candidatos.filter((c) => !jaExistentes.has(c.nome));
   const paraEnviarAgora = faltando.slice(0, MAX_FOTOS_POR_EXECUCAO);
 
@@ -226,7 +281,7 @@ async function backupFotos(equipamentos, historico, ordens, env) {
   const falhas = [];
   for (const foto of paraEnviarAgora) {
     try {
-      await copiarFotoParaR2(foto.url, foto.nome, env);
+      await copiarFotoParaDrive(foto.url, foto.nome, token, env);
       enviadas++;
     } catch (err) {
       falhas.push({ nome: foto.nome, erro: err.message });
