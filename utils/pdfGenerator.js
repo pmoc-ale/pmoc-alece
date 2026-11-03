@@ -202,6 +202,11 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
           margin-bottom: 20px;
           table-layout: fixed; /* Impede que colunas longas espremam as curtas */
         }
+        /* Sem isso, uma linha que caísse bem na quebra de página saía
+           cortada ao meio (metade numa página, metade na outra) -- o
+           html2pdf respeita "page-break-inside" e empurra a linha
+           inteira pra próxima página em vez de fatiar ela. */
+        tr { page-break-inside: avoid; }
         th {
           background-color: #E3F3E9;
           color: #0B3D24;
@@ -541,6 +546,7 @@ function gerarRelatorioAnaliseGlpi(ctx) {
         .summary-value { font-size: 20px; font-weight: bold; color: #0B3D24; }
         .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #0B3D24; border-bottom: 1px solid #d2d6de; padding-bottom: 5px; margin: 30px 0 15px 0; page-break-after: avoid; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+        tr { page-break-inside: avoid; }
         th { background-color: #E3F3E9; color: #0B3D24; font-weight: bold; text-transform: uppercase; font-size: 10px; padding: 8px; border-bottom: 2px solid #d2d6de; }
         td { padding: 8px; border-bottom: 1px solid #eee; font-size: 11px; word-wrap: break-word; }
         .text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }
