@@ -130,11 +130,21 @@ export default {
 
     try {
       const prompt = montarPrompt(corpo);
-      const resultado = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      // [2026-11] @cf/meta/llama-3.1-8b-instruct foi descontinuado pela
+      // Cloudflare -- se esse modelo também sumir do catálogo no futuro,
+      // troque aqui por outro da lista em
+      // https://developers.cloudflare.com/workers-ai/models/ (categoria
+      // "Text Generation"), um de porte pequeno/médio já basta pra
+      // resumir alguns números em 2-4 frases.
+      const resultado = await env.AI.run("@cf/openai/gpt-oss-20b", {
         messages: [{ role: "user", content: prompt }],
         max_tokens: 300,
       });
-      const texto = (resultado?.response || "").trim();
+      // A interface do Workers AI é padronizada (resultado.response), mas
+      // alguns modelos (ex: os "reasoning" como o gpt-oss) às vezes vêm
+      // num formato de resposta de chat -- os dois fallbacks cobrem isso
+      // sem precisar trocar esse trecho de novo se o modelo mudar.
+      const texto = (resultado?.response || resultado?.choices?.[0]?.message?.content || (typeof resultado === "string" ? resultado : "") || "").trim();
       if (!texto) return respostaJson({ erro: "A IA não devolveu nenhum texto." }, 500);
       return respostaJson({ ok: true, texto });
     } catch (err) {
