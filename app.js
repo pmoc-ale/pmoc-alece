@@ -133,6 +133,11 @@ const URL_UPLOAD_FOTO = "https://fotos.pmoc-alece-sistemas.workers.dev";
 // pra configurar (precisa gerar uma chave uma vez só, de graça).
 const URL_REDEFINIR_SENHA = "https://redefinir-senha.pmoc-alece-sistemas.workers.dev";
 
+// Resumo em texto da Análise GLPI, gerado por IA (Workers AI da Cloudflare,
+// de graça) -- só é chamado 1x por importação de CSV, nunca a cada pessoa
+// que abre o dashboard. Ver cloudflare-worker/worker-narrativa-glpi.js.
+const URL_NARRATIVA_GLPI = "https://narrativa-glpi.pmoc-alece-sistemas.workers.dev";
+
 // Chave PÚBLICA do "VAPID" -- identifica o PMOC ALECE pros serviços de push
 // do navegador (Google/Mozilla/etc.) na hora de ativar o aviso de atraso
 // direto no computador (ver ativarNotificacoesPush). É pública de propósito
@@ -11962,6 +11967,40 @@ function agCalcularResumoCampo() {
   };
 }
 
+// Resume os registros JÁ classificados (nunca o CSV cru) nos números que a
+// IA vai usar -- é só isso que sai do navegador pro Worker, nunca o
+// detalhe linha a linha de cada chamado.
+function agMontarResumoParaNarrativa(registros) {
+  const CF = 2, CSE = 3, CD = 4, CST = 5, CPR = 6;
+  const total = registros.length;
+  const abertos = registros.filter((r) => r[CST] !== "Fechado").length;
+  const contarTop = (idx, excluir) => {
+    const m = {};
+    registros.forEach((r) => { const v = r[idx]; if (v && !(excluir && excluir.includes(v))) m[v] = (m[v] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([nome, valor]) => ({ nome, valor }));
+  };
+  const datas = registros.map((r) => r[CD]).filter(Boolean).sort();
+  return {
+    totalChamados: total, abertos, fechados: total - abertos,
+    periodoInicio: datas[0] || "", periodoFim: datas[datas.length - 1] || "",
+    topSetores: contarTop(CSE),
+    topFalhas: contarTop(CF, ["Não classificado (revisar)", "Fora de escopo (não é AC)"]),
+    porPrioridade: contarTop(CPR),
+  };
+}
+
+async function agGerarNarrativaIA(registros) {
+  const idToken = await auth.currentUser.getIdToken();
+  const resp = await fetch(URL_NARRATIVA_GLPI, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify(agMontarResumoParaNarrativa(registros)),
+  });
+  const dados = await resp.json().catch(() => ({}));
+  if (!resp.ok || !dados.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
+  return dados.texto;
+}
+
 // --- 3) Upload: só o CSV do GLPI (chamados) -- sem fonte automática hoje ---
 $("#agBtnGlpiEscolher")?.addEventListener("click", () => $("#agGlpiInput").click());
 
@@ -11983,10 +12022,25 @@ $("#agGlpiInput")?.addEventListener("change", async () => {
       atualizadoEm: new Date().toISOString(),
       atualizadoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
     });
-    ESTADO.analiseGlpi = { campos, registros };
+    ESTADO.analiseGlpi = { campos, registros, narrativaIA: "", narrativaGeradaEm: "" };
     toast(`${registros.length} chamados importados.`);
     agRenderTudo();
     agAtualizarStatusImportacao();
+
+    // Resumo por IA é "nice to have" -- nunca deixa a importação em si
+    // parecer quebrada se isso falhar (ex: Worker ainda não configurado).
+    try {
+      $("#agResumoImportacao").textContent = "Chamados importados. Gerando resumo por IA...";
+      const textoIA = await agGerarNarrativaIA(registros);
+      await updateDoc(doc(db, "analiseGlpi", "glpi"), { narrativaIA: textoIA, narrativaGeradaEm: new Date().toISOString() });
+      ESTADO.analiseGlpi.narrativaIA = textoIA;
+      const cardNarrativa = $("#agCardNarrativaIA");
+      if (cardNarrativa) { cardNarrativa.hidden = false; $("#agNarrativaIA").textContent = textoIA; }
+    } catch (err) {
+      console.error("Resumo por IA:", err);
+    } finally {
+      agAtualizarStatusImportacao();
+    }
   } catch (err) {
     console.error(err);
     toast("Erro ao importar o CSV: " + err.message);
@@ -12470,8 +12524,11 @@ async function renderAnaliseGlpi() {
   try {
     const snapGlpi = await getDoc(doc(db, "analiseGlpi", "glpi"));
     ESTADO.analiseGlpi = snapGlpi.exists()
-      ? { campos: snapGlpi.data().campos, registros: JSON.parse(snapGlpi.data().registrosJson || "[]") }
-      : { campos: [], registros: [] };
+      ? {
+          campos: snapGlpi.data().campos, registros: JSON.parse(snapGlpi.data().registrosJson || "[]"),
+          narrativaIA: snapGlpi.data().narrativaIA || "", narrativaGeradaEm: snapGlpi.data().narrativaGeradaEm || "",
+        }
+      : { campos: [], registros: [], narrativaIA: "", narrativaGeradaEm: "" };
   } catch (err) {
     console.error(err);
     toast("Erro ao carregar o painel: " + err.message);
@@ -12483,6 +12540,15 @@ async function renderAnaliseGlpi() {
   const temDados = ESTADO.analiseGlpi.registros.length > 0 || (ESTADO.chamadosCorretivos || []).length > 0;
   $("#agConteudo").hidden = !temDados;
   if (!temDados) return;
+
+  // Resumo por IA é sobre a importação inteira (não muda com os filtros
+  // acima), então só atualiza aqui -- não em cada agRenderTudo().
+  const cardNarrativa = $("#agCardNarrativaIA");
+  if (cardNarrativa) {
+    cardNarrativa.hidden = !ESTADO.analiseGlpi.narrativaIA;
+    const p = $("#agNarrativaIA");
+    if (p) p.textContent = ESTADO.analiseGlpi.narrativaIA || "";
+  }
 
   agPopularFiltros();
   agRenderTudo();

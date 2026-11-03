@@ -465,6 +465,10 @@
 
         <!-- Página: Visão geral -->
         <div class="ag-pagina" id="agPagina-visaoGeral">
+          <div class="card" id="agCardNarrativaIA" hidden>
+            <h2>Resumo <span class="ag-pilula" style="margin-left:6px">Gerado por IA</span></h2>
+            <p id="agNarrativaIA" style="font-size:13.5px"></p>
+          </div>
           <div class="kpi-row" id="agKpisVisaoGeral"></div>
           <div class="card">
             <h2>Evolução das aberturas</h2>
@@ -1156,7 +1160,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=167"></script>
+<script type="module" src="app.js?v=168"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
