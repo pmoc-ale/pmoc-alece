@@ -12042,7 +12042,13 @@ function agChartBarrasH(containerId, dados, opts) {
   cont.innerHTML = "";
   if (!dados.length) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
   const n = dados.length;
-  const W = opts.W || 500, rowH = 19, padL = opts.padL || 190, padR = 46, padT = 3, padB = 3;
+  // W = a largura real (em px) do container, não um número fixo -- o SVG
+  // some via viewBox no mesmo número de "unidades" que de pixels reais, daí
+  // o texto (ag-nome-label etc, em unidades de viewBox) sempre renderiza no
+  // tamanho de fonte pretendido de verdade, em vez de encolher proporcional
+  // à largura da tela (no celular, um viewBox de 500 esticado pra caber em
+  // ~330px deixava a letra ilegível, pouco mais de 3px de altura real).
+  const W = cont.clientWidth || opts.W || 500, rowH = 19, padL = opts.padL || 190, padR = 46, padT = 3, padB = 3;
   const plotW = W - padL - padR, H = padT + padB + n * rowH;
   const max = Math.max(...dados.map((d) => d.valor), 1);
   const barW = (v) => (plotW * v) / max;
@@ -12071,7 +12077,7 @@ function agChartLinha(containerId, serie, cor) {
   if (!cont) return;
   cont.innerHTML = "";
   if (serie.length < 2) { cont.innerHTML = '<p class="muted">Período insuficiente pra gráfico.</p>'; return; }
-  const W = 1000, H = 130, padL = 36, padR = 12, padT = 10, padB = 22;
+  const W = cont.clientWidth || 1000, H = 130, padL = 36, padR = 12, padT = 10, padB = 22;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const max = Math.max(...serie.map((d) => d.valor), 1);
   const maxEixo = Math.ceil(max / 20) * 20 || 10;
@@ -12085,7 +12091,11 @@ function agChartLinha(containerId, serie, cor) {
     const t = agSvgEl("text", { x: padL - 8, y: ly + 4, class: "ag-eixo-label", "text-anchor": "end" });
     t.textContent = Math.round(v); svg.appendChild(t);
   });
-  const passo = Math.max(1, Math.ceil(n / 12));
+  // Quantas legendas de mês cabem sem embolar depende da largura real
+  // disponível, não de um número fixo de 12 -- no celular (viewBox mais
+  // estreito agora que W = largura real do container) 12 rótulos ficavam
+  // grudados uns nos outros.
+  const passo = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(plotW / 34))));
   serie.forEach((d, i) => {
     if (i % passo !== 0 && i !== n - 1) return;
     const t = agSvgEl("text", { x: x(i), y: H - 6, class: "ag-eixo-label", "text-anchor": "middle" });
@@ -12118,7 +12128,7 @@ function agChartBarraEmpilhada(containerId, legendaId, dados) {
   const leg = $(`#${legendaId}`);
   if (leg) leg.innerHTML = "";
   if (!total) { cont.innerHTML = '<p class="muted">Sem dados no recorte atual.</p>'; return; }
-  const W = 500, H = 38;
+  const W = cont.clientWidth || 500, H = 38;
   const svg = agSvgEl("svg", { viewBox: `0 0 ${W} ${H}` });
   let xAtual = 0; const gap = 2;
   dados.forEach((d, i) => {
@@ -12189,6 +12199,13 @@ function agChartPareto(containerId, legendaId, dados) {
     const t = agSvgEl("text", { x: W - padR + 8, y: yPct(v) + 4, class: "ag-eixo-label" });
     t.textContent = v + "%"; svg.appendChild(t);
   });
+  // ".ag-pagina svg" (CSS) força width:100% em qualquer svg da página --
+  // sem essa largura fixa (que SÓ um estilo inline consegue vencer, por
+  // especificidade), o SVG seria espremido de volta pro container estreito
+  // e o scroll horizontal abaixo nunca entraria em ação; a letra do eixo
+  // ficaria minúscula no celular, igual acontecia antes nos outros gráficos.
+  svg.style.width = (W + margemRotulo) + "px";
+  svg.style.flexShrink = "0";
   const scrollWrap = document.createElement("div"); scrollWrap.style.overflowX = "auto"; scrollWrap.appendChild(svg);
   cont.appendChild(scrollWrap);
   if (leg) {
