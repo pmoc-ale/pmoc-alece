@@ -393,13 +393,28 @@ function baixarRelatorioPDF(equipamentos, cicloInfo, historico) {
 
   // 2. Configura as margens e a qualidade do PDF
   const opt = {
-    margin: [10, 10, 10, 10], 
+    margin: [10, 10, 10, 10],
     filename: `Relatorio_PMOC_ALECE_${new Date().toISOString().split('T')[0]}.pdf`,
     image: { type: 'jpeg', quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
   };
 
-  // 3. Converte e baixa o arquivo
-  html2pdf().set(opt).from(html).save();
+  // 3. O html2pdf monta um container "position: fixed" pra capturar o
+  // relatório, mas o html2canvas usa a posição de rolagem ATUAL da página
+  // pra calcular onde esse container está -- se a pessoa exportar o PDF
+  // depois de rolar a tela pra baixo (comum, o botão fica no topo da
+  // página), a captura sai deslocada/cortada (cabeçalho empurrado pra
+  // baixo, tabelas sumindo). Volta pro topo antes de gerar e restaura a
+  // posição de rolagem de onde a pessoa estava, depois.
+  const rolagemAnterior = { x: window.scrollX, y: window.scrollY };
+  window.scrollTo(0, 0);
+
+  const restaurarRolagem = () => window.scrollTo(rolagemAnterior.x, rolagemAnterior.y);
+
+  // 4. Converte e baixa o arquivo
+  html2pdf().set(opt).from(html).save().then(restaurarRolagem).catch((erro) => {
+    restaurarRolagem();
+    throw erro;
+  });
 }
