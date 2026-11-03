@@ -131,18 +131,21 @@ export default {
     try {
       const prompt = montarPrompt(corpo);
       // [2026-11] @cf/meta/llama-3.1-8b-instruct foi descontinuado pela
-      // Cloudflare. Tentei @cf/openai/gpt-oss-20b em seguida, mas é um
-      // modelo "reasoning" (gasta parte do max_tokens "pensando" antes de
-      // responder) e voltava sem texto nenhum com um limite baixo -- troquei
-      // pro glm-4.7-flash, que é um modelo de diálogo direto (sem essa
-      // etapa escondida), mais previsível pra essa tarefa simples. Se esse
-      // também sumir do catálogo no futuro, troque aqui por outro da lista
-      // em https://developers.cloudflare.com/workers-ai/models/ (categoria
-      // "Text Generation") -- evite os marcados como "reasoning"/"thinking"
-      // pra esse tipo de resumo curto.
-      const resultado = await env.AI.run("@cf/zai-org/glm-4.7-flash", {
+      // Cloudflare. Tentei @cf/openai/gpt-oss-20b e depois glm-4.7-flash,
+      // mas os dois são modelos "reasoning" -- gastam o max_tokens numa
+      // etapa de "pensar" escondida (aparece como campo "reasoning" na
+      // resposta) e só escrevem o texto final DEPOIS, então com um limite
+      // baixo voltavam com content: null. O llama-3.3-70b abaixo é um
+      // modelo de instrução "clássico" (mesma família do 3.1 que
+      // descontinuaram, sem essa etapa escondida), bem mais previsível pra
+      // essa tarefa simples. Se esse também sumir do catálogo no futuro,
+      // troque aqui por outro da lista em
+      // https://developers.cloudflare.com/workers-ai/models/ (categoria
+      // "Text Generation") -- evite qualquer um descrito como
+      // "reasoning"/"thinking".
+      const resultado = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 400,
+        max_tokens: 500,
       });
       // A interface do Workers AI é padronizada (resultado.response), mas
       // alguns modelos (ex: os "reasoning" como o gpt-oss) às vezes vêm
