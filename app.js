@@ -12274,6 +12274,33 @@ function agFiltrar() {
   });
 }
 
+// Descreve em texto os filtros ativos (pro cabeçalho do PDF) -- "Base
+// completa" quando nenhum está marcado, senão lista só os que têm valor.
+function agDescreverFiltrosAtivos() {
+  const partes = [];
+  const dIni = $("#agFDataIni")?.value, dFim = $("#agFDataFim")?.value;
+  if (dIni || dFim) {
+    const f = (d) => d ? d.split("-").reverse().join("/") : "";
+    partes.push(dIni && dFim ? `${f(dIni)} a ${f(dFim)}` : dIni ? `a partir de ${f(dIni)}` : `até ${f(dFim)}`);
+  }
+  const setor = $("#agFSetor")?.value; if (setor) partes.push(`setor "${setor}"`);
+  const prio = $("#agFPrioridade")?.value; if (prio) partes.push(`prioridade "${prio}"`);
+  const status = $("#agFStatus")?.value; if (status) partes.push(`status "${status}"`);
+  return partes.length ? partes.join(", ") : "Base completa (sem filtros)";
+}
+
+function agBaixarPdf() {
+  const registros = agFiltrar();
+  if (!registros.length) { toast("Nenhum chamado no recorte atual pra exportar."); return; }
+  baixarRelatorioAnaliseGlpi({
+    registros,
+    totalGeral: ESTADO.analiseGlpi.registros.length,
+    filtrosTexto: agDescreverFiltrosAtivos(),
+    narrativaGeral: ESTADO.analiseGlpi.narrativaIA || "",
+    narrativaFalhas: ESTADO.analiseGlpi.narrativaFalhasIA || "",
+  });
+}
+
 function agIdadeDias(dataIso) {
   return Math.max(0, (Date.now() - new Date(dataIso + "T00:00:00").getTime()) / 86400000);
 }
@@ -12502,6 +12529,7 @@ function agInicializarControles() {
     _agPaginaAtualTabela = 1; agRenderTudo();
   });
   $("#agBuscaTexto")?.addEventListener("input", () => { _agPaginaAtualTabela = 1; agRenderTudo(); });
+  $("#agBtnBaixarPdf")?.addEventListener("click", agBaixarPdf);
   $all("#agTabelaOrdens thead th[data-ag-campo]").forEach((th) => {
     th.style.cursor = "pointer";
     th.addEventListener("click", () => {

@@ -387,6 +387,28 @@ function gerarRelatorioPDF(equipamentos, cicloInfo, historico) {
 }
 
 
+// Usado por toda função "baixarRelatorioX" do arquivo -- um único lugar
+// pro problema de rolagem (ver comentário abaixo) em vez de repetir a
+// mesma correção em cada exportador de PDF que o sistema ganhar.
+function gerarEBaixarPdf(html, opt) {
+  // O html2pdf monta um container "position: fixed" pra capturar o
+  // relatório, mas o html2canvas usa a posição de rolagem ATUAL da página
+  // pra calcular onde esse container está -- se a pessoa exportar o PDF
+  // depois de rolar a tela pra baixo (comum, o botão de baixar costuma
+  // ficar no topo da página), a captura sai deslocada/cortada (cabeçalho
+  // empurrado pra baixo, tabelas sumindo). Volta pro topo antes de gerar
+  // e restaura a posição de rolagem de onde a pessoa estava, depois.
+  const rolagemAnterior = { x: window.scrollX, y: window.scrollY };
+  window.scrollTo(0, 0);
+
+  const restaurarRolagem = () => window.scrollTo(rolagemAnterior.x, rolagemAnterior.y);
+
+  return html2pdf().set(opt).from(html).save().then(restaurarRolagem).catch((erro) => {
+    restaurarRolagem();
+    throw erro;
+  });
+}
+
 function baixarRelatorioPDF(equipamentos, cicloInfo, historico) {
   // 1. Chama a sua função para gerar o HTML
   const html = gerarRelatorioPDF(equipamentos, cicloInfo, historico);
@@ -400,21 +422,217 @@ function baixarRelatorioPDF(equipamentos, cicloInfo, historico) {
     jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
   };
 
-  // 3. O html2pdf monta um container "position: fixed" pra capturar o
-  // relatório, mas o html2canvas usa a posição de rolagem ATUAL da página
-  // pra calcular onde esse container está -- se a pessoa exportar o PDF
-  // depois de rolar a tela pra baixo (comum, o botão fica no topo da
-  // página), a captura sai deslocada/cortada (cabeçalho empurrado pra
-  // baixo, tabelas sumindo). Volta pro topo antes de gerar e restaura a
-  // posição de rolagem de onde a pessoa estava, depois.
-  const rolagemAnterior = { x: window.scrollX, y: window.scrollY };
-  window.scrollTo(0, 0);
+  // 3. Converte e baixa o arquivo
+  gerarEBaixarPdf(html, opt);
+}
 
-  const restaurarRolagem = () => window.scrollTo(rolagemAnterior.x, rolagemAnterior.y);
+// --- Relatório de Análise de Chamados (GLPI) ------------------------------
+// Mesma lógica de cor/ordem de AG_COR_STATUS e AG_ORDEM_PRIORIDADE no
+// app.js, duplicada aqui pelo mesmo motivo do escapeHtml/LOGO lá em cima:
+// este arquivo roda sozinho, antes do app.js (que é um módulo, com escopo
+// próprio). As cores usam os mesmos hex de --verde-700/--teal/--dourado-
+// escuro/--vermelho do styles.css, não as CSS vars (esse HTML roda fora
+// da página, dentro do container do html2pdf).
+const AG_PDF_COR_STATUS = {
+  "Fechado": "#008241",
+  "Solucionado": "#1F9750",
+  "Em atendimento (atribuído)": "#386D74",
+  "Em atendimento (planejado)": "#56A7B2",
+  "Pendente": "#9C7B2E",
+  "Novo": "#C00000",
+};
+function agPdfCorStatus(status) {
+  if (AG_PDF_COR_STATUS[status]) return AG_PDF_COR_STATUS[status];
+  let h = 0; for (let i = 0; i < status.length; i++) h = (h * 31 + status.charCodeAt(i)) >>> 0;
+  const reserva = ["#008241", "#386D74", "#9C7B2E", "#C00000", "#1F9750", "#56A7B2"];
+  return reserva[h % reserva.length];
+}
+const AG_PDF_ORDEM_PRIORIDADE = ["Muito baixa", "Baixa", "Média", "Alta", "Muito alta", "Critica", "Crítica"];
+function agPdfIndicePrioridade(p) {
+  const i = AG_PDF_ORDEM_PRIORIDADE.indexOf(p);
+  return i === -1 ? 999 : i;
+}
+const AG_PDF_MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-  // 4. Converte e baixa o arquivo
-  html2pdf().set(opt).from(html).save().then(restaurarRolagem).catch((erro) => {
-    restaurarRolagem();
-    throw erro;
+// ctx = { registros, totalGeral, filtrosTexto, narrativaGeral, narrativaFalhas }
+// -- "registros" já vem filtrado (mesmo recorte que a pessoa está vendo na
+// tela quando clica em baixar); "totalGeral" é o total da base inteira,
+// sem filtro, só pra dar contexto no cabeçalho quando o recorte é menor.
+function gerarRelatorioAnaliseGlpi(ctx) {
+  const CF = 2, CSE = 3, CD = 4, CST = 5, CPR = 6;
+  const registros = ctx.registros || [];
+  const hoje = new Date();
+  const dataFormatada = hoje.toLocaleDateString('pt-BR');
+
+  const abertos = registros.filter(r => r[CST] !== 'Fechado').length;
+  const fechados = registros.length - abertos;
+  const setoresDistintos = new Set(registros.map(r => r[CSE]).filter(Boolean)).size;
+  const pctEncerrados = registros.length ? (fechados / registros.length * 100).toFixed(1) : '0.0';
+
+  const datas = registros.map(r => r[CD]).filter(Boolean).sort();
+  const periodoTexto = datas.length
+    ? `${datas[0].split('-').reverse().join('/')} a ${datas[datas.length - 1].split('-').reverse().join('/')}`
+    : '—';
+
+  const porStatus = {};
+  registros.forEach(r => { porStatus[r[CST]] = (porStatus[r[CST]] || 0) + 1; });
+  const dadosStatus = Object.entries(porStatus).sort((a, b) => b[1] - a[1]);
+
+  const porPrio = {};
+  registros.forEach(r => { porPrio[r[CPR]] = (porPrio[r[CPR]] || 0) + 1; });
+  const dadosPrio = Object.entries(porPrio).sort((a, b) => agPdfIndicePrioridade(a[0]) - agPdfIndicePrioridade(b[0]));
+
+  const porMes = {};
+  registros.forEach(r => { if (r[CD]) { const m = r[CD].slice(0, 7); porMes[m] = (porMes[m] || 0) + 1; } });
+  const chavesMes = Object.keys(porMes).sort();
+  const dadosMes = chavesMes.map((k, i) => {
+    const [ano, mes] = k.split('-');
+    const anterior = i > 0 ? porMes[chavesMes[i - 1]] : null;
+    const qtd = porMes[k];
+    const variacao = anterior === null ? null : qtd - anterior;
+    return { rotulo: `${AG_PDF_MESES[+mes - 1]}/${ano}`, qtd, variacao };
   });
+
+  const classificaveis = registros.filter(r => r[CF] !== 'Não classificado (revisar)' && r[CF] !== 'Fora de escopo (não é AC)');
+  const porFalha = {};
+  classificaveis.forEach(r => { porFalha[r[CF]] = (porFalha[r[CF]] || 0) + 1; });
+  let acumulado = 0;
+  const dadosFalha = Object.entries(porFalha).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([nome, qtd]) => {
+    acumulado += qtd;
+    return { nome, qtd, pct: classificaveis.length ? (qtd / classificaveis.length * 100) : 0, pctAcumulado: classificaveis.length ? (acumulado / classificaveis.length * 100) : 0 };
+  });
+
+  const porSetor = {};
+  registros.forEach(r => { if (r[CSE]) porSetor[r[CSE]] = (porSetor[r[CSE]] || 0) + 1; });
+  const dadosSetor = Object.entries(porSetor).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  const linhaTabela = (cols) => `<tr>${cols.map(c => `<td class="${c.classe || 'text-left'}">${c.html}</td>`).join('')}</tr>`;
+  const tabela = (cabecalhos, linhasHtml) => `
+    <table>
+      <thead><tr>${cabecalhos.map(c => `<th style="width:${c.w};" class="${c.classe || 'text-left'}">${c.rotulo}</th>`).join('')}</tr></thead>
+      <tbody>${linhasHtml}</tbody>
+    </table>`;
+
+  const secaoNarrativa = (titulo, texto) => texto
+    ? `<div class="section-title">${escapeHtml(titulo)}</div><p style="font-size:11.5px;color:#333;margin-bottom:10px;">${escapeHtml(texto)}</p>`
+    : '';
+
+  let conteudoHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; margin: 30px; color: #1a1a1a; font-size: 11px; line-height: 1.4; }
+        ${cssCabecalhoOficial()}
+        .meta-emissao { text-align: right; font-size: 10px; color: #5B6B7A; margin: -10px 0 20px; }
+        .meta-emissao strong { color: #0B3D24; }
+        .summary-box { width: 100%; display: table; border: 1px solid #d2d6de; background-color: #fcfcfc; margin-bottom: 25px; }
+        .summary-item { display: table-cell; width: 20%; text-align: center; vertical-align: middle; padding: 15px 10px; border-right: 1px solid #eee; }
+        .summary-item:last-child { border-right: none; }
+        .summary-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .summary-value { font-size: 20px; font-weight: bold; color: #0B3D24; }
+        .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #0B3D24; border-bottom: 1px solid #d2d6de; padding-bottom: 5px; margin: 30px 0 15px 0; page-break-after: avoid; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
+        th { background-color: #E3F3E9; color: #0B3D24; font-weight: bold; text-transform: uppercase; font-size: 10px; padding: 8px; border-bottom: 2px solid #d2d6de; }
+        td { padding: 8px; border-bottom: 1px solid #eee; font-size: 11px; word-wrap: break-word; }
+        .text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }
+        .delta-pos { color: #1e7e34; font-weight: bold; } .delta-neg { color: #c82333; font-weight: bold; }
+        .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #d2d6de; font-size: 9px; color: #777; overflow: hidden; }
+      </style>
+    </head>
+    <body>
+      ${cabecalhoOficialHtml('Relatório de Análise de Chamados — GLPI')}
+      <div class="meta-emissao">
+        <strong>Emissão:</strong> ${dataFormatada} &nbsp;&middot;&nbsp;
+        <strong>Recorte:</strong> ${escapeHtml(ctx.filtrosTexto || 'Base completa')} &nbsp;&middot;&nbsp;
+        <strong>Período das aberturas:</strong> ${periodoTexto}
+      </div>
+
+      <div class="summary-box">
+        <div class="summary-item"><div class="summary-label">Chamados no recorte</div><div class="summary-value">${registros.length}</div></div>
+        <div class="summary-item"><div class="summary-label">Em aberto</div><div class="summary-value">${abertos}</div></div>
+        <div class="summary-item"><div class="summary-label">Encerrados</div><div class="summary-value">${fechados}</div></div>
+        <div class="summary-item"><div class="summary-label">% Encerrados</div><div class="summary-value">${pctEncerrados}%</div></div>
+        <div class="summary-item"><div class="summary-label">Setores distintos</div><div class="summary-value">${setoresDistintos}</div></div>
+      </div>
+
+      ${secaoNarrativa('Resumo', ctx.narrativaGeral)}
+
+      <div class="section-title">1. Distribuição por Status</div>
+      ${tabela(
+        [{ rotulo: 'Status', w: '46%' }, { rotulo: 'Quantidade', w: '27%', classe: 'text-center' }, { rotulo: '% do recorte', w: '27%', classe: 'text-right' }],
+        dadosStatus.map(([nome, qtd]) => linhaTabela([
+          { html: `<span style="color:${agPdfCorStatus(nome)};font-weight:700;">${escapeHtml(nome)}</span>` },
+          { html: String(qtd), classe: 'text-center' },
+          { html: `${registros.length ? (qtd / registros.length * 100).toFixed(1) : '0.0'}%`, classe: 'text-right' },
+        ])).join('')
+      )}
+
+      <div class="section-title">2. Distribuição por Prioridade</div>
+      ${tabela(
+        [{ rotulo: 'Prioridade', w: '46%' }, { rotulo: 'Quantidade', w: '27%', classe: 'text-center' }, { rotulo: '% do recorte', w: '27%', classe: 'text-right' }],
+        dadosPrio.map(([nome, qtd]) => linhaTabela([
+          { html: `<strong>${escapeHtml(nome)}</strong>` },
+          { html: String(qtd), classe: 'text-center' },
+          { html: `${registros.length ? (qtd / registros.length * 100).toFixed(1) : '0.0'}%`, classe: 'text-right' },
+        ])).join('')
+      )}
+
+      <div class="section-title">3. Evolução Mensal de Abertura</div>
+      ${dadosMes.length ? tabela(
+        [{ rotulo: 'Mês', w: '40%' }, { rotulo: 'Chamados abertos', w: '30%', classe: 'text-center' }, { rotulo: 'Variação vs. mês anterior', w: '30%', classe: 'text-right' }],
+        dadosMes.map(m => linhaTabela([
+          { html: `<strong>${escapeHtml(m.rotulo)}</strong>` },
+          { html: String(m.qtd), classe: 'text-center' },
+          {
+            html: m.variacao === null ? '—' : m.variacao > 0 ? `<span class="delta-neg">▲ ${m.variacao}</span>` : m.variacao < 0 ? `<span class="delta-pos">▼ ${Math.abs(m.variacao)}</span>` : '—',
+            classe: 'text-right',
+          },
+        ])).join('')
+      ) : '<p style="font-style:italic;color:#777;">Sem registros no recorte selecionado.</p>'}
+
+      ${secaoNarrativa('4. Análise das Falhas', ctx.narrativaFalhas)}
+      ${dadosFalha.length ? tabela(
+        [{ rotulo: 'Tipo de falha', w: '40%' }, { rotulo: 'Quantidade', w: '18%', classe: 'text-center' }, { rotulo: '% classificável', w: '21%', classe: 'text-right' }, { rotulo: '% acumulado', w: '21%', classe: 'text-right' }],
+        dadosFalha.map(f => linhaTabela([
+          { html: escapeHtml(f.nome) },
+          { html: String(f.qtd), classe: 'text-center' },
+          { html: `${f.pct.toFixed(1)}%`, classe: 'text-right' },
+          { html: `${f.pctAcumulado.toFixed(1)}%`, classe: 'text-right' },
+        ])).join('')
+      ) : '<p style="font-style:italic;color:#777;">Sem chamados classificáveis no recorte selecionado.</p>'}
+
+      <div class="section-title">5. Setores com Mais Chamados</div>
+      ${dadosSetor.length ? tabela(
+        [{ rotulo: 'Setor', w: '58%' }, { rotulo: 'Quantidade', w: '21%', classe: 'text-center' }, { rotulo: '% do recorte', w: '21%', classe: 'text-right' }],
+        dadosSetor.map(([nome, qtd]) => linhaTabela([
+          { html: escapeHtml(nome) },
+          { html: String(qtd), classe: 'text-center' },
+          { html: `${registros.length ? (qtd / registros.length * 100).toFixed(1) : '0.0'}%`, classe: 'text-right' },
+        ])).join('')
+      ) : '<p style="font-style:italic;color:#777;">Sem registros no recorte selecionado.</p>'}
+
+      <div class="footer">
+        <div style="float: left;">Sistema de Manutenção Preventiva — Gerado automaticamente.</div>
+        <div style="float: right;">Página 1</div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return conteudoHTML;
+}
+
+function baixarRelatorioAnaliseGlpi(ctx) {
+  const html = gerarRelatorioAnaliseGlpi(ctx);
+  const opt = {
+    margin: [10, 10, 10, 10],
+    filename: `Relatorio_Analise_GLPI_ALECE_${new Date().toISOString().split('T')[0]}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+  };
+  gerarEBaixarPdf(html, opt);
 }

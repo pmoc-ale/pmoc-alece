@@ -460,6 +460,7 @@
           <label style="font-size:11px">Prioridade<br><select id="agFPrioridade"><option value="">Todas</option></select></label>
           <label style="font-size:11px">Status<br><select id="agFStatus"><option value="">Todos</option></select></label>
           <span class="ag-filtro-btn-wrap"><span class="ag-filtro-btn-spacador">&nbsp;</span><button class="btn ghost" id="agBtnLimparFiltros">Limpar filtros</button></span>
+          <span class="ag-filtro-btn-wrap"><span class="ag-filtro-btn-spacador">&nbsp;</span><button class="btn primary" id="agBtnBaixarPdf">Baixar relatório (PDF)</button></span>
           <span class="muted" id="agContagemFiltro" style="margin-left:auto"></span>
         </div>
 
@@ -1160,11 +1161,11 @@
     </div>
   </div>
 </div>
-<script src="utils/pdfGenerator.js?v=7"></script>
+<script src="utils/pdfGenerator.js?v=8"></script>
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=169"></script>
+<script type="module" src="app.js?v=170"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
