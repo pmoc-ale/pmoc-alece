@@ -114,6 +114,28 @@ Dados do recorte (${textoSeguro(r.periodoInicio, 20)} a ${textoSeguro(r.periodoF
 - Setores com mais chamados: ${listaFormatada(r.topSetores)}`;
 }
 
+// Mesmas regras de REGRAS_COMUNS, mais uma específica pra dados de PESSOA
+// -- a planilha de campo lista quem atendeu cada ordem, mas um resumo que
+// soasse como "fulano trabalha pouco/muito" seria um julgamento de
+// desempenho individual que não é o papel dessa ferramenta. O prompt só
+// deve descrever a distribuição (números), nunca avaliar quem é "melhor"
+// ou "pior".
+function montarPromptEquipe(r) {
+  const taxa = (r.sim + r.nao) ? ((r.sim / (r.sim + r.nao)) * 100).toFixed(1) : "0";
+  return `Você resume dados de atendimento da equipe de campo que faz manutenção de ar-condicionado pro gestor de uma assembleia legislativa (PMOC ALECE). Escreva um resumo GERAL em português do Brasil, de 2 a 4 frases, tom direto e profissional, SEM markdown, SEM listas, SEM saudação.
+
+${REGRAS_COMUNS}
+- Não avalie o desempenho de nenhuma pessoa específica (não diga que alguém "atende pouco/muito" ou é "melhor/pior") -- descreva só a distribuição dos números, nunca um julgamento sobre pessoas.
+
+Dados do recorte:
+- Total de ordens de serviço: ${Number(r.total) || 0}
+- Taxa de resolução (entre as que já têm resposta): ${taxa}% (${Number(r.sim) || 0} de ${(Number(r.sim) || 0) + (Number(r.nao) || 0)})
+- Prédios com mais ordens: ${listaFormatada(r.porPredio)}
+- Marcas de equipamento mais comuns: ${listaFormatada(r.porMarca)}
+- Marcas com pior nota média de funcionamento (escala, quanto menor pior): ${listaFormatada(r.notaMarca)}
+- Prédios com pior nota média de funcionamento (escala, quanto menor pior): ${listaFormatada(r.notaPredio)}`;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -137,7 +159,14 @@ export default {
     } catch {
       return respostaJson({ erro: "Corpo da requisição inválido." }, 400);
     }
-    if (!corpo || typeof corpo.totalChamados !== "number") {
+    // "tipo": "equipe" é o resumo da página Equipe de campo (um texto só);
+    // sem "tipo" (ou "glpi") é o comportamento de sempre, dois textos
+    // (visão geral + falhas) a partir dos números da Análise GLPI.
+    const tipo = corpo?.tipo === "equipe" ? "equipe" : "glpi";
+    if (tipo === "equipe" && (!corpo || typeof corpo.total !== "number")) {
+      return respostaJson({ erro: "Faltam os números resumidos da equipe (total etc)." }, 400);
+    }
+    if (tipo === "glpi" && (!corpo || typeof corpo.totalChamados !== "number")) {
       return respostaJson({ erro: "Faltam os números resumidos (totalChamados etc)." }, 400);
     }
 
@@ -167,6 +196,10 @@ export default {
     }
 
     try {
+      if (tipo === "equipe") {
+        const texto = await gerarTexto(montarPromptEquipe(corpo));
+        return respostaJson({ ok: true, texto });
+      }
       // Duas chamadas separadas (não uma só pedindo "escreva os dois") --
       // mais fácil de usar cada texto no lugar certo sem depender de um
       // separador frágil dentro da resposta da IA.

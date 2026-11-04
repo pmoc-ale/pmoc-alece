@@ -545,6 +545,13 @@
 
         <!-- Página: Equipe de campo -->
         <div class="ag-pagina" id="agPagina-equipe" hidden>
+          <div class="card" id="agCardNarrativaEquipeIA" hidden>
+            <h2>Resumo</h2>
+            <p id="agNarrativaEquipeIA" style="font-size:13.5px"></p>
+          </div>
+          <div style="text-align:right; margin-bottom:14px" id="agWrapBtnGerarResumoEquipe" hidden>
+            <button class="btn ghost" id="agBtnGerarResumoEquipe">Gerar resumo</button>
+          </div>
           <div class="kpi-row" id="agKpisEquipe"></div>
           <div class="ag-grid-2">
             <div class="card">
@@ -1165,7 +1172,7 @@
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=170"></script>
+<script type="module" src="app.js?v=171"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver

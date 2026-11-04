@@ -12004,6 +12004,46 @@ async function agGerarNarrativaIA(registros) {
   return { textoGeral: dados.textoGeral, textoFalhas: dados.textoFalhas };
 }
 
+// Resumo da Equipe de campo -- diferente do GLPI (que gera sozinho a cada
+// CSV importado), essa página sincroniza automático a cada poucos minutos
+// e não tem um "evento de import" pra disparar em cima. Por isso é sob
+// demanda (botão "Gerar resumo", só pra admin) em vez de automático --
+// evita chamar a IA sem necessidade a cada sincronização.
+async function agGerarNarrativaEquipeIA() {
+  const idToken = await auth.currentUser.getIdToken();
+  const resp = await fetch(URL_NARRATIVA_GLPI, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ tipo: "equipe", ...agCalcularResumoCampo() }),
+  });
+  const dados = await resp.json().catch(() => ({}));
+  if (!resp.ok || !dados.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
+  return dados.texto;
+}
+
+$("#agBtnGerarResumoEquipe")?.addEventListener("click", async () => {
+  const btn = $("#agBtnGerarResumoEquipe");
+  btn.disabled = true;
+  btn.textContent = "Gerando...";
+  try {
+    const texto = await agGerarNarrativaEquipeIA();
+    await setDoc(doc(db, "analiseGlpi", "equipe"), {
+      narrativa: texto, narrativaGeradaEm: new Date().toISOString(),
+      geradoPor: ESTADO.meuUsuarioDoc?.usuario || auth.currentUser?.email || "desconhecido",
+    });
+    ESTADO.narrativaEquipeIA = texto;
+    const card = $("#agCardNarrativaEquipeIA");
+    if (card) { card.hidden = false; $("#agNarrativaEquipeIA").textContent = texto; }
+    toast("Resumo gerado.");
+  } catch (err) {
+    console.error("Resumo da equipe:", err);
+    toast("Erro ao gerar o resumo: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Gerar resumo";
+  }
+});
+
 // --- 3) Upload: só o CSV do GLPI (chamados) -- sem fonte automática hoje ---
 $("#agBtnGlpiEscolher")?.addEventListener("click", () => $("#agGlpiInput").click());
 
@@ -12554,6 +12594,8 @@ function agPopularFiltros() {
 async function renderAnaliseGlpi() {
   const souAdminLocal = ESTADO.permissao === "admin";
   $("#agDetailsImportar").hidden = !souAdminLocal;
+  const wrapBtnEquipe = $("#agWrapBtnGerarResumoEquipe");
+  if (wrapBtnEquipe) wrapBtnEquipe.hidden = !souAdminLocal;
   agInicializarControles();
   if (souAdminLocal) agAtualizarStatusImportacao();
 
@@ -12591,6 +12633,19 @@ async function renderAnaliseGlpi() {
     cardNarrativaFalhas.hidden = !ESTADO.analiseGlpi.narrativaFalhasIA;
     const pf = $("#agNarrativaFalhasIA");
     if (pf) pf.textContent = ESTADO.analiseGlpi.narrativaFalhasIA || "";
+  }
+
+  try {
+    const snapEquipe = await getDoc(doc(db, "analiseGlpi", "equipe"));
+    ESTADO.narrativaEquipeIA = snapEquipe.exists() ? (snapEquipe.data().narrativa || "") : "";
+  } catch (err) {
+    console.error(err);
+  }
+  const cardNarrativaEquipe = $("#agCardNarrativaEquipeIA");
+  if (cardNarrativaEquipe) {
+    cardNarrativaEquipe.hidden = !ESTADO.narrativaEquipeIA;
+    const pe = $("#agNarrativaEquipeIA");
+    if (pe) pe.textContent = ESTADO.narrativaEquipeIA || "";
   }
 
   agPopularFiltros();
