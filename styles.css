@@ -921,20 +921,20 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
    (desktop, ou outro papel de usuário) fica escondido, já que essas telas
    já estão acessíveis pelas abas de cima. */
 .sidenav-atalho-trabalhador { display: none; }
-.sidenav-item.active .sidenav-icon { background: var(--dourado); }
 
+/* Ícone de verdade (SVG inline, mesmo padrão do .tab-icon da topbar) --
+   antes disso era um "display:none" só com uma bolinha decorativa no
+   celular; no desktop não tinha ícone nenhum. "currentColor" no stroke
+   do SVG faz o ícone seguir a cor do texto sozinho (cinza no normal,
+   verde-900 no item ativo, igual a cor do próprio rótulo) -- sem
+   precisar de uma regra extra pro estado ativo. */
 .sidenav-icon {
-  /* A bolinha decorativa não aparece mais no menu lateral do desktop --
-     o item ativo já se destaca com fundo + linha à esquerda. No modo
-     "barra inferior" do celular ela reaparece como um tracinho (ver
-     media query), porque lá não tem "à esquerda" pra destacar. */
-  display: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--borda-forte);
+  display: inline-flex;
   flex-shrink: 0;
+  opacity: 0.8;
 }
+.sidenav-icon svg { width: 18px; height: 18px; display: block; }
+.sidenav-item.active .sidenav-icon { opacity: 1; }
 
 .sidenav-spacer { flex: 1; }
 
@@ -1387,6 +1387,21 @@ table tbody tr:last-child td { border-bottom: none; }
 table tbody tr:hover td { background: var(--verde-50); }
 
 table tbody td:first-child { font-family: var(--fonte-dado); }
+
+/* Texto longo (ex: nome de setor) quebrando em várias linhas fazia cada
+   linha da tabela de desktop ter uma altura diferente, "serrilhada" --
+   trunca numa linha só com "..." e mostra o texto inteiro no title
+   (tooltip nativo do navegador ao passar o mouse). Só no desktop: no
+   celular essa mesma tabela vira cards empilhados (.tabela-cards-mobile,
+   ver media query), onde não tem problema de altura e cortar o texto
+   tiraria informação sem necessidade. */
+.td-truncado {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+}
 
 /* Status (pills / selects) — cores herdadas do Excel exportado */
 .status-select {
@@ -2717,7 +2732,8 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     white-space: nowrap;
     border-left: none; /* a linha à esquerda do menu de desktop não faz sentido numa barra horizontal */
   }
-  .sidenav-icon { display: block; margin: 0 auto; width: 16px; height: 4px; border-radius: 2px; } /* Deixei as bolinhas parecendo "tracinhos" de app */
+  .sidenav-icon { display: block; margin: 0 auto; }
+  .sidenav-icon svg { width: 20px; height: 20px; }
   #btnSair, #btnApagarCronograma { margin-top: 0 !important; }
   /* No celular a barra de baixo já vem cheia (Hoje/Calendário/Dashboard/
      Localização pro trabalhador, mais itens de Gestão pro admin) -- o
@@ -2845,6 +2861,15 @@ details.ciclos-discreto[open] summary, details.drawer-secao[open] summary {
     border-bottom: none;
     text-align: right;
     font-size: 13px;
+  }
+  /* No card empilhado do celular não tem o problema de altura desigual
+     que o truncamento resolve no desktop -- aqui só tiraria informação
+     à toa, então desfaz. */
+  .tabela-cards-mobile td.td-truncado {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
   }
   .tabela-cards-mobile td[data-label]::before {
     content: attr(data-label);

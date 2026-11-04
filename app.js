@@ -9604,7 +9604,7 @@ function renderEquipamentosCadastro() {
   itensComCorretivas.forEach(({ item, totalCorretivas }) => {
     const dadosTecnicos = escapeHtml([item.tag && `Tag: ${item.tag}`, item.marca, item.modelo, item.capacidade, item.tipoGas && `Gás: ${item.tipoGas}`].filter(Boolean).join(" • ") || "-");
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td></td><td data-label="Patrimônio">${escapeHtml(item.patrimonio || "-")}</td><td data-label="Setor">${escapeHtml(item.setor)}</td><td data-label="Ambiente">${escapeHtml(item.ambiente)}</td>
+    tr.innerHTML = `<td></td><td data-label="Patrimônio">${escapeHtml(item.patrimonio || "-")}</td><td data-label="Setor" class="td-truncado" title="${escapeHtml(item.setor)}">${escapeHtml(item.setor)}</td><td data-label="Ambiente">${escapeHtml(item.ambiente)}</td>
       <td data-label="Prédio">${escapeHtml(item.local || "SEDE")}</td>
       <td data-label="Setor PCM">${item.setorPCM}</td>
       <td data-label="Status">
