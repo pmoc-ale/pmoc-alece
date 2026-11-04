@@ -124,32 +124,30 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Silhueta do Ceará bem discreta, fixa no canto -- mesma forma usada
-   como marca d'água nos PDFs (ver marcaDaguaCearaHtml em
-   utils/pdfGenerator.js), atrás de tudo, pra dar uma cara de
-   "identidade" sem chamar atenção nem atrapalhar a leitura de nada por
-   cima. Usa mask (não background-image) pra poder colorir a silhueta,
-   já que o SVG original é branco. [2026-11] Testei várias variações
-   com linha dourada (contorno colado, linhas soltas, linha tecendo a
-   borda) -- a Jovanna não gostou de nenhuma, voltou pro original. */
+/* Canto verde + linha dourada tecendo por cima da borda dele, igual a
+   capa do manual de marca. [2026-11] A primeira tentativa (ver
+   histórico) saiu com a linha fina e fraca demais -- a referência tem
+   uma linha GROSSA e de opacidade alta, confiante, indo de ponta a
+   ponta sem se perder; essa versão aumenta bastante os dois (stroke-
+   width e opacity) em cima da mesma forma de antes. */
 .fundo-decorativo {
   position: fixed;
-  right: -70px;
-  bottom: -50px;
+  right: -60px;
+  bottom: -80px;
   width: 420px;
   height: 512px;
-  background-color: var(--verde-700);
-  opacity: 0.05;
-  -webkit-mask-image: url("assets/ceara-silhueta.svg");
-  mask-image: url("assets/ceara-silhueta.svg");
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: bottom right;
-  mask-position: bottom right;
   z-index: -1;
   pointer-events: none;
+}
+.fundo-decorativo-verde {
+  fill: var(--verde-700);
+  opacity: 0.07;
+}
+.fundo-decorativo-linha {
+  fill: none;
+  stroke: var(--dourado);
+  stroke-width: 3.5;
+  opacity: 0.8;
 }
 
 @media (max-width: 640px) {
