@@ -126,29 +126,31 @@ html, body {
 
 /* Silhueta do Ceará bem discreta, fixa no canto -- mesma forma usada
    como marca d'água nos PDFs (ver marcaDaguaCearaHtml em
-   utils/pdfGenerator.js), só que aqui atrás de tudo, quase
-   imperceptível, pra dar uma cara de "identidade" sem chamar atenção
-   nem atrapalhar a leitura de nada por cima. Usa mask (não
-   background-image) pra poder colorir a silhueta, já que o SVG
-   original é branco. */
+   utils/pdfGenerator.js), atrás de tudo, pra dar uma cara de
+   "identidade" sem chamar atenção nem atrapalhar a leitura de nada por
+   cima. Preenchimento verde sólido + contorno fino dourado TRAÇANDO a
+   borda -- a combinação "mapa verde + linha dourada" é o padrão oficial
+   repetido em praticamente toda a papelaria do manual de marca (pasta,
+   envelope, cartão de visita, crachá), não só o preenchimento sozinho
+   que era usado aqui antes. */
 .fundo-decorativo {
   position: fixed;
   right: -70px;
   bottom: -50px;
   width: 420px;
   height: 512px;
-  background-color: var(--verde-700);
-  opacity: 0.05;
-  -webkit-mask-image: url("assets/ceara-silhueta.svg");
-  mask-image: url("assets/ceara-silhueta.svg");
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: bottom right;
-  mask-position: bottom right;
   z-index: -1;
   pointer-events: none;
+}
+.fundo-decorativo-preenchido {
+  fill: var(--verde-700);
+  opacity: 0.05;
+}
+.fundo-decorativo-contorno {
+  fill: none;
+  stroke: var(--dourado);
+  stroke-width: 1.6;
+  opacity: 0.4;
 }
 
 @media (max-width: 640px) {
