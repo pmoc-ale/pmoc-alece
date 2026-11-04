@@ -223,6 +223,15 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   opacity: 0;
 }
 
+#telaCarregando {
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+#telaCarregando.saindo {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Silhueta do Ceará no fundo -- bem sutil, só textura/identidade visual
    (a Jovanna pediu; combina com o manual de marca da ALECE, que usa o
    contorno do mapa do estado em destaque nos materiais oficiais). */

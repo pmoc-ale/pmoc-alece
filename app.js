@@ -3868,7 +3868,7 @@ async function registrarUsuarioLogado(user) {
 // telas na hora -- sem isso, depois de ficar esperando o clique em
 // "Entrar", a tela trocava de uma vez, parecendo mais um susto/bug do
 // que uma resposta do sistema.
-function transicaoParaApp(overlay, appRoot) {
+function transicaoParaApp(overlay, appRoot, telaCarregando) {
   if (appRoot) {
     appRoot.hidden = false;
     appRoot.classList.add("entrando");
@@ -3890,13 +3890,23 @@ function transicaoParaApp(overlay, appRoot) {
       overlay.classList.remove("saindo");
     }, 350);
   }
+  // Mesma transição de 350ms do overlay/appRoot acima, não um "remove()"
+  // instantâneo -- a tela de carregamento tem a mesma marca d'água do
+  // Ceará que o app por trás dela (ver .fundo-decorativo), só que sem o
+  // spinner por cima; removê-la na hora deixava um instante em que o
+  // mapa aparecia "pelado" (sem spinner, sem o app ainda visível) antes
+  // da transição do appRoot começar -- daí a impressão de que o mapa só
+  // aparecia DEPOIS do spinner sumir, em vez de ao mesmo tempo.
+  if (telaCarregando) {
+    telaCarregando.classList.add("saindo");
+    setTimeout(() => telaCarregando.remove(), 350);
+  }
 }
 
 onAuthStateChanged(auth, async (user) => {
   const overlay = $("#authOverlay");
   const appRoot = $("#appRoot");
   const telaCarregando = $("#telaCarregando");
-  if (telaCarregando) telaCarregando.remove();
   if (user) {
     ESTADO.usuarioEmail = user.email;
     ESTADO.usuarioNome = extrairUsuario(user.email);
@@ -3935,7 +3945,7 @@ onAuthStateChanged(auth, async (user) => {
       await signOut(auth);
       return;
     }
-    transicaoParaApp(overlay, appRoot);
+    transicaoParaApp(overlay, appRoot, telaCarregando);
     atualizarVisibilidadeAdmin();
     if (!appJaInicializado) {
           appJaInicializado = true;
@@ -3949,6 +3959,11 @@ onAuthStateChanged(auth, async (user) => {
   } else {
     if (overlay) overlay.hidden = false;
     if (appRoot) appRoot.hidden = true;
+    // Aqui pode remover na hora (sem a transição de fade de cima): o
+    // authOverlay (z-index 200) já cobre a tela de carregamento
+    // (z-index 150) assim que some o "hidden", então não existe o
+    // instante de "mapa pelado" que acontece no caminho de login OK.
+    if (telaCarregando) telaCarregando.remove();
     // Desfaz o "Entrando..."/desabilitado do botão -- senão, depois de
     // sair (Sair) e voltar pra tela de login, o botão ficava travado do
     // jeito que ficou na última tentativa.
