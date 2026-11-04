@@ -124,34 +124,35 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Canto verde + linha dourada tecendo por cima da borda dele, igual a
-   capa do manual de marca. [2026-11] A primeira tentativa (ver
-   histórico) saiu com a linha fina e fraca demais -- a referência tem
-   uma linha GROSSA e de opacidade alta, confiante, indo de ponta a
-   ponta sem se perder; essa versão aumenta bastante os dois (stroke-
-   width e opacity) em cima da mesma forma de antes. */
+/* Faixa verde na borda esquerda, de cima a baixo da tela, com uma linha
+   dourada grossa tecendo por cima -- igual a referência que a Jovanna
+   mandou (tela de carregamento com a silhueta inteira na lateral, não
+   só um cantinho). Fica atrás de tudo (z-index -1): nas telas do app
+   (dashboard etc.) a topbar+sidenav (opacas, >= 216px) cobrem essa
+   faixa por inteiro, então ela só aparece de fato nas telas sem layout
+   próprio -- carregamento e login. */
 .fundo-decorativo {
   position: fixed;
-  right: -60px;
-  bottom: -80px;
-  width: 420px;
-  height: 512px;
+  left: 0;
+  top: 0;
+  width: 320px;
+  height: 100vh;
   z-index: -1;
   pointer-events: none;
 }
 .fundo-decorativo-verde {
   fill: var(--verde-700);
-  opacity: 0.07;
+  opacity: 0.9;
 }
 .fundo-decorativo-linha {
   fill: none;
   stroke: var(--dourado);
-  stroke-width: 3.5;
-  opacity: 0.8;
+  stroke-width: 5;
+  opacity: 0.85;
 }
 
 @media (max-width: 640px) {
-  .fundo-decorativo { width: 260px; height: 317px; right: -50px; bottom: -30px; }
+  .fundo-decorativo { width: 110px; }
 }
 
 h1, h2, h3 {
