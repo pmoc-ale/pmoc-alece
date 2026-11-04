@@ -124,62 +124,37 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Silhueta do Ceará bem discreta, fixa no canto -- mesma forma usada
-   como marca d'água nos PDFs (ver marcaDaguaCearaHtml em
-   utils/pdfGenerator.js), atrás de tudo, pra dar uma cara de
-   "identidade" sem chamar atenção nem atrapalhar a leitura de nada por
-   cima. Usa mask (não background-image) pra poder colorir a silhueta,
-   já que o SVG original é branco. [2026-11] Testei acrescentar um
-   contorno dourado por cima (igual a papelaria do manual de marca),
-   mas a Jovanna preferiu esse preenchimento sozinho, como estava --
-   voltou pra esse, as linhas douradas entram em outro lugar da tela,
-   não grudadas no mapa. */
+/* Canto verde + linha dourada tecendo por cima da borda dele -- o
+   padrão de verdade do manual de marca (conferido no PDF: pasta,
+   envelope, cartão de visita, crachá SEMPRE usam essa combinação, não
+   o preenchimento sozinho nem linhas soltas em outro canto). A linha
+   dourada não é um contorno exato do preenchimento -- no manual ela
+   cruza a fronteira verde/branco várias vezes, deslocada pra dentro e
+   pra fora; os dois paths aqui são formas parecidas, não idênticas, de
+   propósito, pra imitar esse efeito de "tecido". Fixo no canto,
+   discreto (baixa opacidade), atrás de todo o conteúdo. */
 .fundo-decorativo {
   position: fixed;
-  right: -70px;
-  bottom: -50px;
+  right: -60px;
+  bottom: -80px;
   width: 420px;
   height: 512px;
-  background-color: var(--verde-700);
-  opacity: 0.05;
-  -webkit-mask-image: url("assets/ceara-silhueta.svg");
-  mask-image: url("assets/ceara-silhueta.svg");
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  -webkit-mask-position: bottom right;
-  mask-position: bottom right;
   z-index: -1;
   pointer-events: none;
+}
+.fundo-decorativo-verde {
+  fill: var(--verde-700);
+  opacity: 0.07;
+}
+.fundo-decorativo-linha {
+  fill: none;
+  stroke: var(--dourado);
+  stroke-width: 1.6;
+  opacity: 0.3;
 }
 
 @media (max-width: 640px) {
-  .fundo-decorativo { width: 260px; height: 317px; right: -50px; bottom: -30px; }
-}
-
-/* Linhas douradas soltas no fundo da tela -- mesmo espírito da linha
-   que traça a borda do mapa na papelaria do manual de marca, só que
-   aqui sem seguir o contorno de verdade do Ceará (fica só perto do
-   mapa, no canto); são traços abstratos, espalhados por outras partes
-   da tela, pro fundo não ficar "vazio" fora daquele canto. Position
-   fixed + z-index -1, mesma camada do .fundo-decorativo -- atrás de
-   tudo, não disputa atenção com o conteúdo. */
-.linha-dourada {
-  position: fixed;
-  fill: none;
-  stroke: var(--dourado);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  opacity: 0.16;
-  z-index: -1;
-  pointer-events: none;
-}
-.linha-dourada-1 { top: 60px; left: -20px; width: 420px; height: 130px; }
-.linha-dourada-2 { bottom: 40px; left: 60%; width: 140px; height: 440px; }
-
-@media (max-width: 900px) {
-  .linha-dourada-2 { display: none; } /* numa tela estreita, sobra pouco espaço "vazio" pra ela respirar sem brigar com o conteúdo */
+  .fundo-decorativo { width: 260px; height: 317px; right: -40px; bottom: -50px; }
 }
 
 h1, h2, h3 {
