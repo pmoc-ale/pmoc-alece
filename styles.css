@@ -128,33 +128,58 @@ html, body {
    como marca d'água nos PDFs (ver marcaDaguaCearaHtml em
    utils/pdfGenerator.js), atrás de tudo, pra dar uma cara de
    "identidade" sem chamar atenção nem atrapalhar a leitura de nada por
-   cima. Preenchimento verde sólido + contorno fino dourado TRAÇANDO a
-   borda -- a combinação "mapa verde + linha dourada" é o padrão oficial
-   repetido em praticamente toda a papelaria do manual de marca (pasta,
-   envelope, cartão de visita, crachá), não só o preenchimento sozinho
-   que era usado aqui antes. */
+   cima. Usa mask (não background-image) pra poder colorir a silhueta,
+   já que o SVG original é branco. [2026-11] Testei acrescentar um
+   contorno dourado por cima (igual a papelaria do manual de marca),
+   mas a Jovanna preferiu esse preenchimento sozinho, como estava --
+   voltou pra esse, as linhas douradas entram em outro lugar da tela,
+   não grudadas no mapa. */
 .fundo-decorativo {
   position: fixed;
   right: -70px;
   bottom: -50px;
   width: 420px;
   height: 512px;
+  background-color: var(--verde-700);
+  opacity: 0.05;
+  -webkit-mask-image: url("assets/ceara-silhueta.svg");
+  mask-image: url("assets/ceara-silhueta.svg");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: bottom right;
+  mask-position: bottom right;
   z-index: -1;
   pointer-events: none;
-}
-.fundo-decorativo-preenchido {
-  fill: var(--verde-700);
-  opacity: 0.05;
-}
-.fundo-decorativo-contorno {
-  fill: none;
-  stroke: var(--dourado);
-  stroke-width: 1.6;
-  opacity: 0.4;
 }
 
 @media (max-width: 640px) {
   .fundo-decorativo { width: 260px; height: 317px; right: -50px; bottom: -30px; }
+}
+
+/* Linhas douradas soltas no fundo da tela -- mesmo espírito da linha
+   que traça a borda do mapa na papelaria do manual de marca, só que
+   aqui sem seguir o contorno de verdade do Ceará (fica só perto do
+   mapa, no canto); são traços abstratos, espalhados por outras partes
+   da tela, pro fundo não ficar "vazio" fora daquele canto. Position
+   fixed + z-index -1, mesma camada do .fundo-decorativo -- atrás de
+   tudo, não disputa atenção com o conteúdo. */
+.linha-dourada {
+  position: fixed;
+  fill: none;
+  stroke: var(--dourado);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0.16;
+  z-index: -1;
+  pointer-events: none;
+}
+.linha-dourada-1 { top: 60px; left: -20px; width: 420px; height: 130px; }
+.linha-dourada-2 { bottom: 40px; left: 60%; width: 140px; height: 440px; }
+
+@media (max-width: 900px) {
+  .linha-dourada-2 { display: none; } /* numa tela estreita, sobra pouco espaço "vazio" pra ela respirar sem brigar com o conteúdo */
 }
 
 h1, h2, h3 {
@@ -529,6 +554,20 @@ select:focus-visible, .tab:focus-visible, [tabindex]:focus-visible {
   position: sticky;
   top: 0;
   z-index: 101;
+  overflow: hidden;
+}
+/* Mesmo traço dourado do .linha-dourada (ver fundo da página), só que
+   aqui dentro da topbar -- um detalhe a mais, bem discreto, sem brigar
+   com o brasão/texto por cima (fica atrás, baixa opacidade). */
+.topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 100' preserveAspectRatio='none'%3E%3Cpath d='M -10,70 C 80,20 160,95 260,55 S 420,10 520,60 S 680,90 810,30' fill='none' stroke='%23C9A34E' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  opacity: 0.22;
+  pointer-events: none;
 }
 
 .topbar-inner {
