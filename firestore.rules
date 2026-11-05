@@ -27,6 +27,26 @@ service cloud.firestore {
         meuPerfil().bloqueado == true;
     }
 
+    // Atalho pra condição de leitura genérica (igual ao que o catch-all
+    // antigo usava): autenticado e não bloqueado. Reaproveitado em cada
+    // coleção que precisa desse mesmo nível de acesso de leitura, agora de
+    // forma explícita em vez de um catch-all único (ver explicação completa
+    // no bloco final do arquivo).
+    function autenticadoENaoBloqueado() {
+      return request.auth != null && !estouBloqueado();
+    }
+
+    // Um trabalhador só deveria poder mexer no ciclo que tá rodando AGORA,
+    // nunca num ciclo antigo (encerrado) só porque ele sabe o ID -- a
+    // condição abaixo cobre tanto a escrita direta em ciclos/{cicloId} (ver
+    // match abaixo) quanto as subcoleções (equipamentos/historico/ordens),
+    // que só existe um ciclo com status "Ativo" por vez (ver
+    // fecharCicloEIniciarProximo() em app.js, que sempre encerra o antigo e
+    // cria o próximo na mesma operação).
+    function cicloEstaAtivo(cicloId) {
+      return get(/databases/$(database)/documents/ciclos/$(cicloId)).data.status == "Ativo";
+    }
+
     match /usuarios/{uid} {
       // Ler o cadastro de OUTRO usuário só pra admin -- antes bastava estar
       // logado (nem checava bloqueado) pra ler o perfil completo de
@@ -56,20 +76,109 @@ service cloud.firestore {
       );
     }
 
+    // Documento do ciclo em si (não as subcoleções abaixo). Antes não tinha
+    // regra própria -- caía no catch-all genérico (só admin escreve) -- e
+    // isso quebrava o fechamento automático do ciclo: verificarFechamentoCiclo()
+    // roda no navegador de QUALQUER pessoa logada (dispara sozinho quando o
+    // ÚLTIMO equipamento pendente é marcado "Concluída", o que é uma ação
+    // normal de trabalhador), e fecharCicloEIniciarProximo() grava direto
+    // nesse documento -- sem essa regra, um trabalhador comum que terminasse
+    // o último item do ciclo veria "Erro ao fechar o ciclo: permissão negada"
+    // (toast silencioso, o ciclo nunca fechava pra ele).
+    //
+    // Em vez de abrir create/update geral pra trabalhador (deixaria
+    // criar/editar QUALQUER ciclo com QUALQUER dado), libera só as duas
+    // operações exatas que fecharCicloEIniciarProximo() faz.
+    match /ciclos/{cicloId} {
+      allow read: if autenticadoENaoBloqueado();
+
+      // Fechar o ciclo ATIVO -- nunca reabre um já encerrado, nunca pula pra
+      // outro status, e só nos campos que o fechamento de verdade grava (ver
+      // updateDoc em fecharCicloEIniciarProximo()).
+      allow update: if souTrabalhador()
+        && resource.data.status == "Ativo"
+        && request.resource.data.status == "Encerrado"
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(["status", "dataFechamento", "total", "noPrazo", "emAtraso", "porPredio"]);
+
+      // Criar o PRÓXIMO ciclo -- só com os 3 campos que toda criação de
+      // ciclo grava (gerarCronograma()/fecharCicloEIniciarProximo() em
+      // app.js); gerarCronograma() em si é tela só de admin na interface,
+      // então aqui é só a regra do banco, mais restrita que "qualquer coisa"
+      // de qualquer forma.
+      allow create: if souTrabalhador()
+        && request.resource.data.keys().hasOnly(["criadoEm", "dataInicio", "status"])
+        && request.resource.data.status == "Ativo";
+    }
+
     match /ciclos/{cicloId}/equipamentos/{itemId} {
-      allow create, update: if souTrabalhador();
+      allow read: if autenticadoENaoBloqueado();
+      allow create, update: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
     match /ciclos/{cicloId}/historico/{id} {
+      allow read: if autenticadoENaoBloqueado();
       // Só cria -- editar/apagar um registro já existente fica só com admin
       // (é um log de manutenção, não devia dar pra reescrever depois).
-      allow create: if souTrabalhador();
+      allow create: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
     match /ciclos/{cicloId}/ordens/{id} {
-      allow create, update, delete: if souTrabalhador();
+      allow read: if autenticadoENaoBloqueado();
+      allow create, update, delete: if souTrabalhador() && cicloEstaAtivo(cicloId);
     }
+
+    // Leitura de "ordens"/"historico" via collectionGroup (ver
+    // iniciarSincronizacaoOrdens/iniciarSincronizacaoHistorico e
+    // abrirDrawerEquipamento em app.js) -- precisa do padrão recursivo
+    // "{caminho=**}/colecao/{id}", documentado pelo próprio Firebase como a
+    // forma correta de dar suporte a consultas collectionGroup (a condição
+    // não pode depender de nenhum valor capturado pelo wildcard `caminho`).
+    match /{caminho=**}/ordens/{id} {
+      allow read: if autenticadoENaoBloqueado();
+    }
+    match /{caminho=**}/historico/{id} {
+      allow read: if autenticadoENaoBloqueado();
+    }
+
     match /infoCondensadoras/{equipamentoId} {
+      allow read: if autenticadoENaoBloqueado();
       allow create, update: if souTrabalhador();
     }
+
+    match /equipes/{id} {
+      allow read: if autenticadoENaoBloqueado();
+      allow write: if souAdmin();
+    }
+    match /feriados/{id} {
+      allow read: if autenticadoENaoBloqueado();
+      allow write: if souAdmin();
+    }
+    match /plantas/{id} {
+      allow read: if autenticadoENaoBloqueado();
+      allow write: if souAdmin();
+    }
+    match /config/{id} {
+      allow read: if autenticadoENaoBloqueado();
+      // Além do admin (tela de Vagas/Parâmetros), fecharCicloEIniciarProximo()
+      // também atualiza config/cronograma -- só o campo "dataInicio" -- na
+      // mesma operação de fechar o ciclo, disparada por um trabalhador
+      // comum (ver comentário em ciclos/{cicloId} acima). Sem isso, o
+      // fechamento falharia aqui em vez de lá.
+      allow update: if souAdmin() ||
+        (souTrabalhador() && id == "cronograma"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["dataInicio"]));
+      allow create, delete: if souAdmin();
+    }
+
+    // Log de auditoria (quem fez o quê, só ações de admin) -- antes
+    // qualquer pessoa logada e não bloqueada conseguia LER o log inteiro
+    // (via o catch-all genérico, que concedia leitura ampla sem excluir
+    // nenhuma coleção). A escrita já era só admin (continua assim, sem
+    // mudança, agora apenas explícita em vez de depender do catch-all).
+    match /auditoria/{id} {
+      allow read: if souAdmin();
+      allow write: if souAdmin();
+    }
+
     // Exemplos (confirmado/descartado) usados pra "ensinar" a detecção
     // automática de equipamento na planta -- ver classificarPorExemplos()
     // em app.js. Mesmo nível de acesso de admin que o resto da Localização.
@@ -77,8 +186,19 @@ service cloud.firestore {
       allow read, write: if souAdmin();
     }
 
+    // O catch-all genérico ANTIGO concedia LEITURA pra QUALQUER caminho,
+    // inclusive usuarios/** e auditoria/**, anulando por completo as
+    // restrições específicas dessas duas coleções -- no Firestore, quando
+    // mais de uma regra corresponde ao mesmo caminho, o acesso é concedido
+    // se QUALQUER UMA permitir; não existe "a mais específica vence". Essa
+    // leitura genérica foi removida e distribuída, coleção por coleção, nos
+    // blocos acima (incluindo usuarios/** e auditoria/**, que são as duas
+    // que precisavam de restrição de verdade).
+    //
+    // A parte de ESCRITA do catch-all continua igual: cobre a capacidade de
+    // admin escrever/apagar em QUALQUER coleção, mesmo onde a regra
+    // específica só prevê trabalhador -- como já funcionava antes.
     match /{document=**} {
-      allow read: if request.auth != null && !estouBloqueado();
       allow write: if souAdmin();
     }
   }
