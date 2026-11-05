@@ -227,6 +227,7 @@ configSite: { mesesCiclo: MESES_CICLO, urlCorretivas: "", predios: ["SEDE", "ANE
   // zero) -- ver processarArquivo/confirmarAdicaoPredioNovo.
   modoAdicionarPredio: false,
   itensParaAdicionarPredio: null,
+  exemplosDeteccao: [],
   selecaoEquipamentos: new Set(),
   selecaoHistorico: new Set(),
   equipes: [],
@@ -931,8 +932,10 @@ fileInput.addEventListener("change", () => {
 
 function processarArquivo(file) {
   $("#dropzoneLabel").textContent = `Lendo "${file.name}"...`;
+  const cardSumidosAntigo = $("#cardSumidosPlanilha");
+  if (cardSumidosAntigo) cardSumidosAntigo.hidden = true;
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const data = new Uint8Array(e.target.result);
       const wb = XLSX.read(data, { type: "array" });
@@ -968,16 +971,29 @@ function processarArquivo(file) {
         let algumaAcaoTomada = false;
 
         if (prediosJaExistemNaPlanilha.length) {
+          const linhasDesses = todasAsLinhas.filter((l) => prediosJaExistemNaPlanilha.includes((l.__local || "SEDE").trim()));
+          const resultado = linhasParaItens(linhasDesses);
+          if (resultado.erro) { toast(resultado.erro); return; }
+          // Calcula os números de verdade ANTES de perguntar -- assim a
+          // pergunta já mostra uma prévia real (quantos vão atualizar,
+          // quantos são novos, quantos sumiram), em vez de um texto
+          // genérico. Isso ajuda a pegar de cara um erro de digitação no
+          // Patrimônio da planilha (que criaria um cadastro duplicado em
+          // vez de atualizar o certo -- o número de "novos" ficaria
+          // maior do que ela esperava).
+          const diff = compararComPlanilha(resultado.itens);
+          const detalhePorPredio = diff.porPredioResumo
+            .map((p) => `${p.local}: ${p.atualizar} atualiza${p.atualizar === 1 ? "" : "m"}, ${p.novos} novo(s), ${p.sumidos} sumido(s) da planilha`)
+            .join("\n");
           const querAtualizar = window.confirm(
-            `Essa planilha tem dado(s) de ${prediosJaExistemNaPlanilha.join(", ")}, que já está(ão) cadastrado(s).\n\n` +
-            `OK = ATUALIZAR o cadastro deles com essa planilha (casa pelo Patrimônio) -- corrige/completa quem já existe e adiciona quem for novo, SEM apagar nada e sem mexer em status/data/equipe de ninguém.\n` +
-            `Cancelar = não atualizar esses prédios agora.`
+            `Prévia da atualização:\n\n${detalhePorPredio}\n\n` +
+            `"Sumido" = já está cadastrado mas o Patrimônio não apareceu nessa planilha -- NÃO será apagado.\n\n` +
+            `Se os números de "novo(s)" parecem altos demais, pode ser um erro de digitação no Patrimônio da planilha (em vez de casar com quem já existe, criaria um cadastro duplicado) -- confira antes de confirmar.\n\n` +
+            `OK = confirmar a atualização.\nCancelar = não atualizar agora.`
           );
           if (querAtualizar) {
-            const linhasDesses = todasAsLinhas.filter((l) => prediosJaExistemNaPlanilha.includes((l.__local || "SEDE").trim()));
-            const resultado = linhasParaItens(linhasDesses);
-            if (resultado.erro) { toast(resultado.erro); return; }
-            atualizarCadastroPredioExistente(resultado.itens);
+            await atualizarCadastroPredioExistente(resultado.itens);
+            renderSumidosPlanilha(diff.sumidos);
             algumaAcaoTomada = true;
           }
         }
@@ -1330,6 +1346,75 @@ async function confirmarAdicaoPredioNovo() {
   } finally {
     $("#btnGerar").disabled = false;
   }
+}
+
+// Calcula (sem escrever nada no Firebase) o que vai acontecer se essa
+// planilha for aplicada num prédio que já existe: quem vai ser
+// ATUALIZADO (casou pelo Patrimônio com um equipamento já cadastrado),
+// quem é NOVO (não casou com nada) e quem SUMIU (estava cadastrado
+// nesse prédio, mas o Patrimônio dele não apareceu nessa planilha).
+// Usada em dois lugares: pra montar a prévia com números de verdade
+// ANTES de perguntar se ela quer confirmar (evita, por exemplo, um erro
+// de digitação no Patrimônio da planilha virar um cadastro duplicado em
+// vez de atualizar o certo) e pra montar o relatório de "sumiu da
+// planilha" depois que a atualização roda.
+function compararComPlanilha(itensDaPlanilha) {
+  const porPredio = new Map();
+  itensDaPlanilha.forEach((item) => {
+    const local = item.local || "SEDE";
+    if (!porPredio.has(local)) porPredio.set(local, []);
+    porPredio.get(local).push(item);
+  });
+
+  let totalAtualizar = 0, totalNovos = 0;
+  const sumidos = [];
+  const porPredioResumo = [];
+
+  for (const [local, itensDoPredio] of porPredio.entries()) {
+    const existentesDoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
+    const patrimoniosNaPlanilha = new Set(itensDoPredio.filter((i) => i.patrimonio).map((i) => i.patrimonio));
+    const porPatrimonioExistente = new Map();
+    existentesDoLocal.forEach((e) => { if (e.patrimonio) porPatrimonioExistente.set(e.patrimonio, e); });
+
+    let atualizarPredio = 0, novosPredio = 0;
+    itensDoPredio.forEach((item) => {
+      if (item.patrimonio && porPatrimonioExistente.has(item.patrimonio)) atualizarPredio++;
+      else novosPredio++;
+    });
+
+    const sumidosDoPredio = existentesDoLocal.filter((e) => e.patrimonio && !patrimoniosNaPlanilha.has(e.patrimonio));
+
+    totalAtualizar += atualizarPredio;
+    totalNovos += novosPredio;
+    sumidos.push(...sumidosDoPredio);
+    porPredioResumo.push({ local, atualizar: atualizarPredio, novos: novosPredio, sumidos: sumidosDoPredio.length });
+  }
+
+  return { porPredioResumo, totalAtualizar, totalNovos, sumidos };
+}
+
+function renderSumidosPlanilha(sumidos) {
+  const card = $("#cardSumidosPlanilha");
+  if (!card) return;
+  if (!sumidos.length) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  $("#sumidosCount").textContent = `${sumidos.length} item(ns)`;
+  $("#sumidosExplicacao").textContent =
+    `Esses equipamentos estão cadastrados no sistema, mas o Patrimônio deles não apareceu na última planilha que você subiu. ` +
+    `Ninguém foi apagado -- se algum realmente saiu de uso, remova manualmente na aba Equipamentos.`;
+  const cols = [
+    ["Patrimônio", (i) => i.patrimonio],
+    ["Prédio", (i) => i.local || "SEDE"],
+    ["Setor", (i) => i.setor],
+    ["Ambiente", (i) => i.ambiente],
+    ["Status", (i) => i.statusPreventiva],
+  ];
+  const table = $("#sumidosTable");
+  table.innerHTML = `<thead><tr>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead>
+    <tbody>${sumidos.map((i) => `<tr>${cols.map((c) => `<td>${escapeHtml(String(c[1](i) ?? ""))}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 
 // Atualiza o cadastro de um prédio que JÁ existe, a partir de uma
@@ -2104,7 +2189,7 @@ onAuthStateChanged(auth, async (user) => {
     if (!appJaInicializado) {
           appJaInicializado = true;
           inicializarApp();
-          if (ESTADO.permissao === "admin") { iniciarSincronizacaoUsuarios(); iniciarSincronizacaoAuditoria(); iniciarSincronizacaoEquipes(); }
+          if (ESTADO.permissao === "admin") { iniciarSincronizacaoUsuarios(); iniciarSincronizacaoAuditoria(); iniciarSincronizacaoEquipes(); iniciarSincronizacaoExemplosDeteccao(); }
           await carregarConfigSite();
           const abaSalva = localStorage.getItem("ultimaAbaPMOC") || "dashboard";
           irParaAba(abaPermitida(abaSalva, ESTADO.permissao) ? abaSalva : "dashboard");
@@ -2403,6 +2488,24 @@ function iniciarSincronizacaoEquipes() {
     ESTADO.equipes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderComProtecaoDeMenu("#equipesPorPredio", renderEquipesPorPredio);
   }, (err) => console.error("Erro ao ler equipes:", err));
+}
+
+// Exemplos de candidato CONFIRMADO/DESCARTADO (ver descartarCandidato e
+// a confirmação em aoClicarCandidatoNaoIdentificado), guardados em
+// TODAS as plantas juntas -- usados por classificarPorExemplos() pra
+// refinar a detecção automática além do limiar fixo por planta (ver
+// renderMarcadoresPlanta). Só precisa sincronizar pra admin: candidato
+// não identificado só é mostrado (e só é confirmado/descartado) no modo
+// admin da Localização.
+function iniciarSincronizacaoExemplosDeteccao() {
+  onSnapshot(collection(db, "exemplosDeteccao"), (snap) => {
+    ESTADO.exemplosDeteccao = snap.docs.map((d) => d.data());
+  }, (err) => {
+    console.error("Erro ao ler exemplos de detecção:", err);
+    // Não precisa de toast aqui -- sem esses exemplos, a detecção
+    // simplesmente volta a usar só o limiar fixo de sempre (ver
+    // classificarPorExemplos), não quebra nada visível pra ela.
+  });
 }
 
 function nomeEquipePorVaga(predio, vaga, nEquipesFallback) {
@@ -4839,6 +4942,28 @@ function bboxUniao(elementos) {
   return { x: box.x, y: box.y, width: box.x2 - box.x, height: box.y2 - box.y };
 }
 
+// "Ensina" a detecção a partir dos candidatos que ela já confirmou ou
+// descartou, em TODAS as plantas (ver iniciarSincronizacaoExemplosDeteccao) --
+// compara um candidato novo com o exemplo mais PARECIDO de cada grupo
+// (vizinho mais próximo por qtdPontos) e decide pra qual lado ele puxa
+// mais. Só decide alguma coisa quando já existe pelo menos 1 exemplo de
+// cada tipo -- sem isso (começo de uso, ou planta isolada sem nenhum
+// descarte ainda) devolve null, e o filtro em renderMarcadoresPlanta usa
+// só o limiar fixo de sempre (nunca fica MAIS permissivo do que já era,
+// só eventualmente mais rigoroso quando já existe sinal de verdade).
+function classificarPorExemplos(qtdPontos) {
+  const exemplos = ESTADO.exemplosDeteccao || [];
+  const confirmados = exemplos.filter((e) => e.tipo === "confirmado");
+  const descartados = exemplos.filter((e) => e.tipo === "descartado");
+  if (!confirmados.length || !descartados.length) return null;
+  const distanciaMinima = (lista) => Math.min(...lista.map((e) => Math.abs((e.qtdPontos ?? 0) - qtdPontos)));
+  const distConfirmado = distanciaMinima(confirmados);
+  const distDescartado = distanciaMinima(descartados);
+  if (distConfirmado < distDescartado) return "parece_real";
+  if (distDescartado < distConfirmado) return "parece_falso";
+  return null; // empate -- não decide nada sozinho
+}
+
 async function renderMarcadoresPlanta() {
   const svg = $("#plantaSvg");
   const gMarcadores = $("#plantaMarcadoresSvg");
@@ -4870,7 +4995,12 @@ async function renderMarcadoresPlanta() {
   const limiarAprendido = planta.limiarQtdPontos || 0;
   const candidatosCamada = ((planta.camadaEquipamento && dados?.marcadoresPorCamada?.[planta.camadaEquipamento]) || [])
     .filter((c) => !ignorados.has(chaveCandidato(c)))
-    .filter((c) => (c.qtdPontos ?? Infinity) > limiarAprendido);
+    .filter((c) => (c.qtdPontos ?? Infinity) > limiarAprendido)
+    // Camada extra de aprendizado, por cima do limiar fixo acima: só
+    // entra em ação quando já existe exemplo confirmado E descartado o
+    // suficiente pra comparar (ver classificarPorExemplos) -- nunca
+    // deixa passar um candidato que o limiar já teria barrado.
+    .filter((c) => classificarPorExemplos(c.qtdPontos) !== "parece_falso");
   // Mesma distância "razoável" usada no encaixe do clique (candidatoMaisProximo)
   // -- assim uma posição salva antes desse ajuste (de um clique impreciso)
   // também volta a bater com o símbolo real, sem precisar remarcar nada.
@@ -5522,6 +5652,14 @@ async function descartarCandidato(planta, cand) {
       const tamanhoCandidato = Math.min(cand.qtdPontos || 0, LIMIAR_QTD_PONTOS_TETO);
       if (tamanhoCandidato > limiarAtual) atualizacao.limiarQtdPontos = tamanhoCandidato;
       if (Object.keys(atualizacao).length === 0) return;
+      // Guarda esse descarte como exemplo pra "ensinar" a detecção em
+      // TODAS as plantas, não só nessa (ver classificarPorExemplos) --
+      // mesma transação, então nunca fica um sem o outro.
+      tx.set(doc(collection(db, "exemplosDeteccao")), {
+        tipo: "descartado",
+        qtdPontos: cand.qtdPontos || 0,
+        registradoEm: new Date().toISOString(),
+      });
       tx.update(plantaRef, atualizacao);
     });
     toast("Área descartada -- não vai mais aparecer como candidato.");
@@ -5645,6 +5783,15 @@ function aoClicarCandidatoNaoIdentificado(planta, cand, elemento) {
   if (candidatoSelecionadoParaConfirmar?.chave === chave) {
     candidatoSelecionadoParaConfirmar = null;
     salvarPosicaoPlanta(planta, cand.x, cand.y);
+    // Guarda esse candidato confirmado como exemplo de "isso É
+    // equipamento de verdade", pro mesmo aprendizado usado em
+    // descartarCandidato (ver classificarPorExemplos) -- não bloqueia
+    // nem atrasa a confirmação em si, é só um sinal a mais.
+    addDoc(collection(db, "exemplosDeteccao"), {
+      tipo: "confirmado",
+      qtdPontos: cand.qtdPontos || 0,
+      registradoEm: new Date().toISOString(),
+    }).catch((err) => console.error("Erro ao guardar exemplo de detecção:", err));
     return;
   }
 

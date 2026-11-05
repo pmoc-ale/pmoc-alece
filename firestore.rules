@@ -28,7 +28,10 @@ service cloud.firestore {
     }
 
     match /usuarios/{uid} {
-      allow read: if request.auth != null;
+      // Ler o cadastro de OUTRO usuário só pra admin -- antes bastava estar
+      // logado (nem checava bloqueado) pra ler o perfil completo de
+      // qualquer colega, incluindo quem é admin e quem está bloqueado.
+      allow read: if request.auth != null && (request.auth.uid == uid || souAdmin());
 
       // Auto-cadastro (tela de login pública): só cria como "padrão" e não
       // bloqueado, não importa o que a pessoa tente mandar no resto do
@@ -66,6 +69,12 @@ service cloud.firestore {
     }
     match /infoCondensadoras/{equipamentoId} {
       allow create, update: if souTrabalhador();
+    }
+    // Exemplos (confirmado/descartado) usados pra "ensinar" a detecção
+    // automática de equipamento na planta -- ver classificarPorExemplos()
+    // em app.js. Mesmo nível de acesso de admin que o resto da Localização.
+    match /exemplosDeteccao/{id} {
+      allow read, write: if souAdmin();
     }
 
     match /{document=**} {
