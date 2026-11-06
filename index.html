@@ -345,9 +345,14 @@
             <h2>Equipamentos cadastrados</h2>
             <span class="pill" id="equipamentosCount">0 itens</span>
           </div>
-          <button class="btn ghost" id="btnBaixarCondensadoras" style="font-size: 12.5px; padding: 6px 14px; border-color: var(--azul-700); color: var(--azul-800);">
-            Relatório Técnico (.xlsx)
-          </button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="btn ghost" id="btnAgendarPendentes" hidden style="font-size: 12.5px; padding: 6px 14px;">
+              Agendar máquinas pendentes (0)
+            </button>
+            <button class="btn ghost" id="btnBaixarCondensadoras" style="font-size: 12.5px; padding: 6px 14px; border-color: var(--azul-700); color: var(--azul-800);">
+              Relatório Técnico (.xlsx)
+            </button>
+          </div>
         </div>
 
         <!-- Fica em cima da barra de pesquisa -->
@@ -364,6 +369,7 @@
               <option value="Em andamento">Em andamento</option>
               <option value="Concluída">Concluída</option>
               <option value="Atrasado">Atrasado</option>
+              <option value="AguardandoAgendamento">Aguardando agendamento</option>
             </select>
             <select id="filtroSetorPCM">
               <option value="">Categoria: todas</option>
@@ -692,6 +698,6 @@
 <script src="utils/pdfGenerator.js"></script>
 <script src="utils/dwfParser.js?v=5"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=37"></script>
+<script type="module" src="app.js?v=38"></script>
 </body>
 </html>

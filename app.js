@@ -1788,7 +1788,8 @@ async function reagendarTudo(permitirRecuo = false) {
     const pendentes = itensDoPredio
       .filter((e) =>
         (e.statusPreventiva === "Pendente" || (e.statusPreventiva === "Em andamento" && estaAtrasado(e))) &&
-        e.fixadoManualmente !== true 
+        e.fixadoManualmente !== true &&
+        e.aindaNaoAgendado !== true
       )
       .sort((a, b) => (a.ordemExecucao || 0) - (b.ordemExecucao || 0));
 
@@ -4282,6 +4283,68 @@ $("#btnBaixarCondensadoras")?.addEventListener("click", async () => {
   }
 });
 
+// Mesma fórmula da "roleta" usada em gerarCronograma()/adicionarEquipamentoManual()
+// -- extraída pra função própria porque agora também é usada depois, quando um
+// equipamento cadastrado como "aindaNaoAgendado" finalmente é agendado (ver
+// agendarUmEquipamentoPendente()/agendarEquipamentosPendentes() mais abaixo).
+function calcularEquipeRodizio(local, ordemExecucao) {
+  const itensDoMesmoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
+  const capLocal = (ESTADO.config && ESTADO.config.capacidades && ESTADO.config.capacidades[local]) || { nEquipes: 2, aparelhosDia: 2 };
+  if (capLocal.modoRodizio && capLocal.equipesAtivas && capLocal.equipesAtivas.length > 0) {
+    const nVagas = Math.max(1, capLocal.nEquipes || 1);
+    const capacidadeDia = nVagas * Math.max(1, capLocal.aparelhosDia || 1);
+    const diasUteisJaUsados = Math.floor(itensDoMesmoLocal.length / capacidadeDia);
+    const slotDaSala = (ordemExecucao - 1) % nVagas;
+    const pool = capLocal.equipesAtivas;
+    const indiceNoPool = (diasUteisJaUsados * nVagas + slotDaSala) % pool.length;
+    return pool[indiceNoPool];
+  }
+  return nomeEquipePorVaga(local, ordemExecucao - 1, capLocal.nEquipes);
+}
+
+// Agenda, agora, um equipamento que foi cadastrado como "aindaNaoAgendado"
+// (ver adicionarEquipamentoManual()) -- define a equipe responsável (que
+// ainda não tinha) e deixa o reagendarTudo() de sempre encaixar a próxima
+// data livre dele.
+async function agendarUmEquipamentoPendente(item) {
+  const equipeResponsavel = calcularEquipeRodizio(item.local || "SEDE", item.ordemExecucao || 1);
+  await updateDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
+    equipeResponsavel,
+    aindaNaoAgendado: false,
+  });
+}
+
+async function agendarEquipamentosPendentes() {
+  const pendentes = ESTADO.equipamentos.filter((e) => e.aindaNaoAgendado === true);
+  if (!pendentes.length) return;
+  const ok = window.confirm(
+    `Agendar ${pendentes.length} equipamento(s) que ainda não tinham sido agendado(s)?\n\n` +
+    `Cada um vai ganhar uma equipe responsável e entrar na próxima data livre do cronograma.`
+  );
+  if (!ok) return;
+  try {
+    const TAMANHO_LOTE = 400;
+    for (let inicio = 0; inicio < pendentes.length; inicio += TAMANHO_LOTE) {
+      const pedaco = pendentes.slice(inicio, inicio + TAMANHO_LOTE);
+      const batch = writeBatch(db);
+      pedaco.forEach((item) => {
+        const equipeResponsavel = calcularEquipeRodizio(item.local || "SEDE", item.ordemExecucao || 1);
+        batch.update(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", item.id), {
+          equipeResponsavel,
+          aindaNaoAgendado: false,
+        });
+      });
+      await batch.commit();
+    }
+    toast(`${pendentes.length} equipamento(s) agendado(s). Reorganizando o cronograma...`);
+    await reagendarTudo();
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao agendar: " + err.message);
+  }
+}
+$("#btnAgendarPendentes")?.addEventListener("click", agendarEquipamentosPendentes);
+
 async function adicionarEquipamentoManual() {
   const patrimonio = $("#eqPatrimonio").value.trim();
   const setor = $("#eqSetor").value.trim();
@@ -4360,24 +4423,21 @@ async function adicionarEquipamentoManual() {
     const itensDoMesmoLocal = ESTADO.equipamentos.filter((e) => (e.local || "SEDE") === local);
     const maiorOrdem = itensDoMesmoLocal.reduce((max, e) => Math.max(max, e.ordemExecucao || 0), 0);
     const ordemExecucao = maiorOrdem + 1;
-    const capLocal = (ESTADO.config && ESTADO.config.capacidades && ESTADO.config.capacidades[local]) || { nEquipes: 2, aparelhosDia: 2 };
 
-    // Mesma fórmula da "roleta" usada em gerarCronograma() — aproxima em qual
-    // dia esse item cairia (pelo tanto de itens que já existem nesse prédio)
-    // pra escolher a equipe do rodízio de forma consistente com o resto do
-    // cronograma, em vez de uma conta mais simples que ignorava o rodízio.
-    let equipeResponsavel;
-    if (capLocal.modoRodizio && capLocal.equipesAtivas && capLocal.equipesAtivas.length > 0) {
-      const nVagas = Math.max(1, capLocal.nEquipes || 1);
-      const capacidadeDia = nVagas * Math.max(1, capLocal.aparelhosDia || 1);
-      const diasUteisJaUsados = Math.floor(itensDoMesmoLocal.length / capacidadeDia);
-      const slotDaSala = (ordemExecucao - 1) % nVagas;
-      const pool = capLocal.equipesAtivas;
-      const indiceNoPool = (diasUteisJaUsados * nVagas + slotDaSala) % pool.length;
-      equipeResponsavel = pool[indiceNoPool];
-    } else {
-      equipeResponsavel = nomeEquipePorVaga(local, ordemExecucao - 1, capLocal.nEquipes);
-    }
+    // Enquanto ainda está só cadastrando as máquinas (antes de pensar em
+    // escala), não faz sentido empurrar o equipamento pro cronograma e já
+    // definir uma equipe/data que provavelmente vai trocar depois — por isso
+    // pergunta antes. Quem escolhe "Cancelar" cadastra a máquina do mesmo
+    // jeito, só sem equipe/data ainda (aindaNaoAgendado: true); dá pra
+    // agendar depois, um por um (botão no cadastro) ou todos de uma vez
+    // ("Agendar máquinas pendentes", ver agendarEquipamentosPendentes()).
+    const agendarAgora = window.confirm(
+      "Agendar este equipamento no cronograma agora?\n\n" +
+      "Isso já define a equipe responsável e encaixa a próxima data de preventiva.\n\n" +
+      "Clique em Cancelar pra só cadastrar a máquina por enquanto — você agenda quando quiser."
+    );
+
+    const equipeResponsavel = agendarAgora ? calcularEquipeRodizio(local, ordemExecucao) : "";
 
     const item = {
       id, patrimonio, setor, ambiente,
@@ -4395,6 +4455,7 @@ async function adicionarEquipamentoManual() {
       dataAgendada: "",
       diaPlanejado: "",
       semanaPlanejada: "",
+      aindaNaoAgendado: !agendarAgora,
     };
 
     try {
@@ -4405,8 +4466,12 @@ async function adicionarEquipamentoManual() {
       await setDoc(doc(db, "ciclos", ESTADO.cicloAtual, "equipamentos", id), item);
       ESTADO.equipamentos.push(item);
       await registrarHistorico(item, "-", "Cadastrado", "Cadastro");
-      toast("Equipamento adicionado. Agendando automaticamente...");
-      await reagendarTudo();
+      if (agendarAgora) {
+        toast("Equipamento adicionado. Agendando automaticamente...");
+        await reagendarTudo();
+      } else {
+        toast("Equipamento cadastrado. Ainda não foi agendado no cronograma.");
+      }
     } catch (err) {
       console.error(err);
       toast("Erro ao adicionar: " + err.message);
@@ -6410,6 +6475,7 @@ function renderEquipamentosCadastro() {
     }
     if (statusFiltro) {
       if (statusFiltro === "Atrasado") { if (!estaAtrasado(item)) return false; }
+      else if (statusFiltro === "AguardandoAgendamento") { if (item.aindaNaoAgendado !== true) return false; }
       else if (item.statusPreventiva !== statusFiltro) return false;
     }
     if (setorPCMFiltro && item.setorPCM !== setorPCMFiltro) return false;
@@ -6431,6 +6497,12 @@ function renderEquipamentosCadastro() {
   }
 
   $("#equipamentosCount").textContent = `${itensComCorretivas.length} itens`;
+  const qtdPendentesAgendar = ESTADO.equipamentos.filter((e) => e.aindaNaoAgendado === true).length;
+  const btnAgendarPendentes = $("#btnAgendarPendentes");
+  if (btnAgendarPendentes) {
+    btnAgendarPendentes.hidden = qtdPendentesAgendar === 0;
+    btnAgendarPendentes.textContent = `Agendar máquinas pendentes (${qtdPendentesAgendar})`;
+  }
   const setaOrdenacao = ESTADO.ordenacaoEquipamentos === "corretivas_desc" ? " ▼"
     : ESTADO.ordenacaoEquipamentos === "corretivas_asc" ? " ▲" : " ⇅";
   table.innerHTML = `<thead><tr>
@@ -6449,9 +6521,11 @@ function renderEquipamentosCadastro() {
       <td data-label="Prédio">${escapeHtml(item.local || "SEDE")}</td>
       <td data-label="Setor PCM">${item.setorPCM}</td>
       <td data-label="Status">
-        ${estaAtrasado(item)
-          ? '<span class="status-select atrasado" style="cursor:default">Atrasado</span>'
-          : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}
+        ${item.aindaNaoAgendado
+          ? '<span class="status-select" style="cursor:default;background:var(--cinza-200,#e5e7eb);color:var(--texto-suave)">Aguardando agendamento</span>'
+          : estaAtrasado(item)
+            ? '<span class="status-select atrasado" style="cursor:default">Atrasado</span>'
+            : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}
       </td>
       <td data-label="Origem">${item.origem === "manual" ? "Manual" : "Planilha"}</td>
       <td data-label="Marca/Modelo/Cap." style="font-size:12px">${dadosTecnicos}</td>
@@ -6631,13 +6705,22 @@ async function abrirDrawerEquipamento(id) {
   $("#drawerCorpo").innerHTML = `
     <details class="drawer-secao" open>
       <summary>Situação</summary>
-      <div class="drawer-campo"><span class="rotulo">Status</span>
-        <span class="valor">${estaAtrasado(item)
-          ? '<span class="status-select atrasado" style="cursor:default">Atrasado</span>'
-          : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}</span></div>
-      <div class="drawer-campo"><span class="rotulo">${item.statusPreventiva === "Concluída" ? "Próximo ciclo previsto" : "Próxima preventiva"}</span><span class="valor">${formatarDataBR(item.statusPreventiva === "Concluída" ? item.proximaPreventiva : item.dataAgendada)} ${(item.statusPreventiva === "Concluída" ? item.proximaPreventivaDia : item.diaPlanejado) ? "(" + (item.statusPreventiva === "Concluída" ? item.proximaPreventivaDia : item.diaPlanejado) + ")" : ""}</span></div>
-      <div class="drawer-campo"><span class="rotulo">Semana planejada</span><span class="valor">${item.semanaPlanejada || "-"}</span></div>
-      <div class="drawer-campo"><span class="rotulo">Equipe responsável</span><span class="valor">${escapeHtml(item.equipeResponsavel || "-")}</span></div>
+      ${item.aindaNaoAgendado ? `
+        <div class="drawer-campo"><span class="rotulo">Status</span>
+          <span class="valor"><span class="status-select" style="cursor:default;background:var(--cinza-200,#e5e7eb);color:var(--texto-suave)">Aguardando agendamento</span></span></div>
+        <div class="drawer-campo"><span class="rotulo">Equipe responsável</span><span class="valor">Ainda não definida</span></div>
+        <div class="drawer-acoes">
+          <button class="btn primary" id="drawerAgendarAgora">Agendar no cronograma agora</button>
+        </div>
+      ` : `
+        <div class="drawer-campo"><span class="rotulo">Status</span>
+          <span class="valor">${estaAtrasado(item)
+            ? '<span class="status-select atrasado" style="cursor:default">Atrasado</span>'
+            : `<span class="status-select ${classeStatus(item.statusPreventiva)}" style="cursor:default">${item.statusPreventiva}</span>`}</span></div>
+        <div class="drawer-campo"><span class="rotulo">${item.statusPreventiva === "Concluída" ? "Próximo ciclo previsto" : "Próxima preventiva"}</span><span class="valor">${formatarDataBR(item.statusPreventiva === "Concluída" ? item.proximaPreventiva : item.dataAgendada)} ${(item.statusPreventiva === "Concluída" ? item.proximaPreventivaDia : item.diaPlanejado) ? "(" + (item.statusPreventiva === "Concluída" ? item.proximaPreventivaDia : item.diaPlanejado) + ")" : ""}</span></div>
+        <div class="drawer-campo"><span class="rotulo">Semana planejada</span><span class="valor">${item.semanaPlanejada || "-"}</span></div>
+        <div class="drawer-campo"><span class="rotulo">Equipe responsável</span><span class="valor">${escapeHtml(item.equipeResponsavel || "-")}</span></div>
+      `}
       <div class="drawer-campo"><span class="rotulo">Última preventiva concluída</span><span class="valor">${ultimaPreventiva}</span></div>
       <div class="drawer-campo"><span class="rotulo">Total de preventivas feitas</span><span class="valor">${totalPreventivas}</span></div>
     </details>
@@ -6782,6 +6865,18 @@ async function abrirDrawerEquipamento(id) {
     } catch (err) {
       console.error(err);
       toast("Erro ao salvar: " + err.message);
+    }
+  });
+
+  $("#drawerAgendarAgora")?.addEventListener("click", async () => {
+    try {
+      await agendarUmEquipamentoPendente(item);
+      toast("Agendando no cronograma...");
+      fecharDrawer();
+      await reagendarTudo();
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao agendar: " + err.message);
     }
   });
 
