@@ -138,6 +138,13 @@ const URL_REDEFINIR_SENHA = "https://redefinir-senha.pmoc-alece-sistemas.workers
 // que abre o dashboard. Ver cloudflare-worker/worker-narrativa-glpi.js.
 const URL_NARRATIVA_GLPI = "https://narrativa-glpi.pmoc-alece-sistemas.workers.dev";
 
+// Busca a planilha de chamados (Forms) direto do Google Sheets, sem
+// precisar baixar e reimportar o arquivo -- ver cloudflare-worker/
+// worker-planilha-chamados.js (o gid é só da aba que a Jovanna usa hoje;
+// se a planilha mudar de aba, troca aqui).
+const URL_PLANILHA_CHAMADOS = "https://planilha-chamados.pmoc-alece-sistemas.workers.dev";
+const GID_PLANILHA_CHAMADOS = "1978174237";
+
 // Chave PÚBLICA do "VAPID" -- identifica o PMOC ALECE pros serviços de push
 // do navegador (Google/Mozilla/etc.) na hora de ativar o aviso de atraso
 // direto no computador (ver ativarNotificacoesPush). É pública de propósito
@@ -12780,6 +12787,41 @@ function goAoAbrirAba() {
   if (ESTADO_GO.chamados.length) goRenderReview();
 }
 
+function goProcessarLinhas(rows) {
+  const chamados = goRowsToChamados(rows);
+  if (!chamados.length) {
+    goShowUploadError("Nenhum chamado encontrado. Confira se a primeira linha é o cabeçalho e se há dados nas linhas seguintes.");
+    return;
+  }
+  ESTADO_GO.chamados = chamados;
+  goRenderReview();
+  goShowScreen("review");
+}
+
+async function goBuscarDaPlanilha() {
+  $("#goUploadError").hidden = true;
+  const btn = $("#goBtnBuscarPlanilha");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Buscando...";
+  try {
+    const idToken = await auth.currentUser.getIdToken();
+    const resp = await fetch(`${URL_PLANILHA_CHAMADOS}?gid=${GID_PLANILHA_CHAMADOS}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    const dados = await resp.json().catch(() => ({}));
+    if (!resp.ok || !dados.ok) throw new Error(dados.erro || `Erro ${resp.status}`);
+    goProcessarLinhas(dados.linhas || []);
+  } catch (err) {
+    console.error(err);
+    goShowUploadError("Não consegui buscar a planilha: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+$("#goBtnBuscarPlanilha").addEventListener("click", goBuscarDaPlanilha);
+
 function goHandleFile(file) {
   $("#goUploadError").hidden = true;
   const ehCsv = /\.csv$/i.test(file.name);
@@ -12803,14 +12845,7 @@ function goHandleFile(file) {
       }
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
-      const chamados = goRowsToChamados(rows);
-      if (!chamados.length) {
-        goShowUploadError("Nenhum chamado encontrado. Confira se a primeira linha é o cabeçalho e se há dados nas linhas seguintes.");
-        return;
-      }
-      ESTADO_GO.chamados = chamados;
-      goRenderReview();
-      goShowScreen("review");
+      goProcessarLinhas(rows);
     } catch (err) {
       console.error(err);
       goShowUploadError("Não consegui interpretar essa planilha. Confira se é um .xlsx/.csv válido.");
