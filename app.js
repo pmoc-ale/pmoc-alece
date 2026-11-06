@@ -1131,7 +1131,7 @@ $all(".subtab").forEach((btn) => {
 // quando a aba muda, senão a aba ativa podia ficar escondida dentro de
 // um grupo fechado sem nenhuma pista visual do motivo.
 const GRUPO_SIDENAV_POR_VIEW = {
-  ordens: "Gestão", historico: "Gestão",
+  ordens: "Gestão", historico: "Gestão", analiseglpi: "Gestão", geradoros: "Gestão",
   equipamentos: "Inventário", condensadoras: "Inventário",
   localizacao: "Configuração", feriados: "Configuração",
 };
@@ -1189,6 +1189,7 @@ $all(".tab").forEach((btn) => {
     if (btn.dataset.view === "ordens") renderOrdens();
     if (btn.dataset.view === "historico") renderHistorico();
     if (btn.dataset.view === "analiseglpi") renderAnaliseGlpi();
+    if (btn.dataset.view === "geradoros") goAoAbrirAba();
     if (btn.dataset.view === "config") { renderCapacidadesPorPredio(); atualizarVisualModoAdicionarPredio(); }
     if (btn.dataset.view === "auditoria") renderAuditoria();
     if (btn.dataset.view === "config-site") preencherFormularioConfigSite();
@@ -3996,7 +3997,7 @@ function atualizarVisibilidadeAdmin() {
   });
 
   // Trabalhador só vê Calendário e Dashboard — some com o resto do menu
-  ["ordens", "historico", "equipamentos", "condensadoras", "feriados"].forEach((view) => {
+  ["ordens", "historico", "equipamentos", "condensadoras", "feriados", "analiseglpi", "geradoros"].forEach((view) => {
     const tab = $(`.tab[data-view="${view}"]`);
     if (tab) tab.hidden = isTrabalhador;
   });
@@ -4010,7 +4011,7 @@ function abaPermitida(nome, permissao) {
   if (nome === "hoje") return permissao === "trabalhador";
   if (permissao === "admin") return true;
   if (["upload", "config"].includes(nome)) return false;
-  if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "condensadoras", "feriados", "analiseglpi"].includes(nome)) return false;
+  if (permissao === "trabalhador" && ["ordens", "historico", "equipamentos", "condensadoras", "feriados", "analiseglpi", "geradoros"].includes(nome)) return false;
   return true;
 }
 
@@ -12666,3 +12667,236 @@ async function renderAnaliseGlpi() {
   agPopularFiltros();
   agRenderTudo();
 }
+
+// ------------------------------------------------------------------
+// Gerador de Ordens de Serviço -- importa a planilha de chamados do
+// Forms (a mesma que a equipe já usa pra acompanhar o pessoal) e gera
+// o PDF de OS pronto pra arquivar, uma página por chamado. Parsing de
+// cabeçalho/data portado de https://github.com/JovannaPi/gerador_os_alece
+// (mantido igual, já testado contra a planilha real); a geração do
+// documento usa o pipeline de PDF do próprio PMOC em vez do
+// window.print() de lá -- ver baixarOrdensServico() em
+// utils/pdfGenerator.js.
+// ------------------------------------------------------------------
+const GO_FIELD_DEFS = [
+  { key: "carimbo", headers: ["carimbo de data/hora"] },
+  { key: "equipe", headers: ["selecione sua equipe:", "selecione sua equipe"] },
+  { key: "numeroChamado", headers: ["nº do chamado:", "n° do chamado:", "no do chamado:", "nº do chamado", "n° do chamado"] },
+  { key: "anexo", headers: ["anexo:", "anexo"] },
+  { key: "localizacao", headers: ["localização:", "localização"] },
+  { key: "numGabinete", headers: ["nº do gabinete:", "n° do gabinete:", "nº do gabinete"] },
+  { key: "sala", headers: ["sala:", "sala"] },
+  { key: "nomeSetor", headers: ["nome do setor:", "nome do setor"] },
+  { key: "salaSetor", headers: ["sala do setor:", "sala do setor"] },
+  { key: "marcaEvap", headers: ["marca da evaporadora:", "marca da evaporadora"] },
+  { key: "capacidade", headers: ["capacidade:", "capacidade do equipamento:", "capacidade da máquina evaporadora"] },
+  { key: "tombo", headers: ["tombo: (placa alumínio/adesivo verde)", "tombo (placa alumínio/adesivo verde)", "tombo:"] },
+  { key: "tag", headers: ["tag:  (adesivo branco com qr code)", "tag: (adesivo branco com qr code)", "tag:"] },
+  { key: "solucionado", headers: ["problema solucionado?", "problema solucionado"] },
+  { key: "descProblema", headers: ["descreva o problema do chamado?", "descreva o problema do chamado"] },
+  { key: "pecaFaltando", headers: ["qual o problema ou peça que está faltando para solucionar o chamado?", "qual o problema ou peça que está faltando para solucionar o chamado"] },
+  { key: "aguaSanitaria", headers: ["foi colocado água sanitária na evaporadora e limpado os filtros?", "foi colocado água sanitária na evaporadora e limpado os filtros"] },
+];
+
+const ESTADO_GO = { chamados: [] };
+
+function goNorm(s) {
+  return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function goVal(v) {
+  if (v === undefined || v === null) return "—";
+  let s = String(v).trim();
+  if (s === "") return "—";
+  s = s.replace(/^"|"$/g, "").trim();
+  if (/^[*.-]+$/.test(s)) return "Não informado";
+  return s;
+}
+
+function goParseBRDateTime(s) {
+  if (s instanceof Date) return s;
+  s = String(s || "").trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})[ T]?(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?/);
+  if (!m) return null;
+  let d = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, y = parseInt(m[3], 10);
+  if (y < 100) y += 2000;
+  const hh = m[4] ? parseInt(m[4], 10) : 0, mi = m[5] ? parseInt(m[5], 10) : 0, ss = m[6] ? parseInt(m[6], 10) : 0;
+  const dt = new Date(y, mo, d, hh, mi, ss);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+function goFmtDateTime(dt) {
+  if (!dt) return "—";
+  const p = (n) => (n < 10 ? "0" + n : "" + n);
+  return `${p(dt.getDate())}/${p(dt.getMonth() + 1)}/${dt.getFullYear()} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}
+
+function goBuildColumnMap(headerRow) {
+  const map = {};
+  const normalizedHeaders = headerRow.map(goNorm);
+  GO_FIELD_DEFS.forEach((def) => {
+    let idx = -1;
+    for (let i = 0; i < normalizedHeaders.length; i++) {
+      if (def.headers.indexOf(normalizedHeaders[i]) !== -1) { idx = i; break; }
+    }
+    map[def.key] = idx;
+  });
+  if (map.carimbo === -1) map.carimbo = 0;
+  return map;
+}
+
+function goRowsToChamados(rows) {
+  if (!rows.length) return [];
+  const headerRow = rows[0].map((c) => (c == null ? "" : c));
+  const colMap = goBuildColumnMap(headerRow);
+  const out = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || row.every((c) => c === undefined || c === null || String(c).trim() === "")) continue;
+    const o = {};
+    GO_FIELD_DEFS.forEach((def) => {
+      const idx = colMap[def.key];
+      o[def.key] = idx >= 0 && idx < row.length ? row[idx] : "";
+    });
+    o._timestamp = goParseBRDateTime(o.carimbo);
+    out.push(o);
+  }
+  return out;
+}
+
+function goShowScreen(nome) {
+  $("#goCardUpload").hidden = nome !== "upload";
+  $("#goCardReview").hidden = nome !== "review";
+}
+
+function goShowUploadError(msg) {
+  const el = $("#goUploadError");
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+function goAoAbrirAba() {
+  goShowScreen(ESTADO_GO.chamados.length ? "review" : "upload");
+  if (ESTADO_GO.chamados.length) goRenderReview();
+}
+
+function goHandleFile(file) {
+  $("#goUploadError").hidden = true;
+  const ehCsv = /\.csv$/i.test(file.name);
+  const reader = new FileReader();
+  reader.onerror = () => goShowUploadError("Não foi possível ler o arquivo. Tente novamente.");
+  reader.onload = (e) => {
+    try {
+      let wb;
+      if (ehCsv) {
+        // Mesma correção de acentuação do CSV usada em processarArquivo()
+        // (Levantamento) -- sem decodificar manualmente, Excel/Google
+        // Planilhas exportando CSV sem BOM corrompe os acentos e a busca
+        // pelo nome exato da coluna no cabeçalho falha silenciosamente.
+        const bytes = new Uint8Array(e.target.result);
+        let texto = new TextDecoder("utf-8").decode(bytes);
+        if (texto.includes("�")) texto = new TextDecoder("windows-1252").decode(bytes);
+        wb = XLSX.read(texto, { type: "string" });
+      } else {
+        const data = new Uint8Array(e.target.result);
+        wb = XLSX.read(data, { type: "array" });
+      }
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+      const chamados = goRowsToChamados(rows);
+      if (!chamados.length) {
+        goShowUploadError("Nenhum chamado encontrado. Confira se a primeira linha é o cabeçalho e se há dados nas linhas seguintes.");
+        return;
+      }
+      ESTADO_GO.chamados = chamados;
+      goRenderReview();
+      goShowScreen("review");
+    } catch (err) {
+      console.error(err);
+      goShowUploadError("Não consegui interpretar essa planilha. Confira se é um .xlsx/.csv válido.");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function goChamadosFiltrados() {
+  const from = $("#goDateFrom").value ? new Date($("#goDateFrom").value + "T00:00:00") : null;
+  const to = $("#goDateTo").value ? new Date($("#goDateTo").value + "T23:59:59") : null;
+  return ESTADO_GO.chamados.filter((c) => {
+    if (!c._timestamp) return true;
+    if (from && c._timestamp < from) return false;
+    if (to && c._timestamp > to) return false;
+    return true;
+  });
+}
+
+function goRenderReview() {
+  const filtrados = goChamadosFiltrados();
+  $("#goFilterCount").textContent = `${filtrados.length} de ${ESTADO_GO.chamados.length} chamados`;
+
+  const tabela = $("#goReviewTable");
+  if (!filtrados.length) {
+    tabela.innerHTML = `<tr><td class="muted" style="padding:20px;text-align:center">Nenhum chamado no período selecionado.</td></tr>`;
+    tabela._filtrados = [];
+    return;
+  }
+
+  tabela.innerHTML = `
+    <thead><tr>
+      <th><input type="checkbox" id="goCheckAll" checked></th>
+      <th>Nº chamado</th><th>Data</th><th>Equipe</th><th>Anexo</th><th>Setor</th>
+    </tr></thead>
+    <tbody>
+      ${filtrados.map((c, i) => `
+        <tr>
+          <td data-label="Incluir"><input type="checkbox" class="go-row-check" data-idx="${i}" checked></td>
+          <td data-label="Nº chamado">${escapeHtml(goVal(c.numeroChamado))}</td>
+          <td data-label="Data">${escapeHtml(goFmtDateTime(c._timestamp))}</td>
+          <td data-label="Equipe">${escapeHtml(goVal(c.equipe))}</td>
+          <td data-label="Anexo">${escapeHtml(goVal(c.anexo))}</td>
+          <td data-label="Setor">${escapeHtml(goVal(c.nomeSetor))}</td>
+        </tr>`).join("")}
+    </tbody>`;
+  tabela._filtrados = filtrados;
+
+  $("#goCheckAll").addEventListener("change", (e) => {
+    $all(".go-row-check").forEach((cb) => { cb.checked = e.target.checked; });
+  });
+}
+
+$("#goDropzone").addEventListener("click", () => $("#goFileInput").click());
+$("#goDropzone").addEventListener("dragover", (e) => { e.preventDefault(); $("#goDropzone").classList.add("dragover"); });
+$("#goDropzone").addEventListener("dragleave", () => $("#goDropzone").classList.remove("dragover"));
+$("#goDropzone").addEventListener("drop", (e) => {
+  e.preventDefault();
+  $("#goDropzone").classList.remove("dragover");
+  if (e.dataTransfer.files[0]) goHandleFile(e.dataTransfer.files[0]);
+});
+$("#goFileInput").addEventListener("change", () => {
+  if ($("#goFileInput").files[0]) goHandleFile($("#goFileInput").files[0]);
+});
+$("#goBtnSelecionarArquivo").addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  $("#goFileInput").click();
+});
+$("#goDateFrom").addEventListener("change", goRenderReview);
+$("#goDateTo").addEventListener("change", goRenderReview);
+$("#goBtnClearDates").addEventListener("click", () => {
+  $("#goDateFrom").value = "";
+  $("#goDateTo").value = "";
+  goRenderReview();
+});
+$("#goBtnBackUpload").addEventListener("click", () => {
+  ESTADO_GO.chamados = [];
+  goShowScreen("upload");
+});
+$("#goBtnGenerate").addEventListener("click", () => {
+  const tabela = $("#goReviewTable");
+  const filtrados = tabela._filtrados || [];
+  const selecionados = $all(".go-row-check")
+    .filter((cb) => cb.checked)
+    .map((cb) => filtrados[parseInt(cb.dataset.idx, 10)]);
+  if (!selecionados.length) { toast("Selecione ao menos um chamado."); return; }
+  baixarOrdensServico(selecionados);
+});

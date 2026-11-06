@@ -654,3 +654,135 @@ function baixarRelatorioAnaliseGlpi(ctx) {
   };
   gerarEBaixarPdf(html, opt);
 }
+
+// --- Ordens de Serviço (a partir da planilha de chamados do Forms) -------
+// Layout portado de https://github.com/JovannaPi/gerador_os_alece (mesma
+// planilha que a equipe já usa pra acompanhar o pessoal) -- cores trocadas
+// pro padrão do PMOC (verde/dourado em vez do azul próprio daquele
+// projeto) e cabeçalho reaproveitando cabecalhoOficialHtml()/LOGO_ALECE_
+// BASE64_PDF lá em cima, pra sair um documento igual aos outros relatórios
+// do sistema, em vez de um quarto estilo visual diferente.
+function goPdfItem(label, valor) {
+  return `<div class="go-os-item"><span class="lbl">${escapeHtml(label)}</span><span class="val">${escapeHtml(valor)}</span></div>`;
+}
+
+function goPdfItemFull(label, valor) {
+  return `<div class="go-os-item go-os-item-full"><span class="lbl">${escapeHtml(label)}</span><div class="go-os-desc">${escapeHtml(valor)}</div></div>`;
+}
+
+function goPdfBuildPagina(c) {
+  const chamadoNum = c.numeroChamado || "—";
+  const semOS = /sem os/i.test(chamadoNum) || chamadoNum === "—" || chamadoNum === "Não informado";
+  const dadosLocalizacao = /gabinete/i.test(c.localizacao || "")
+    ? goPdfItem("Nº do Gabinete", c.numGabinete) + goPdfItem("Sala", c.sala)
+    : goPdfItem("Nome do Setor", c.nomeSetor) + goPdfItem("Sala do Setor", c.salaSetor);
+
+  return `
+    <div class="go-os-page">
+      ${cabecalhoOficialHtml("Ordem de Serviço — Manutenção de Ar Condicionado")}
+      <div class="go-os-topline">
+        <div>Chamado: <b>${escapeHtml(chamadoNum)}</b></div>
+        ${semOS ? '<div class="go-os-semos">Sem número de OS atribuído</div>' : ""}
+      </div>
+      <div class="go-os-meta">
+        <div>Data de fechamento: <b>${escapeHtml(c.dataFechamentoTexto || "—")}</b></div>
+        <div>Equipe: <b>${escapeHtml(c.equipe || "—")}</b></div>
+      </div>
+
+      <div class="go-os-section-title">Dados do Chamado</div>
+      <div class="go-os-grid">
+        ${goPdfItem("Anexo", c.anexo)}
+        ${goPdfItem("Localização", c.localizacao)}
+        ${dadosLocalizacao}
+      </div>
+
+      <div class="go-os-section-title">Dados do Equipamento</div>
+      <div class="go-os-grid">
+        ${goPdfItem("Marca da Evaporadora", c.marcaEvap)}
+        ${goPdfItem("Capacidade", c.capacidade)}
+        ${goPdfItem("Tombo (placa alumínio / adesivo verde)", c.tombo)}
+        ${goPdfItem("Tag (adesivo branco com QR code)", c.tag)}
+      </div>
+
+      <div class="go-os-section-title">Diagnóstico</div>
+      <div class="go-os-grid">
+        ${goPdfItem("Problema solucionado?", c.solucionado)}
+        ${goPdfItem("Água sanitária aplicada / filtros limpos?", c.aguaSanitaria)}
+        ${goPdfItemFull("Descrição do problema", c.descProblema)}
+        ${c.pecaFaltando && c.pecaFaltando !== "—" ? goPdfItemFull("Peça / problema pendente para solução", c.pecaFaltando) : ""}
+      </div>
+    </div>`;
+}
+
+function gerarRelatorioOrdensServico(chamados) {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    body { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; margin: 0; color: #1C2530; font-size: 12px; line-height: 1.5; }
+    ${cssCabecalhoOficial()}
+    .go-os-page { page-break-after: always; padding: 4px 4px 16px; }
+    .go-os-page:last-child { page-break-after: avoid; }
+    .go-os-topline { display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-bottom: 2px solid #1C2530; padding-bottom: 10px; margin-bottom: 10px; }
+    .go-os-semos { color: #C00000; font-size: 11px; font-weight: 600; }
+    .go-os-meta { display: flex; gap: 32px; font-size: 12px; color: #5B6B7A; margin-bottom: 22px; }
+    .go-os-meta b { color: #1C2530; }
+    .go-os-section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; color: #0B3D24; border-bottom: 1px solid #DCE3EA; padding-bottom: 6px; margin: 20px 0 12px; page-break-after: avoid; }
+    .go-os-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+    .go-os-item { font-size: 13px; padding: 6px 0; border-bottom: 1px dotted #EEF2F6; page-break-inside: avoid; }
+    .go-os-item .lbl { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: #5B6B7A; margin-bottom: 2px; }
+    .go-os-item-full { grid-column: 1 / -1; }
+    .go-os-desc { font-size: 13px; line-height: 1.7; background: #FAF9F5; border: 1px solid #EEF2F6; padding: 12px 14px; border-radius: 2px; margin-top: 4px; white-space: pre-wrap; page-break-inside: avoid; }
+  </style></head><body>
+    ${chamados.map(goPdfBuildPagina).join("")}
+  </body></html>`;
+}
+
+function baixarOrdensServico(chamados) {
+  // dataFechamentoTexto/numeroChamado etc. já vêm formatados como texto do
+  // app.js (goFmtDateTime/goVal) -- esta função só monta e baixa o PDF.
+  const formatados = chamados.map((c) => ({
+    ...c,
+    numeroChamado: goValPdf(c.numeroChamado),
+    equipe: goValPdf(c.equipe),
+    anexo: goValPdf(c.anexo),
+    localizacao: goValPdf(c.localizacao),
+    numGabinete: goValPdf(c.numGabinete),
+    sala: goValPdf(c.sala),
+    nomeSetor: goValPdf(c.nomeSetor),
+    salaSetor: goValPdf(c.salaSetor),
+    marcaEvap: goValPdf(c.marcaEvap),
+    capacidade: goValPdf(c.capacidade),
+    tombo: goValPdf(c.tombo),
+    tag: goValPdf(c.tag),
+    solucionado: goValPdf(c.solucionado),
+    descProblema: goValPdf(c.descProblema),
+    pecaFaltando: goValPdf(c.pecaFaltando),
+    aguaSanitaria: goValPdf(c.aguaSanitaria),
+    dataFechamentoTexto: goFmtDateTimePdf(c._timestamp),
+  }));
+
+  const html = gerarRelatorioOrdensServico(formatados);
+  const opt = {
+    margin: [15, 15, 15, 15],
+    filename: `Ordens_Servico_ALECE_${new Date().toISOString().split('T')[0]}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+  };
+  gerarEBaixarPdf(html, opt);
+}
+
+// Mesma lógica de goVal/goFmtDateTime do app.js, duplicada aqui pelo mesmo
+// motivo do escapeHtml/LOGO lá em cima: este arquivo roda sozinho, antes
+// do app.js (um <script type="module">, com escopo próprio).
+function goValPdf(v) {
+  if (v === undefined || v === null) return "—";
+  let s = String(v).trim();
+  if (s === "") return "—";
+  s = s.replace(/^"|"$/g, "").trim();
+  if (/^[*.-]+$/.test(s)) return "Não informado";
+  return s;
+}
+function goFmtDateTimePdf(dt) {
+  if (!dt) return "—";
+  const p = (n) => (n < 10 ? "0" + n : "" + n);
+  return `${p(dt.getDate())}/${p(dt.getMonth() + 1)}/${dt.getFullYear()} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+}

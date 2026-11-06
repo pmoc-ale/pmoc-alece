@@ -149,6 +149,9 @@
         <button class="tab sidenav-item" data-view="analiseglpi">
           <span class="sidenav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></span> Análise GLPI
         </button>
+        <button class="tab sidenav-item" data-view="geradoros">
+          <span class="sidenav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4"/></svg></span> Gerar OS
+        </button>
       </div>
     </details>
 
@@ -599,6 +602,39 @@
           </div>
         </div>
       </details>
+    </section>
+
+    <!-- VIEW: GERADOR DE ORDENS DE SERVIÇO (a partir da planilha do Forms) -->
+    <section class="view" id="view-geradoros">
+      <div class="card" id="goCardUpload">
+        <h2>Importe a planilha de chamados</h2>
+        <p class="muted">Mesma planilha (.xlsx/.csv) exportada do formulário que a equipe já usa pra acompanhar o pessoal. Cada linha vira uma Ordem de Serviço.</p>
+        <label class="dropzone" id="goDropzone">
+          <input type="file" id="goFileInput" accept=".xlsx,.xls,.csv" hidden>
+          <span id="goDropzoneLabel">Clique ou arraste o arquivo aqui</span>
+          <button type="button" class="btn primary" id="goBtnSelecionarArquivo">Selecionar arquivo</button>
+        </label>
+        <p class="muted" id="goUploadError" style="color:var(--vermelho)" hidden></p>
+      </div>
+
+      <div class="card" id="goCardReview" hidden>
+        <div class="card-head">
+          <h2>Chamados importados</h2>
+          <span class="pill" id="goFilterCount">0 chamados</span>
+        </div>
+        <div class="local-filtro" style="margin-bottom:10px">
+          <label class="muted" style="font-size:12.5px">De <input type="date" id="goDateFrom" style="width:auto"></label>
+          <label class="muted" style="font-size:12.5px">até <input type="date" id="goDateTo" style="width:auto"></label>
+          <button type="button" class="btn secondary" id="goBtnClearDates">Limpar período</button>
+        </div>
+        <div class="table-wrap">
+          <table id="goReviewTable" class="tabela-cards-mobile"></table>
+        </div>
+        <div class="card-head" style="margin-top:12px">
+          <button type="button" class="btn secondary" id="goBtnBackUpload">← Nova importação</button>
+          <button type="button" class="btn primary" id="goBtnGenerate">Gerar Ordens de Serviço (PDF)</button>
+        </div>
+      </div>
     </section>
 
     <!-- VIEW 8: EQUIPAMENTOS -->
@@ -1178,11 +1214,11 @@
     </div>
   </div>
 </div>
-<script src="utils/pdfGenerator.js?v=10"></script>
+<script src="utils/pdfGenerator.js?v=11"></script>
 <script src="utils/qrcode.js"></script>
 <script src="utils/dwfParser.js?v=7"></script>
 <script type="module" src="firebase-config.js?v=4"></script>
-<script type="module" src="app.js?v=173"></script>
+<script type="module" src="app.js?v=174"></script>
 <script>
   // Guarda uma cópia do site no aparelho (service worker) pra ele
   // continuar abrindo mesmo numa sala/subsolo sem sinal nenhum -- ver
